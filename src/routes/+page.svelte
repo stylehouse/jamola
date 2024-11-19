@@ -3,7 +3,7 @@
     import Call from "$lib/Call.svelte";
 
 </script>
-<h1>Welcome to SvelteKit</h1>
+<h1>Welcome to jamola</h1>
 
 <main>
     <Call />

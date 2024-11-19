@@ -1,11 +1,16 @@
 <script lang="ts">
     let rem = $state([])
     function begin() {
+        console.log("Began!")
         rem.push("Began")   
     }
+    $effect(() => {
+        console.log("Effecting!")
+
+    })
 </script>
 
-<button on:click={begin}>Ring</button>
+<button onclick={begin}>Ring</button>
     <ul>
     {#each rem as remark}
         <li>{remark}</li>

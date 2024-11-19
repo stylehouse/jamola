@@ -1,0 +1,96 @@
+x-defaults: &defaults
+  #stdin_open: true
+  #tty: true
+  restart: always
+
+services:
+  # the ssl web proxy
+  caddy:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM caddy:2-builder AS builder
+        RUN xcaddy build --with github.com/caddy-dns/duckdns
+
+        FROM caddy:2
+        COPY --from=builder /usr/bin/caddy /usr/bin/caddy
+    ports:
+      - "9080:80"
+      - "9443:443"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+      - ./logs:/var/log/caddy
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    environment:
+      - DUCKDNS_API_TOKEN=${DUCKDNS_API_TOKEN}
+    depends_on:
+      - cos-jamo
+    networks:
+      - web
+    <<: *defaults
+  
+  # the web server proper
+  cos-jamo:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM node:slim
+        WORKDIR /app
+        CMD bash
+        EXPOSE 3000
+    volumes:
+      - .:/app:exec
+    ports:
+      - "127.0.0.1:9090:3000"
+    command: npm run dev -- --port 3000 --host 0.0.0.0
+    networks:
+      - web
+    <<: *defaults
+
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+networks:
+  web:
+
+configs:
+  caddy_config:
+    content: |
+      voulais.duckdns.org {
+          # Enable automatic HTTPS
+          tls {
+              dns duckdns {$DUCKDNS_API_TOKEN}
+          }
+          
+          # Enable compression
+          encode zstd gzip
+          
+          # Handle all requests
+          handle {
+              # Reverse proxy to your application
+              reverse_proxy cos-jamo:3000
+          }
+          
+          # Basic security headers
+          header {
+              # Enable HSTS
+              Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+              # Prevent browsers from sniffing MIME types
+              X-Content-Type-Options "nosniff"
+              # XSS protection
+              X-XSS-Protection "1; mode=block"
+              # Click-jacking protection
+              X-Frame-Options "DENY"
+          }
+          
+          # Enable logging
+          log {
+              output file /var/log/caddy/access.log
+              format console
+          }
+      }
