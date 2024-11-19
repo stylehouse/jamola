@@ -11,7 +11,7 @@
     let errorMessage = $state("");
     let userName = $state("you");
     let participants = $state(new SvelteMap()); // Map of participant name to {audio: HTMLAudioElement, volume: number}
-    let localVolume = 1.0;
+    let localVolume = 0.7;
 
     $effect(() => {
         if (userName == "you") {
@@ -49,7 +49,6 @@
                 audio: new Audio(),
                 volume: 1.0,
             });
-            participants = participants; // trigger Svelte reactivity
         }
     }
 
@@ -58,7 +57,6 @@
         if (participant) {
             participant.volume = volume;
             participant.audio.volume = volume;
-            participants = participants; // trigger Svelte reactivity
         }
     }
 
@@ -222,11 +220,11 @@
 
     <div class="controls">
         <button on:click={startConnection} disabled={status !== "Disconnected"}>
-            Start
+            Ring
         </button>
 
         <button on:click={stopConnection} disabled={status === "Disconnected"}>
-            Stop
+            Not
         </button>
     </div>
 
@@ -252,7 +250,6 @@
                         bind:value={participant.volume}
                         on:input={() => updateVolume(name, participant.volume)}
                     />
-                    {(participant.volume * 100).toFixed(0)}%
                 </label>
             </div>
         {/each}
@@ -277,9 +274,9 @@
     }
 
     button {
-        padding: 0.5rem 1rem;
+        padding: 0.3rem 1rem;
         cursor: pointer;
-        font-size: 13em;
+        font-size: 8em;
     }
 
     button:disabled {
@@ -305,7 +302,7 @@
         gap: 1rem;
         margin: 0.5rem 0;
         padding: 0.5rem;
-        background: #f5f5f5;
+        background: #2b463b;
         border-radius: 4px;
     }
 
