@@ -1,10 +1,7 @@
 x-defaults: &defaults
-  #stdin_open: true
-  #tty: true
   restart: always
 
 services:
-  # the ssl web proxy
   caddy:
     build:
       context: .
@@ -27,29 +24,38 @@ services:
     environment:
       - DUCKDNS_API_TOKEN=${DUCKDNS_API_TOKEN}
     depends_on:
-      - cos-jamo
+      cos-jamo:
+        condition: service_healthy
     networks:
       - web
     <<: *defaults
-  
-  # the web server proper
+    
   cos-jamo:
     build:
       context: .
       dockerfile_inline: |
-        FROM node:slim
+        FROM node:20-slim
         WORKDIR /app
-        CMD bash
+        COPY package*.json ./
+        RUN npm ci
+        COPY . .
         EXPOSE 3000
     volumes:
       - .:/app:exec
-    ports:
-      - "127.0.0.1:9090:3000"
+      # Prevent the container's node_modules from being overwritten by the host
+      - /app/node_modules
+    expose:
+      - "3000"
     command: npm run dev -- --port 3000 --host 0.0.0.0
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:3000"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     networks:
       - web
     <<: *defaults
-
 
 volumes:
   caddy_data:

@@ -11,7 +11,7 @@
 
 <style>
     h1 {
-        width:100%;
+        
         background:#402;
         padding:1em;
     }
