@@ -1,7 +1,7 @@
 
 import { io } from "socket.io-client";
 
-export sig = ({on_pc}) => {
+export let sig = ({on_pc}) => {
     // Connect to signaling server
     const socket = io();
     const peerConnections = new Map(); // Store RTCPeerConnection for each peer

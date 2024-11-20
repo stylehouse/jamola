@@ -3,10 +3,6 @@
     import { SvelteMap } from "svelte/reactivity";
     import { sig } from "$lib/signaling.svelte";
 
-    let localConnection;
-    let remoteConnection;
-    let sendChannel;
-    let receiveChannel;
     let localStream;
     let status = $state("Disconnected");
     let errorMessage = $state("");
@@ -26,56 +22,46 @@
         }
     });
     function createDataChannel(par) {
-        let channel = par.pc.createDataChannel(label);
-        channel.onmessage = (event) => {
+        par.channel = par.pc.createDataChannel("participants");
+        par.channel.onmessage = (event) => {
             const data = JSON.parse(event.data);
+            console.log("Got participant: "+data.name);
             if (data.type === "participant") {
-                addParticipant(data.name);
+                par.name = data.name
             }
         };
-                    sendChannel = 
 
-                    // Announce ourselves
-                    let announ = () => {
-                        console.log("Sending participant");
-                        sendChannel.send(
-                            JSON.stringify({
-                                type: "participant",
-                                name: userName,
-                            }),
-                        );
-                    };
-                    if (sendChannel.readyState === "open") {
-                        announ();
-                    } else {
-                        sendChannel.onopen = () => {
-                            announ();
-                        };
-                    }
-        return channel;
+        // Announce ourselves
+        let announ = () => {
+            console.log("Sending participant");
+            par.channel.send(
+                JSON.stringify({
+                    type: "participant",
+                    name: userName,
+                }),
+            );
+        };
+        if (par.channel.readyState === "open") {
+            announ()
+        }
+        else {
+            par.channel.onopen = announ
+        }
     }
     // read or add new participant
     function i_participant({ peerId, pc }) {
         let par = participants.filter((par) => par.peerId == peerId)[0];
         if (!par && pc) {
             // new par
-            par = {
-                peerId,
-                pc,
-                audio: new Audio(),
-                volume: localVolume,
-            };
+            par = {peerId,pc};
+            par.audio = new Audio();
+            par.audio.volume = localVolume;
             participants.push(par);
         }
         return par;
     }
-
-    function updateVolume(name, volume) {
-        const par = participants.filter((par) => par.name == name)[0];
-        if (par) {
-            par.volume = volume;
-            par.audio.volume = volume;
-        }
+    function volumeChange(par) {
+        console.log("Volume is "+ par.audio.volume)
     }
     // mainly
     // having no voice-only audio processing is essential for hifi
@@ -103,8 +89,10 @@
 
             // this becomes our monitor maybe?
             let par = i_participant({peerId:null,pc:{},name:userName,type:"monitor"})
+            delete par.pc
             localStream.getTracks().forEach((track) => {
                 par.audio.srcObject = new MediaStream([track]);
+                par.audio.play().catch(console.error);
             });
 
             // start signaling via websocket to get to webrtc...
@@ -131,9 +119,6 @@
                     createDataChannel(par);
                 },
             });
-
-
-            addParticipant(userName);
         } catch (error) {
             errorMessage = `Error: ${error.message}`;
             status = "Error occurred";
@@ -146,25 +131,13 @@
         if (localStream) {
             localStream.getTracks().forEach((track) => track.stop());
         }
-
-        if (localConnection) {
-            localConnection.close();
-        }
-
-        if (remoteConnection) {
-            remoteConnection.close();
-        }
-
-        participants.forEach((participant) => {
-            participant.audio.pause();
-            participant.audio.srcObject = null;
+        participants.forEach((par) => {
+            par.pc?.close();
+            par.audio.pause();
+            par.audio.srcObject = null;
         });
 
-        participants.clear();
-        participants = participants;
-
-        localConnection = null;
-        remoteConnection = null;
+        participants = []
         localStream = null;
         status = "Disconnected";
         errorMessage = "";
@@ -210,9 +183,10 @@
 
     <div class="participants">
         <h2>Participants</h2>
-        {#each [...participants] as [name, participant]}
+        {#each participants as par (par.peerId)}
             <div class="participant">
-                <span>{name}</span>
+                <span>{par.name || "???"}</span>
+                {#if par.type}<span class="streamtype">{par.type}</span>{/if}
                 <label>
                     Volume:
                     <input
@@ -220,8 +194,8 @@
                         min="0"
                         max="1"
                         step="0.1"
-                        bind:value={participant.volume}
-                        oninput={() => updateVolume(name, participant.volume)}
+                        bind:value={par.audio.volume}
+                        onchange={() => volumeChange(par)}
                     />
                 </label>
             </div>

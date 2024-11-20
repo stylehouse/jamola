@@ -6,7 +6,7 @@ export const webSocketServer = {
 
 		const io = new Server(server.httpServer)
 
-		io.on('connection', (socket) => {
+		io.on('connection', async (socket) => {
 			console.log('Client connected:', socket.id);
 			console.log('Client address:', socket.handshake.address);
 
@@ -23,10 +23,12 @@ export const webSocketServer = {
 				});
 
 				// Get list of all other peers in the room
-				const peers = Array.from(await io.in(roomId).fetchSockets());
-				socket.emit('peers-in-room', {
-					peers: peers.filter(id => id !== socket.id)
-				});
+				const peers = Array.from(await io.in(roomId).fetchSockets())
+					.map(peer => peer.id)
+					.filter(id => id != socket.id)
+
+				console.log('Peers in '+roomId+': ', peers);
+				socket.emit('peers-in-room', {peers});
 			});
 
 			// Handle SDP offer/answer exchange
