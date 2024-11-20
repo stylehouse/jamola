@@ -23,13 +23,18 @@
     });
     function createDataChannel(par) {
         par.channel = par.pc.createDataChannel("participants");
-        par.channel.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            console.log("Got participant: "+data.name);
-            if (data.type === "participant") {
-                par.name = data.name
-            }
-        };
+        // the receiver is this other channel they sent us
+        //  I don't know why we have to call it "participants" then
+        par.pc.ondatachannel = (event) => {
+            event.channel.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                console.log("Got participant: "+data.name);
+                if (data.type === "participant") {
+                    par = i_participant({peerId:par.peerId})
+                    par.name = data.name
+                }
+            };
+        }
 
         // Announce ourselves
         let announ = () => {
@@ -83,13 +88,16 @@
         errorMessage = "";
         try {
             // Get microphone stream
-            localStream =
+            localStream ||=
                 await navigator.mediaDevices.getUserMedia(constraints);
             status = "Got microphone access";
 
             // this becomes our monitor maybe?
-            let par = i_participant({peerId:null,pc:{},name:userName,type:"monitor"})
+            let par = i_participant({peerId:null,pc:{}})
             delete par.pc
+            par.name = userName
+            par.type = "monitor"
+            
             localStream.getTracks().forEach((track) => {
                 par.audio.srcObject = new MediaStream([track]);
                 par.audio.play().catch(console.error);
@@ -110,7 +118,7 @@
                     // take audio from it
                     par.pc.ontrack = (e) => {
                         par.audio.srcObject = new MediaStream([e.track]);
-                        console.log("Sending participant",[par,par.audio.srcObject,localStream]);
+                        console.log("Got track",[par,par.audio.srcObject,localStream]);
                         par.audio.play().catch(console.error);
                         status = "Audio track started from "+(par.name||"??");
                     };
@@ -138,7 +146,7 @@
         });
 
         participants = []
-        localStream = null;
+        // localStream = null;
         status = "Disconnected";
         errorMessage = "";
     }
