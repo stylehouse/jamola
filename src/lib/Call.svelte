@@ -1,6 +1,7 @@
 <script>
     import { onDestroy } from "svelte";
     import { SvelteMap } from "svelte/reactivity";
+    import { sig } from "$lib/signaling.svelte";
 
     let localConnection;
     let remoteConnection;
@@ -10,9 +11,10 @@
     let status = $state("Disconnected");
     let errorMessage = $state("");
     let userName = $state("you");
-    let participants = $state(new SvelteMap()); // Map of participant name to {audio: HTMLAudioElement, volume: number}
+    let participants = $state([]); // Map of participant name to {audio: HTMLAudioElement, volume: number}
     let localVolume = 0.7;
 
+    // participants exchange names in a webrtc datachannel
     $effect(() => {
         if (userName == "you") {
             // init
@@ -23,6 +25,62 @@
             localStorage.userName = userName;
         }
     });
+    function createDataChannel(par) {
+        let channel = par.pc.createDataChannel(label);
+        channel.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.type === "participant") {
+                addParticipant(data.name);
+            }
+        };
+                    sendChannel = 
+
+                    // Announce ourselves
+                    let announ = () => {
+                        console.log("Sending participant");
+                        sendChannel.send(
+                            JSON.stringify({
+                                type: "participant",
+                                name: userName,
+                            }),
+                        );
+                    };
+                    if (sendChannel.readyState === "open") {
+                        announ();
+                    } else {
+                        sendChannel.onopen = () => {
+                            announ();
+                        };
+                    }
+        return channel;
+    }
+    // read or add new participant
+    function i_participant({ peerId, pc }) {
+        let par = participants.filter((par) => par.peerId == peerId)[0];
+        if (!par && pc) {
+            // new par
+            par = {
+                peerId,
+                pc,
+                audio: new Audio(),
+                volume: localVolume,
+            };
+            participants.push(par);
+        }
+        return par;
+    }
+
+    function updateVolume(name, volume) {
+        const par = participants.filter((par) => par.name == name)[0];
+        if (par) {
+            par.volume = volume;
+            par.audio.volume = volume;
+        }
+    }
+    // mainly
+    // having no voice-only audio processing is essential for hifi
+    // < high bitrate
+    // < flip on|off video
     const constraints = {
         audio: {
             echoCancellation: false,
@@ -31,133 +89,49 @@
         },
         video: false,
     };
-
-    function createDataChannel(connection, label) {
-        const channel = connection.createDataChannel(label);
-        channel.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            if (data.type === "participant") {
-                addParticipant(data.name);
-            }
-        };
-        return channel;
-    }
-
-    function addParticipant(name) {
-        if (!participants.has(name)) {
-            participants.set(name, {
-                audio: new Audio(),
-                volume: 1.0,
-            });
-        }
-    }
-
-    function updateVolume(name, volume) {
-        const participant = participants.get(name);
-        if (participant) {
-            participant.volume = volume;
-            participant.audio.volume = volume;
-        }
-    }
-
     async function startConnection() {
         if (!userName.trim()) {
             errorMessage = "Please enter your name first";
             return;
         }
-        errorMessage = ""
+        errorMessage = "";
         try {
             // Get microphone stream
             localStream =
                 await navigator.mediaDevices.getUserMedia(constraints);
             status = "Got microphone access";
 
-            // Create peer connections
-            localConnection = new RTCPeerConnection({
-                iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-            });
-            remoteConnection = new RTCPeerConnection({
-                iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-            });
-
-            // Set up data channels
-            sendChannel = createDataChannel(localConnection, "participants");
-            remoteConnection.ondatachannel = (event) => {
-                receiveChannel = event.channel;
-                receiveChannel.onmessage = (e) => {
-                    const data = JSON.parse(e.data);
-                    if (data.type === "participant") {
-                        console.log("Gotdata participant");
-                        addParticipant(data.name);
-                    }
-                    else {
-                        console.log("Gotdata other",data);
-
-                    }
-                };
-            };
-
-            // Add stream to local connection
+            // this becomes our monitor maybe?
+            let par = i_participant({peerId:null,pc:{},name:userName,type:"monitor"})
             localStream.getTracks().forEach((track) => {
-                localConnection.addTrack(track, localStream);
+                par.audio.srcObject = new MediaStream([track]);
             });
 
-            // Set up ICE handling
-            localConnection.onicecandidate = (e) => {
-                if (e.candidate) {
-                    remoteConnection.addIceCandidate(e.candidate);
-                }
-            };
+            // start signaling via websocket to get to webrtc...
+            sig({
+                on_pc: ({ peerId, pc }) => {
+                    // a peer connection, soon to receive tracks, name etc
+                    let par = i_participant({ peerId, pc });
 
-            remoteConnection.onicecandidate = (e) => {
-                if (e.candidate) {
-                    localConnection.addIceCandidate(e.candidate);
-                }
-            };
 
-            // Set up audio output
-            remoteConnection.ontrack = (e) => {
-                const participant = participants.get(userName) || {
-                    audio: new Audio(),
-                    volume: localVolume,
-                };
-                participant.audio.srcObject = new MediaStream([e.track]);
-                participant.audio.volume = participant.volume;
-                participant.audio.play().catch(console.error);
-                participants.set(userName, participant);
-                status = "Audio loopback started";
-            };
+                    // input our stream to it
+                    localStream.getTracks().forEach((track) => {
+                        par.pc.addTrack(track, localStream);
+                    });
 
-            // Create and set local description
-            const offer = await localConnection.createOffer();
-            await localConnection.setLocalDescription(offer);
-            await remoteConnection.setRemoteDescription(offer);
+                    // take audio from it
+                    par.pc.ontrack = (e) => {
+                        par.audio.srcObject = new MediaStream([e.track]);
+                        console.log("Sending participant",[par,par.audio.srcObject,localStream]);
+                        par.audio.play().catch(console.error);
+                        status = "Audio track started from "+(par.name||"??");
+                    };
 
-            // Create and set remote description
-            const answer = await remoteConnection.createAnswer();
-            await remoteConnection.setLocalDescription(answer);
-            await localConnection.setRemoteDescription(answer);
+                    // Set up data channel to send names
+                    createDataChannel(par);
+                },
+            });
 
-            // Announce ourselves
-            if (sendChannel.readyState === "open") {
-                console.log("Sending participant");
-                sendChannel.send(
-                    JSON.stringify({
-                        type: "participant",
-                        name: userName,
-                    }),
-                );
-            } else {
-                sendChannel.onopen = () => {
-                    console.log("Sending participant");
-                    sendChannel.send(
-                        JSON.stringify({
-                            type: "participant",
-                            name: userName,
-                        }),
-                    );
-                };
-            }
 
             addParticipant(userName);
         } catch (error) {
@@ -195,12 +169,12 @@
         status = "Disconnected";
         errorMessage = "";
     }
-    let themain = $state()
+    let themain = $state();
     $effect(() => {
         if (themain) {
-            themain.style.display = 'initial'
+            themain.style.display = "initial";
         }
-    })
+    });
 
     onDestroy(() => {
         stopConnection();
@@ -208,7 +182,6 @@
 </script>
 
 <main class="container" style="display:none;" bind:this={themain}>
-    
     <div class="setup">
         <input
             type="text"
@@ -219,11 +192,11 @@
     </div>
 
     <div class="controls">
-        <button on:click={startConnection} disabled={status !== "Disconnected"}>
+        <button onclick={startConnection} disabled={status !== "Disconnected"}>
             Ring
         </button>
 
-        <button on:click={stopConnection} disabled={status === "Disconnected"}>
+        <button onclick={stopConnection} disabled={status === "Disconnected"}>
             Not
         </button>
     </div>
@@ -248,7 +221,7 @@
                         max="1"
                         step="0.1"
                         bind:value={participant.volume}
-                        on:input={() => updateVolume(name, participant.volume)}
+                        oninput={() => updateVolume(name, participant.volume)}
                     />
                 </label>
             </div>

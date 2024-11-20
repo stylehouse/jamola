@@ -23,9 +23,9 @@ services:
         target: /etc/caddy/Caddyfile
     environment:
       - DUCKDNS_API_TOKEN=${DUCKDNS_API_TOKEN}
-    depends_on:
-      cos-jamo:
-        condition: service_healthy
+    # depends_on:
+    #   cos-jamo:
+    #     condition: service_healthy
     networks:
       - web
     <<: *defaults
@@ -43,16 +43,19 @@ services:
     volumes:
       - .:/app:exec
       # Prevent the container's node_modules from being overwritten by the host
+      #  this means any `npm i ...` you make in another environ (eg the host)
+      #   will need pushing to the container via package.json, the above RUN npm ci
+      #    as part of a $ docker compose up --build
       - /app/node_modules
-    expose:
-      - "3000"
+    ports:
+      - "127.0.0.1:9090:3000"
     command: npm run dev -- --port 3000 --host 0.0.0.0
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "http://localhost:3000"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
+    # healthcheck:
+    #   test: ["CMD", "wget", "--spider", "http://127.0.0.1:9090"]
+    #   interval: 2s
+    #   timeout: 5s
+    #   retries: 16
+    #   start_period: 30s
     networks:
       - web
     <<: *defaults
