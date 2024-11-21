@@ -1,8 +1,9 @@
-<script>
+<script lang="ts">
     import { onDestroy } from "svelte";
     import { SvelteMap } from "svelte/reactivity";
-    import { sig } from "$lib/rtcsignaling-client.svelte";
+    import { SignalingClient } from "$lib/rtcsignaling-client.svelte";
 
+    let Signaling: SignalingClient;
     let localStream;
     let status = $state("Disconnected");
     let errorMessage = $state("");
@@ -28,13 +29,13 @@
         par.pc.ondatachannel = (event) => {
             event.channel.onmessage = (event) => {
                 const data = JSON.parse(event.data);
-                console.log("Got participant: "+data.name);
+                console.log("Got participant: " + data.name);
                 if (data.type === "participant") {
-                    par = i_participant({peerId:par.peerId})
-                    par.name = data.name
+                    par = i_participant({ peerId: par.peerId });
+                    par.name = data.name;
                 }
             };
-        }
+        };
 
         // Announce ourselves
         let announce_self = () => {
@@ -47,28 +48,45 @@
             );
         };
 
-         
+        par.channel.onopen = () => {
+            delete par.offline;
+        };
+        par.channel.onclose = () => {
+            par.offline = 1;
+            console.log(`Par leaves: ${par.name}`);
+        };
+
         if (par.channel.readyState === "open") {
-            announce_self()
-        }
-        else {
-            par.channel.onopen = announce_self
+            announce_self();
+        } else {
+            par.channel.onopen = announce_self;
         }
     }
     // read or add new participant
     function i_participant({ peerId, pc }) {
+        let names = participants.map((par) => par.peerId + ": " + par.name);
+
+        console.log("i_participant: " + peerId, names);
         let par = participants.filter((par) => par.peerId == peerId)[0];
-        if (!par && pc) {
-            // new par
-            par = {peerId,pc};
-            par.audio = new Audio();
-            par.audio.volume = localVolume;
-            participants.push(par);
+        if (pc) {
+            if (!par) {
+                // new par
+                par = { peerId, pc };
+                par.audio = new Audio();
+                par.audio.volume = localVolume;
+                participants.push(par);
+            } else {
+                // allow that same object to take over..?
+                //  peerId comes from socket.io so it should be renewed.
+                if (par.pc == pc) debugger;
+                par.pc && par.pc?.close();
+                par.pc = pc;
+            }
         }
         return par;
     }
     function volumeChange(par) {
-        console.log("Volume is "+ par.audio.volume)
+        console.log("Volume is " + par.audio.volume);
     }
     // mainly
     // having no voice-only audio processing is essential for hifi
@@ -95,38 +113,38 @@
             status = "Got microphone access";
 
             // this becomes our monitor maybe?
-            let par = i_participant({peerId:null,pc:{}})
-            delete par.pc
-            par.name = userName
-            par.type = "monitor"
-            
+            let par = i_participant({ peerId: "", pc: {} });
+            delete par.pc;
+            par.name = userName;
+            par.type = "monitor";
             localStream.getTracks().forEach((track) => {
                 par.audio.srcObject = new MediaStream([track]);
+                par.audio.volume = 0;
                 par.audio.play().catch(console.error);
             });
 
             // start signaling via websocket to get to webrtc...
-            sig({
-                on_pc: ({ peerId, pc }) => {
+            if (Signaling) {
+                // should have been packed up
+                Signaling.close();
+            }
+            Signaling = new SignalingClient({
+                on_peer: ({ peerId, pc }) => {
                     // a peer connection, soon to receive tracks, name etc
                     let par = i_participant({ peerId, pc });
 
+                    // watch it become 'connected'
+                    wait_for_par_ready(par, () => {
+                        console.log("Par ready! " + par.peerId);
+                        // input our stream to it
+                        give_localStream(par);
 
-                    // input our stream to it
-                    localStream.getTracks().forEach((track) => {
-                        par.pc.addTrack(track, localStream);
+                        // take audio from it
+                        take_remoteStream(par);
+
+                        // Set up data channel to send names
+                        createDataChannel(par);
                     });
-
-                    // take audio from it
-                    par.pc.ontrack = (e) => {
-                        par.audio.srcObject = new MediaStream([e.track]);
-                        console.log("Got track",[par,par.audio.srcObject,localStream]);
-                        par.audio.play().catch(console.error);
-                        status = "Audio track started from "+(par.name||"??");
-                    };
-
-                    // Set up data channel to send names
-                    createDataChannel(par);
                 },
             });
         } catch (error) {
@@ -134,6 +152,64 @@
             status = "Error occurred";
             console.error("Error:", error);
         }
+    }
+
+    // wait for par.pc to get in a good state
+    function wait_for_par_ready(par, resolve) {
+        let done = 0;
+        let ready = 0;
+        let observe = () => {
+            let says = par.pc.connectionState + "-" + par.pc.signalingState;
+            if (
+                says == "new-stable"
+                || 
+                says == "connected-stable"
+                || says == "connecting-stable"
+            ) {
+                ready = 1;
+                // delete par.constate
+            } else {
+                ready = 0;
+                par.constate = says;
+            }
+            console.log("Waiting for par: " + says, par);
+            if (ready && !done) {
+                done = 1;
+                resolve();
+            }
+        };
+        observe();
+        par.pc.onconnectionstatechange = observe;
+        par.pc.onsignalingstatechange = observe;
+    }
+
+    // take audio from a peer
+    function take_remoteStream(par) {
+        par.pc.ontrack = (e) => {
+            par.audio.srcObject = new MediaStream([e.track]);
+            console.log("Got track", [par, par.audio.srcObject, localStream]);
+            par.audio.play().catch(console.error);
+            status = "Audio track started";
+        };
+    }
+
+    // connect our stream to a peer, complicatedly
+    function give_localStream(par) {
+        // Remove existing senders before adding new tracks
+        par.pc.getSenders().forEach((sender) => {
+            if (sender.track) {
+                par.pc.removeTrack(sender);
+            }
+        });
+
+        // Add tracks safely
+        localStream.getTracks().forEach((track) => {
+            try {
+                par.pc.addTrack(track, localStream);
+            } catch (error) {
+                console.error("Failed to add track:", error);
+            }
+        });
     }
 
     // switch everything off
@@ -146,8 +222,12 @@
             par.audio.pause();
             par.audio.srcObject = null;
         });
+        Signaling && Signaling.close();
+        Signaling = null;
 
-        participants = []
+        // Remove all others? Or let them become disconnected, keeping their recordings?
+        // participants = participants.filter(par => !par.type == 'monitor')
+
         // localStream = null;
         status = "Disconnected";
         errorMessage = "";
@@ -195,8 +275,11 @@
         <h2>Participants</h2>
         {#each participants as par (par.peerId)}
             <div class="participant">
-                <span>{par.name || "???"}</span>
+                <span>{par.name || par.peerId}</span>
                 {#if par.type}<span class="streamtype">{par.type}</span>{/if}
+                {#if par.offline}<span class="ohno">offline</span>{/if}
+                {#if par.constate}<span class="techwhat">{par.constate}</span
+                    >{/if}
                 <label>
                     Volume:
                     <input
@@ -214,6 +297,15 @@
 </main>
 
 <style>
+    .ohno {
+        color: red;
+        font: monospace;
+    }
+    .techwhat {
+        color: cyan;
+        font: monospace;
+    }
+
     .container {
         max-width: 600px;
         margin: 0 auto;

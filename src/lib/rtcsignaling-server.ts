@@ -8,26 +8,26 @@ export const webSocketServer = {
 
 		io.on('connection', async (socket) => {
 			console.log('Client connected:', socket.id);
-			console.log('Client address:', socket.handshake.address);
+			// console.log('Client address:', socket.handshake);
 
 			// is its own room, becomes targetId
 			// await socket.join(socket.id);
 
 			// When a peer joins a room
 			socket.on('join-room', async (roomId: string) => {
-				await socket.join(roomId);
-
 				// Let everyone in the room know about the new peer
 				socket.to(roomId).emit('peer-joined', {
 					peerId: socket.id
 				});
 
+				await socket.join(roomId);
+
 				// Get list of all other peers in the room
 				const peers = Array.from(await io.in(roomId).fetchSockets())
 					.map(peer => peer.id)
 					.filter(id => id != socket.id)
-
-				console.log('Peers in '+roomId+': ', peers);
+				
+				peers.length && console.log('Other peers in '+roomId+': ', peers);
 				socket.emit('peers-in-room', {peers});
 			});
 
