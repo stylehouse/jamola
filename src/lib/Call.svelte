@@ -232,9 +232,6 @@
 
     // switch everything off
     function stopConnection() {
-        if (localStream) {
-            localStream.getTracks().forEach((track) => track.stop());
-        }
         participants.forEach((par) => {
             par.pc?.close();
             par.audio.pause();
@@ -245,6 +242,7 @@
 
         // Remove all others? Or let them become disconnected, keeping their recordings?
         // participants = participants.filter(par => par.type != 'monitor')
+        // < merge same usernames after a while?
 
         // localStream = null;
         status = "Disconnected";
