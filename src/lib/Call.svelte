@@ -1,7 +1,7 @@
 <script>
     import { onDestroy } from "svelte";
     import { SvelteMap } from "svelte/reactivity";
-    import { sig } from "$lib/signaling.svelte";
+    import { sig } from "$lib/rtcsignaling-client.svelte";
 
     let localStream;
     let status = $state("Disconnected");
@@ -37,7 +37,7 @@
         }
 
         // Announce ourselves
-        let announ = () => {
+        let announce_self = () => {
             console.log("Sending participant");
             par.channel.send(
                 JSON.stringify({
@@ -46,11 +46,13 @@
                 }),
             );
         };
+
+         
         if (par.channel.readyState === "open") {
-            announ()
+            announce_self()
         }
         else {
-            par.channel.onopen = announ
+            par.channel.onopen = announce_self
         }
     }
     // read or add new participant

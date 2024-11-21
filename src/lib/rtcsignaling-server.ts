@@ -11,7 +11,7 @@ export const webSocketServer = {
 			console.log('Client address:', socket.handshake.address);
 
 			// is its own room, becomes targetId
-			await socket.join(socket.id);
+			// await socket.join(socket.id);
 
 			// When a peer joins a room
 			socket.on('join-room', async (roomId: string) => {
