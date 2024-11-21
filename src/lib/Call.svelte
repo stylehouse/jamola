@@ -59,7 +59,12 @@
         if (par.channel.readyState === "open") {
             announce_self();
         } else {
-            par.channel.onopen = announce_self;
+            par.channel.onopen = () => {
+                // check again it's totally ready..?
+                if (par.channel.readyState === "open") {
+                    announce_self();
+                }
+            }
         }
     }
     // read or add new participant
@@ -159,20 +164,33 @@
         let done = 0;
         let ready = 0;
         let observe = () => {
-            let says = par.pc.connectionState + "-" + par.pc.signalingState;
+            let says = par.pc.connectionState + "/" + par.pc.signalingState;
+            par.constate = says;
             if (
-                says == "new-stable"
-                || 
-                says == "connected-stable"
-                || says == "connecting-stable"
+                [
+                    // if we don't accept 'new' initially they never get there...
+                    "new",
+                    "connected",
+                    // ,'connecting'
+                ].includes(par.pc.connectionState) &&
+                [
+                    "stable",
+                    // 'have-local-offer'
+                ].includes(par.pc.signalingState)
             ) {
                 ready = 1;
-                // delete par.constate
             } else {
                 ready = 0;
-                par.constate = says;
             }
-            console.log("Waiting for par: " + says, par);
+            console.log(
+                "Waiting " +
+                    ((ready && "ready") || "") +
+                    "for par" +
+                    ((done && "done") || "") +
+                    ": " +
+                    says,
+                par,
+            );
             if (ready && !done) {
                 done = 1;
                 resolve();
@@ -226,7 +244,7 @@
         Signaling = null;
 
         // Remove all others? Or let them become disconnected, keeping their recordings?
-        // participants = participants.filter(par => !par.type == 'monitor')
+        // participants = participants.filter(par => par.type != 'monitor')
 
         // localStream = null;
         status = "Disconnected";
