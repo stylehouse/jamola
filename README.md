@@ -22,7 +22,7 @@ If browsing to your site from your own network takes you to your router's manage
 ```
 And browse `https://voulais.duckdns.org:9443/`.
 
-Apparently this can be done on a rooted Android as well. Or do your own DNS?
+Apparently this can be done on a rooted Android as well. Or do your own DNS, host it elsewhere, or use it elsewhere. Your local art gallery may have free wifi reachable from a nice place.
 
 ## fake input devices
 

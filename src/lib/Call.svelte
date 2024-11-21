@@ -29,7 +29,6 @@
         par.pc.ondatachannel = (event) => {
             event.channel.onmessage = (event) => {
                 const data = JSON.parse(event.data);
-                console.log("Got participant: " + data.name);
                 if (data.type === "participant") {
                     par = i_participant({ peerId: par.peerId });
                     par.name = data.name;
@@ -46,35 +45,38 @@
                     name: userName,
                 }),
             );
+            // once
+            announce_self = () => {};
         };
+        // when ready
+        if (par.channel.readyState === "open") {
+            debugger;
+            announce_self();
+        }
 
         par.channel.onopen = () => {
+            // < bind this to the datachannel
             delete par.offline;
+            // check again it's totally ready..?
+            if (par.channel.readyState === "open") {
+                announce_self();
+            } else {
+                debugger;
+            }
+            console.log(`Par data open: ${par.peerId}`);
         };
         par.channel.onclose = () => {
             par.offline = 1;
             console.log(`Par leaves: ${par.name}`);
         };
-
-        if (par.channel.readyState === "open") {
-            announce_self();
-        } else {
-            par.channel.onopen = () => {
-                // check again it's totally ready..?
-                if (par.channel.readyState === "open") {
-                    announce_self();
-                }
-            }
-        }
     }
     // read or add new participant
     function i_participant({ peerId, pc }) {
-        let names = participants.map((par) => par.peerId + ": " + par.name);
-
-        console.log("i_participant: " + peerId, names);
         let par = participants.filter((par) => par.peerId == peerId)[0];
+        let was_new = false;
         if (pc) {
             if (!par) {
+                was_new = true;
                 // new par
                 par = { peerId, pc };
                 par.audio = new Audio();
@@ -82,12 +84,16 @@
                 participants.push(par);
             } else {
                 // allow that same object to take over..?
-                //  peerId comes from socket.io so it should be renewed.
+                //  peerId comes from socket.io, is per their websocket
                 if (par.pc == pc) debugger;
                 par.pc && par.pc?.close();
                 par.pc = pc;
             }
         }
+
+        let names = participants.map((par) => par.peerId + ": " + par.name);
+        console.log("i_participant: " + peerId, names);
+
         return par;
     }
     function volumeChange(par) {
@@ -131,6 +137,7 @@
             // start signaling via websocket to get to webrtc...
             if (Signaling) {
                 // should have been packed up
+                debugger;
                 Signaling.close();
             }
             Signaling = new SignalingClient({
@@ -138,9 +145,10 @@
                     // a peer connection, soon to receive tracks, name etc
                     let par = i_participant({ peerId, pc });
 
-                    // watch it become 'connected'
+                    // watch it become 'connected' (or so)
                     wait_for_par_ready(par, () => {
                         console.log("Par ready! " + par.peerId);
+
                         // input our stream to it
                         give_localStream(par);
 
@@ -160,12 +168,15 @@
     }
 
     // wait for par.pc to get in a good state
+    //  and forever copy whatever it changes to to par.constate
     function wait_for_par_ready(par, resolve) {
         let done = 0;
         let ready = 0;
         let observe = () => {
             let says = par.pc.connectionState + "/" + par.pc.signalingState;
             par.constate = says;
+
+            // https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/connectionState
             if (
                 [
                     // if we don't accept 'new' initially they never get there...
@@ -182,7 +193,7 @@
             } else {
                 ready = 0;
             }
-            console.log(
+            0 && console.log(
                 "Waiting " +
                     ((ready && "ready") || "") +
                     "for par" +
@@ -214,11 +225,11 @@
     // connect our stream to a peer, complicatedly
     function give_localStream(par) {
         // Remove existing senders before adding new tracks
-        par.pc.getSenders().forEach((sender) => {
-            if (sender.track) {
-                par.pc.removeTrack(sender);
-            }
-        });
+        // par.pc.getSenders().forEach((sender) => {
+        //     if (sender.track) {
+        //         par.pc.removeTrack(sender);
+        //     }
+        // });
 
         // Add tracks safely
         localStream.getTracks().forEach((track) => {
