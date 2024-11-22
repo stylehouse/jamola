@@ -2,13 +2,15 @@
     import { onDestroy } from "svelte";
     import { SvelteMap } from "svelte/reactivity";
     import { SignalingClient } from "$lib/rtcsignaling-client.svelte";
+    import { BitrateStats } from "$lib/bitratestats.svelte";
 
     let Signaling: SignalingClient;
     let localStream;
     let status = $state("Disconnected");
     let errorMessage = $state("");
     let userName = $state("you");
-    let participants = $state([]); // Map of participant name to {audio: HTMLAudioElement, volume: number}
+    let participants = $state([]);
+    let bitrates = new BitrateStats()
     let localVolume = 0.7;
 
     // participants exchange names in a webrtc datachannel
@@ -38,7 +40,7 @@
 
         // Announce ourselves
         let announce_self = () => {
-            console.log("Sending participant");
+            // console.log("Sending participant");
             par.channel.send(
                 JSON.stringify({
                     type: "participant",
@@ -55,34 +57,32 @@
         }
 
         par.channel.onopen = () => {
-            // < bind this to the datachannel
             delete par.offline;
             // check again it's totally ready..?
-            if (par.channel.readyState === "open") {
-                announce_self();
-            } else {
-                debugger;
-            }
-            console.log(`Par data open: ${par.peerId}`);
+            if (par.channel.readyState != "open") debugger
+            announce_self();
+            // console.log(`Data open: ${par.peerId}`);
         };
         par.channel.onclose = () => {
             par.offline = 1;
-            console.log(`Par leaves: ${par.name}`);
+            delete par.bitrate;
+            console.log(`Leaves: ${par.name}`);
         };
     }
     // read or add new participant
-    function i_participant({ peerId, pc }) {
+    function i_participant({ peerId, pc }, etc?) {
         let par = participants.filter((par) => par.peerId == peerId)[0];
-        let was_new = false;
+        let was_new = 0;
         if (pc) {
             if (!par) {
-                was_new = true;
+                was_new = 2;
                 // new par
                 par = { peerId, pc };
                 par.audio = new Audio();
                 par.audio.volume = localVolume;
                 participants.push(par);
             } else {
+                was_new = 1;
                 // allow that same object to take over..?
                 //  peerId comes from socket.io, is per their websocket
                 if (par.pc == pc) debugger;
@@ -90,11 +90,28 @@
                 par.pc = pc;
             }
         }
+        etc && Object.assign(par, etc)
+        if (!par.type) {
+            // subscribe this connection to bitrate monitoring
+            bitrates.add_par(par)
+        }
 
         let names = participants.map((par) => par.peerId + ": " + par.name);
         console.log("i_participant: " + peerId, names);
 
         return par;
+    }
+    function i_self_par(localStream) {
+        // this becomes our monitor maybe?
+        let par = i_participant({ peerId: "", pc: {} });
+        delete par.pc;
+        par.name = userName;
+        par.type = "monitor";
+        localStream.getTracks().forEach((track) => {
+            par.audio.srcObject = new MediaStream([track]);
+            par.audio.volume = 0;
+            par.audio.play().catch(console.error);
+        });
     }
     function volumeChange(par) {
         console.log("Volume is " + par.audio.volume);
@@ -123,16 +140,7 @@
                 await navigator.mediaDevices.getUserMedia(constraints);
             status = "Got microphone access";
 
-            // this becomes our monitor maybe?
-            let par = i_participant({ peerId: "", pc: {} });
-            delete par.pc;
-            par.name = userName;
-            par.type = "monitor";
-            localStream.getTracks().forEach((track) => {
-                par.audio.srcObject = new MediaStream([track]);
-                par.audio.volume = 0;
-                par.audio.play().catch(console.error);
-            });
+            let par = i_self_par(localStream)
 
             // start signaling via websocket to get to webrtc...
             if (Signaling) {
@@ -193,15 +201,16 @@
             } else {
                 ready = 0;
             }
-            0 && console.log(
-                "Waiting " +
-                    ((ready && "ready") || "") +
-                    "for par" +
-                    ((done && "done") || "") +
-                    ": " +
-                    says,
-                par,
-            );
+            0 &&
+                console.log(
+                    "Waiting " +
+                        ((ready && "ready") || "") +
+                        "for par" +
+                        ((done && "done") || "") +
+                        ": " +
+                        says,
+                    par,
+                );
             if (ready && !done) {
                 done = 1;
                 resolve();
@@ -241,8 +250,10 @@
         });
     }
 
+
     // switch everything off
     function stopConnection() {
+        bitrates.close();
         participants.forEach((par) => {
             par.pc?.close();
             par.audio.pause();
@@ -307,6 +318,8 @@
                 {#if par.offline}<span class="ohno">offline</span>{/if}
                 {#if par.constate}<span class="techwhat">{par.constate}</span
                     >{/if}
+                {#if par.bitrate}<span class="bitrate">{par.bitrate} kbps</span
+                    >{/if}
                 <label>
                     Volume:
                     <input
@@ -331,6 +344,12 @@
     .techwhat {
         color: cyan;
         font: monospace;
+    }
+    .bitrate {
+        color: cyan;
+        font: monospace;
+        transform: scaleY(0.7);
+        filter: blur(1px);
     }
 
     .container {
