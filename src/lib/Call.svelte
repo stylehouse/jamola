@@ -11,6 +11,8 @@
     let userName = $state("you");
     let participants = $state([]);
     let bitrates = new BitrateStats();
+    // it never seems to use more than 266 if given more
+    let target_bitrate = 270;
     let localVolume = 0.7;
 
     // participants exchange names in a webrtc datachannel
@@ -134,7 +136,7 @@
             localStream ||=
                 await navigator.mediaDevices.getUserMedia(constraints);
             status = "Got microphone access";
-            
+
             let par = i_self_par(localStream);
 
             // start signaling via websocket to get to webrtc...
@@ -225,12 +227,60 @@
             status = "Audio track started";
         };
     }
+    // Add this function to control bitrate parameters
+    function setAudioBitrate(sender, bitrate) {
+        const params = sender.getParameters();
+        // Check if we have encoding parameters
+        if (!params.encodings) {
+            params.encodings = [{}];
+        }
 
-    // connect our stream to a peer, complicatedly
+        // Set the maximum bitrate (in bps)
+        params.encodings[0].maxBitrate = bitrate * 1000; // Convert kbps to bps
+
+        // Apply the parameters
+        return sender.setParameters(params);
+    }
+
+    // Modify your give_localStream function to include bitrate control
     function give_localStream(par) {
-        // Add tracks safely
         localStream.getTracks().forEach((track) => {
-            par.pc.addTrack(track, localStream);
+            try {
+                const sender = par.pc.addTrack(track, localStream);
+
+                // For audio tracks, set the desired bitrate
+                if (track.kind === "audio") {
+                    // Wait for the connection to be established
+                    par.pc.addEventListener("connectionstatechange", () => {
+                        if (par.pc.connectionState === "connected") {
+                            // Set initial bitrate (e.g., 128 kbps for high quality Opus)
+                            setAudioBitrate(sender, target_bitrate).catch((error) =>
+                                console.error("Failed to set bitrate:", error),
+                            );
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error("Failed to add track:", error);
+            }
+        });
+    }
+
+    // Optional: Add a function to dynamically adjust bitrate
+    function updateAudioBitrate(newBitrate) {
+        target_bitrate = newBitrate
+        participants.map((par) => {
+            if (par.pc && par.pc.getSenders) {
+                const audioSender = par.pc
+                    .getSenders()
+                    .find((sender) => sender.track?.kind === "audio");
+
+                if (audioSender) {
+                    setAudioBitrate(audioSender, newBitrate).catch((error) =>
+                        console.error("Failed to update bitrate:", error),
+                    );
+                }
+            }
         });
     }
 
@@ -333,6 +383,19 @@
         <button onclick={stopConnection} disabled={status === "Disconnected"}>
             Not
         </button>
+
+        <label>
+            <overhang>bitrate</overhang>
+            <select
+                onchange={(e) => updateAudioBitrate(parseInt(e.target.value))}
+            >
+                <option value="50">50</option>
+                <option value="80">80</option>
+                <option value="130">130</option>
+                <option value="270" selected>270</option>
+                <option value="320">320</option>
+            </select>
+        </label>
     </div>
 
     <div class="status">
@@ -353,6 +416,7 @@
                     >{/if}
                 {#if par.bitrate}<span class="bitrate">{par.bitrate} kbps</span
                     >{/if}
+
                 <label>
                     Volume:
                     <input
@@ -377,9 +441,10 @@
         font-style: normal;
     }
     :global(h1),
-    :global(button) {
+    :global(button, select) {
         font-family: "RipeApricots", sans-serif;
         background: #4024;
+        font-size: 2em;
         padding: 22px;
         vertical-align: middle;
     }
@@ -400,7 +465,11 @@
         text-shadow: 3px 3px 2px white;
     }
     span[contenteditable] {
-        caret-width: 3px;
+        border: 3px solid #84d;
+    }
+    overhang {
+        position: absolute;
+        pointer-events: none;
     }
 
     /* par bits */
