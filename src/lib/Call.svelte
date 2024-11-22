@@ -225,7 +225,7 @@
             par.audio.srcObject = new MediaStream([e.track]);
             console.log("Got track", [par, par.audio.srcObject, localStream]);
             par.audio.play().catch(console.error);
-            status = "Audio track started";
+            status = "Got track";
         };
     }
     // Add this function to control bitrate parameters
@@ -414,13 +414,10 @@
             </select>
         </label>
 
-        <p>Status: {status}</p>
+        <p class="status">{status}</p>
         {#if errorMessage}
             <p class="error">{errorMessage}</p>
         {/if}
-    </div>
-
-    <div class="status">
     </div>
 
     <div class="participants">
@@ -513,9 +510,14 @@
     }
     .bitrate {
         color: cyan;
-        font: monospace;
+        font-family: monospace;
         transform: scaleY(0.7);
         filter: blur(1px);
+    }
+    .status {
+        color: rgb(17, 11, 75);
+        font-family: monospace;
+
     }
 
     .container {
@@ -534,13 +536,9 @@
         margin: 2rem 0;
     }
 
-
-    .status {
-        margin-top: 2rem;
-    }
-
     .error {
         color: red;
+        font-family: monospace;
     }
 
     .participants {
