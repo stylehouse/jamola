@@ -3,7 +3,8 @@
     import { SvelteMap } from "svelte/reactivity";
     import { SignalingClient } from "$lib/rtcsignaling-client.svelte";
     import { BitrateStats } from "$lib/bitratestats.svelte";
-
+    import { parRecorder,retryRecordingUploads } from "$lib/recording.svelte";
+    
     let Signaling: SignalingClient;
     let localStream;
     let status = $state("Disconnected");
@@ -62,8 +63,9 @@
         };
     }
 
+    type Participant = {peerId:string,pc?:RTCPeerConnection,name?}
     // read or add new participant (par)
-    function i_par({ peerId, pc, ...etc }) {
+    function i_par({ peerId, pc, ...etc }):Participant {
         let par = participants.filter((par) => par.peerId == peerId)[0];
         let was_new = 0;
         if (pc) {
@@ -79,6 +81,10 @@
                 // allow that same object to take over..?
                 //  peerId comes from socket.io, is per their websocket
                 if (par.pc == pc) debugger;
+                // Stop existing recording if we're replacing the connection
+                if (par.recorder) {
+                    par.recorder.stop();
+                }
                 par.pc && par.pc?.close();
                 par.pc = pc;
             }
@@ -86,10 +92,13 @@
 
         // you give them properties
         Object.assign(par, etc);
+        // they say their bitrate
         if (!par.type) {
-            // subscribe this connection to bitrate monitoring
             bitrates.add_par(par);
         }
+
+        // they record
+        par.recorder = new parRecorder({par,...stuff_we_tell_parRecorder()})
 
         let names = participants.map((par) => par.peerId + ": " + par.name);
         console.log("i_participant: " + peerId, names);
@@ -106,9 +115,22 @@
         });
         delete par.pc;
         localStream.getTracks().forEach((track) => {
-            par.audio.srcObject = new MediaStream([track]);
+            // Create a new MediaStream for monitoring
+            const monitorStream = new MediaStream([track]);
+            
+            par.audio.srcObject = monitorStream
             par.audio.volume = 0;
             par.audio.play().catch(console.error);
+
+            // Start recording this same stream
+            try {
+                if (par.recorder) {
+                    par.recorder.start(monitorStream);
+                    console.log("Started recording self stream");
+                }
+            } catch (error) {
+                console.error("Failed to start self recording:", error);
+            }
         });
     }
     function volumeChange(par) {
@@ -225,12 +247,17 @@
     function take_remoteStream(par) {
         par.pc.ontrack = (e) => {
             par.audio.srcObject = new MediaStream([e.track]);
+
+            // Start recording the received stream
+            if (par.recorder) {
+                par.recorder.start(par.audio.srcObject);
+            }
+
             console.log("Got track", [par, par.audio.srcObject, localStream]);
             par.audio.play().catch(console.error);
             status = "Got things";
         };
     }
-    // Add this function to control bitrate parameters
     function setAudioBitrate(sender, bitrate) {
         const params = sender.getParameters();
         // Check if we have encoding parameters
@@ -272,8 +299,19 @@
             }
         });
     }
-
+    function is_par_valid(par) {
+        return participants.includes(par)
+    }
     // Optional: Add a function to dynamically adjust bitrate
+    function stuff_we_tell_parRecorder() {
+        return {
+            title:goable_title,
+            bitrate:target_bitrate,
+            get_parti: () => participants,
+            is_par_valid,
+        }
+    }
+
     function updateAudioBitrate(newBitrate) {
         target_bitrate = newBitrate;
         participants.map((par) => {
@@ -287,6 +325,11 @@
                         console.error("Failed to update bitrate:", error),
                     );
                 }
+
+                // we record like that too?
+                if (par.recorder) {
+                    par.recorder.bitrate_changed(target_bitrate)
+                }
             }
         });
     }
@@ -294,19 +337,17 @@
     // switch everything off
     function stopConnection() {
         bitrates.close();
-        participants.forEach((par) => {
+        participants.map(par => {
             par.pc?.close();
+            if (par.recorder) {
+                par.recorder.stop()
+            }
             par.audio.pause();
             par.audio.srcObject = null;
         });
         Signaling && Signaling.close();
         Signaling = null;
 
-        // Remove all others? Or let them become disconnected, keeping their recordings?
-        // participants = participants.filter(par => par.type != 'monitor')
-        // < merge same usernames after a while?
-
-        // localStream = null;
         status = "Disconnected";
         errorMessage = "";
     }
@@ -422,7 +463,9 @@
         }
     });
 
+    //
     // have a title
+    //
     let title = $state('untitled')
     let yourtitle:Element
     let loaded_title = false;
@@ -459,16 +502,25 @@
             event.preventDefault();
         }
     }
+
+    // the title button|label blanks the title
+    function letswriteatitle(event) {
+        if (yourtitle) {
+            yourtitle.textContent = ""
+            yourtitle.focus()
+        }
+    }
+    // as will it being the default, once
     function focusonyourtitle(event) {
         if (first_writingyourtitle) {
             first_writingyourtitle = false;
             // clear the default value
             if (title == "untitled") {
                 yourtitle.textContent = ""
-                // yourtitle.focus()
             }
         }
     }
+
     // prevents the record changing title too quickly while typing
     //  while not requiring a onblur() event to set it
     let goable_title = $state(title)
@@ -494,15 +546,23 @@
             goable_title = title
         }
     }
-    // the title button|label blanks the title
-    function letswriteatitle(event) {
-        if (yourtitle) {
-            yourtitle.textContent = ""
-            yourtitle.focus()
+    // the recordings get the title, will segment on change
+    $effect(() => {
+        if (goable_title) {
+            participants.map((par) => {
+                par.recorder.title_changed(goable_title)
+            });
         }
-    }
+    })
     
-    
+    $effect(() => {
+        // Periodically retry failed uploads, eg now
+        retryRecordingUploads()
+        // And every 5 minutes
+        setInterval(retryRecordingUploads, 5 * 60 * 1000);
+    })
+
+    // < is it possible to reuse the encoded opus that was transmit to us as the recorded copy?
 </script>
 
 <main class="container" style="display:none;" bind:this={themain}>
@@ -637,7 +697,7 @@
         color: rgb(54, 19, 19);
         text-shadow: 5px 3px 9px #aca;
     }
-    span[contenteditable] {
+    span[contenteditable=true] {
         border-bottom: 7px dashed #84d;
     }
     .overhang {
