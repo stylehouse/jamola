@@ -60,7 +60,7 @@
         };
     }
     // read or add new participant
-    function i_participant({ peerId, pc }, etc?) {
+    function i_participant({ peerId, pc, ...etc }) {
         let par = participants.filter((par) => par.peerId == peerId)[0];
         let was_new = 0;
         if (pc) {
@@ -80,7 +80,9 @@
                 par.pc = pc;
             }
         }
-        etc && Object.assign(par, etc);
+
+        // you give them properties
+        Object.assign(par, etc);
         if (!par.type) {
             // subscribe this connection to bitrate monitoring
             bitrates.add_par(par);
@@ -91,12 +93,15 @@
 
         return par;
     }
+    // this becomes our monitor
     function i_self_par(localStream) {
-        // this becomes our monitor maybe?
-        let par = i_participant({ peerId: "", pc: {} });
+        let par = i_participant({
+            peerId: "",
+            pc: {},
+            name: userName,
+            type: "monitor",
+        });
         delete par.pc;
-        par.name = userName;
-        par.type = "monitor";
         localStream.getTracks().forEach((track) => {
             par.audio.srcObject = new MediaStream([track]);
             par.audio.volume = 0;
@@ -129,7 +134,7 @@
             localStream ||=
                 await navigator.mediaDevices.getUserMedia(constraints);
             status = "Got microphone access";
-
+            
             let par = i_self_par(localStream);
 
             // start signaling via websocket to get to webrtc...
@@ -223,20 +228,9 @@
 
     // connect our stream to a peer, complicatedly
     function give_localStream(par) {
-        // Remove existing senders before adding new tracks
-        // par.pc.getSenders().forEach((sender) => {
-        //     if (sender.track) {
-        //         par.pc.removeTrack(sender);
-        //     }
-        // });
-
         // Add tracks safely
         localStream.getTracks().forEach((track) => {
-            try {
-                par.pc.addTrack(track, localStream);
-            } catch (error) {
-                console.error("Failed to add track:", error);
-            }
+            par.pc.addTrack(track, localStream);
         });
     }
 
@@ -259,47 +253,51 @@
         status = "Disconnected";
         errorMessage = "";
     }
+    onDestroy(() => {
+        stopConnection();
+    });
 
+    // username related
     let themain = $state();
     let yourname;
     let focus_yourname_once = true;
     $effect(() => {
         if (themain) {
+            // < fade in. this is for the awkward slow loads.
             themain.style.display = "initial";
         }
         if (yourname && focus_yourname_once && userName == "you") {
             focus_yourname_once = false;
             setTimeout(() => {
-                yourname.focus()
-            }, 130)
+                yourname.focus();
+            }, 130);
             console.log("focus yourname");
         }
     });
     function changeyourname(event) {
         userName = event.target.textContent;
     }
-    let first_writingyourname = true
+    let first_writingyourname = true;
     function writingyourname(event) {
         // a noise filter
-        console.log("writingyourname",event)
-        if (event.key == 'Enter') {
-            event.preventDefault()
-        }
-        else {
+        console.log("writingyourname", event);
+        if (event.key == "Enter") {
+            event.preventDefault();
+        } else {
             if (first_writingyourname) {
-                first_writingyourname = false
-                if (userName == 'you') {
-                    userName_printable = ''
+                first_writingyourname = false;
+                if (userName == "you") {
+                    userName_printable = "";
                 }
             }
         }
     }
     let userName_printable = $state(userName);
-    let loaded_username = false
+    let loaded_username = false;
     $effect(() => {
         if (userName == "you" && !loaded_username) {
             // init
-            loaded_username = true
+            loaded_username = true;
             if (localStorage.userName) {
                 userName = localStorage.userName;
             }
@@ -310,10 +308,6 @@
         if (yourname && yourname.textContent != userName) {
             userName_printable = userName;
         }
-    });
-
-    onDestroy(() => {
-        stopConnection();
     });
 </script>
 
