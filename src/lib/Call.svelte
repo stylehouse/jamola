@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onDestroy } from "svelte";
+    import { onDestroy, untrack } from "svelte";
     import { SvelteMap } from "svelte/reactivity";
     import { SignalingClient } from "$lib/rtcsignaling-client.svelte";
     import { BitrateStats } from "$lib/bitratestats.svelte";
@@ -14,16 +14,6 @@
     let localVolume = 0.7;
 
     // participants exchange names in a webrtc datachannel
-    $effect(() => {
-        if (userName == "you") {
-            // init
-            if (localStorage.userName) {
-                userName = localStorage.userName;
-            }
-        } else {
-            localStorage.userName = userName;
-        }
-    });
     function createDataChannel(par) {
         par.channel = par.pc.createDataChannel("participants");
         // the receiver is this other channel they sent us
@@ -270,11 +260,44 @@
         status = "Disconnected";
         errorMessage = "";
     }
+
+
+
+
+
+    
     let themain = $state();
+    let yourname
+    let focus_yourname_once = true
     $effect(() => {
         if (themain) {
             themain.style.display = "initial";
         }
+        if (yourname && focus_yourname_once) {
+            focus_yourname_once = false
+            yourname.focus()
+            console.log("focus yourname")
+        }
+
+    });
+    function changeyourname(event) {
+        userName = event.target.textContent;
+    }
+    let userName_printable = $state(userName)
+    $effect(() => {
+        if (userName == "you") {
+            // init
+            if (localStorage.userName) {
+                userName = localStorage.userName;
+            }
+        } else {
+            localStorage.userName = userName;
+        }
+        // check we aren't overwriting the source of this data
+        if (yourname && yourname.textContent != userName) {
+            userName_printable = userName
+        }
+        
     });
 
     onDestroy(() => {
@@ -283,14 +306,13 @@
 </script>
 
 <main class="container" style="display:none;" bind:this={themain}>
-    <div class="setup">
-        <input
-            type="text"
-            bind:value={userName}
-            placeholder="Enter your name"
-            disabled={status !== "Disconnected"}
-        />
-    </div>
+    <h1><span class="welcometo">Welcome to</span> <span class="jamola">jamola</span>, <span 
+        contenteditable={status == "Disconnected"}
+        bind:this={yourname}
+        oninput={changeyourname}
+        class="yourname"
+        >{userName_printable}</span>
+        !</h1>
 
     <div class="controls">
         <button onclick={startConnection} disabled={status !== "Disconnected"}>
@@ -337,6 +359,35 @@
 </main>
 
 <style>
+    @font-face {
+        font-family: 'RipeApricots';
+        src: url('/RipeApricots.ttf') format('truetype');
+        font-weight: normal;
+        font-style: normal;
+    }
+    :global(h1), :global(button) {
+        font-family: 'RipeApricots', sans-serif;
+        background:#4024;
+        padding:22px;
+        vertical-align: middle;
+        font-size:230%
+    }
+    .welcometo {
+        font-size:250%;
+        color:#11271e;
+    }
+    .jamola {
+        font-size:300%;
+        color:#2d0769;
+    }
+    .yourname {
+        font-size:250%;
+        color:#312b11;
+        text-shadow: 3px white 3px;
+        text-shadow: 3px 3px 2px white;
+    }
+
+     /* par bits */
     .ohno {
         color: red;
         font: monospace;
@@ -351,6 +402,9 @@
         transform: scaleY(0.7);
         filter: blur(1px);
     }
+
+
+
 
     .container {
         max-width: 600px;
