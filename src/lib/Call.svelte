@@ -131,6 +131,8 @@
             errorMessage = "Please enter your name first";
             return;
         }
+        // this will be, sync, after negate()
+        status = "Plugging out";
         errorMessage = "";
         try {
             // Get microphone stream
@@ -255,8 +257,12 @@
                     par.pc.addEventListener("connectionstatechange", () => {
                         if (par.pc.connectionState === "connected") {
                             // Set initial bitrate (e.g., 128 kbps for high quality Opus)
-                            setAudioBitrate(sender, target_bitrate).catch((error) =>
-                                console.error("Failed to set bitrate:", error),
+                            setAudioBitrate(sender, target_bitrate).catch(
+                                (error) =>
+                                    console.error(
+                                        "Failed to set bitrate:",
+                                        error,
+                                    ),
                             );
                         }
                     });
@@ -269,7 +275,7 @@
 
     // Optional: Add a function to dynamically adjust bitrate
     function updateAudioBitrate(newBitrate) {
-        target_bitrate = newBitrate
+        target_bitrate = newBitrate;
         participants.map((par) => {
             if (par.pc && par.pc.getSenders) {
                 const audioSender = par.pc
@@ -308,7 +314,9 @@
         stopConnection();
     });
 
+    //
     // username related
+    //
     function changeyourname(event) {
         userName = event.target.textContent;
     }
@@ -317,6 +325,10 @@
         // a noise filter
         console.log("writingyourname", event);
         if (event.key == "Enter") {
+            console.log("Caught Enter, assume you want to Ring now");
+            negate();
+            // unfocus - so the android keyboard should retract?
+            yourname.blur();
             event.preventDefault();
         } else {
             if (first_writingyourname) {
@@ -357,7 +369,9 @@
         }
     });
 
+    //
     // misc
+    //
     // the interface reveals on first $effect()
     // < blur?
     let themain = $state();
@@ -366,20 +380,43 @@
             // < fade in. this is for the awkward slow loads.
             themain.style.display = "initial";
         }
-    })
+    });
     // buttons word changes
-    let say_negate = $state("Ring")
-    let negating = $state(false)
+    let say_negate = $state("Ring");
+    let negating = $state(false);
     function negate() {
         if (status === "Disconnected") {
-            startConnection()
-            say_negate = "leave"
-        }
-        else {
-            stopConnection()
-            say_negate = "Ring"
+            startConnection();
+            if (status === "Disconnected") {
+                // we rely on this instantly changing
+                debugger;
+            }
+            say_negate = "leave";
+        } else {
+            stopConnection();
+            say_negate = "Ring";
         }
     }
+    // auto-resume - good for debugging when all clients refresh all the time
+    let resumable_once = true;
+    $effect(() => {
+        if (resumable_once) {
+            // init
+            resumable_once = false;
+            if (localStorage.was_on && userName != "you") {
+                console.log("Resuming...");
+                setTimeout(() => negate(), 91);
+            }
+        }
+    });
+    // after the above, or it will store the default was_on=false
+    $effect(() => {
+        if (status === "Disconnected") {
+            delete localStorage.was_on;
+        } else {
+            localStorage.was_on = "call";
+        }
+    });
 </script>
 
 <main class="container" style="display:none;" bind:this={themain}>
@@ -421,19 +458,17 @@
     </div>
 
     <div class="participants">
-        <h1>Participants</h1>
+        <h1 class="casual">Participants</h1>
         {#each participants as par (par.peerId)}
-            <div class="participant">
-                <span>{par.name || par.peerId}</span>
+            <div class="participant {par.type == 'monitor' && 'monitor'}">
+                <span class="theyname">{par.name || par.peerId}</span>
                 {#if par.type}<span class="streamtype">{par.type}</span>{/if}
                 {#if par.offline}<span class="ohno">offline</span>{/if}
                 {#if par.constate}<span class="techwhat">{par.constate}</span
                     >{/if}
-                {#if par.bitrate}<span class="bitrate">{par.bitrate} kbps</span
-                    >{/if}
 
                 <label>
-                    Volume:
+                    <overhang>volume</overhang>
                     <input
                         type="range"
                         min="0"
@@ -443,6 +478,9 @@
                         onchange={() => volumeChange(par)}
                     />
                 </label>
+
+                {#if par.bitrate}<span class="bitrate">{par.bitrate} kbps</span
+                    >{/if}
             </div>
         {/each}
     </div>
@@ -463,8 +501,12 @@
         padding: 9px;
         vertical-align: middle;
     }
-    div,h1,button,select,yourname {
-        border-radius:1em;
+    div,
+    h1,
+    button,
+    select,
+    yourname {
+        border-radius: 1em;
     }
     :global(h1) {
         font-size: 330%;
@@ -488,37 +530,6 @@
         position: absolute;
         pointer-events: none;
     }
-    button {
-        padding: 0.3rem 1rem;
-        cursor: pointer;
-        font-size: 8em;
-        line-height:0.3em;
-    }
-    button:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-    }
-
-    /* par bits */
-    .ohno {
-        color: red;
-        font: monospace;
-    }
-    .techwhat {
-        color: cyan;
-        font: monospace;
-    }
-    .bitrate {
-        color: cyan;
-        font-family: monospace;
-        transform: scaleY(0.7);
-        filter: blur(1px);
-    }
-    .status {
-        color: rgb(17, 11, 75);
-        font-family: monospace;
-
-    }
 
     .container {
         max-width: 600px;
@@ -535,14 +546,66 @@
         gap: 1rem;
         margin: 2rem 0;
     }
-
+    button {
+        padding: 0.3rem 1rem;
+        cursor: pointer;
+        font-size: 8em;
+        line-height: 0.3em;
+    }
+    .casual {
+        line-height: 0.3em;
+        margin: 0em;
+    }
+    button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    .status {
+        color: rgb(17, 11, 75);
+        font-family: monospace;
+    }
     .error {
         color: red;
         font-family: monospace;
     }
 
-    .participants {
-        margin-top: 2rem;
+    /* par bits */
+
+    .ohno {
+        color: red;
+        font: monospace;
+    }
+    .techwhat {
+        color: cyan;
+        font: monospace;
+    }
+    .bitrate {
+        color: cyan;
+        font-family: monospace;
+        transform: scaleY(0.7);
+        filter: blur(1px);
+    }
+    
+    input[type="range"]::-webkit-slider-runnable-track {
+        width: 100%;
+        height: 18px;
+        background: #ddd;
+        border-radius: 4px;
+    }
+
+    input[type="range"]::-moz-range-track {
+        width: 100%;
+        height: 8px;
+        background: #ddd;
+        border-radius: 4px;
+    }
+
+    input[type="range"]::-ms-track {
+        width: 100%;
+        height: 18px;
+        background: transparent;
+        border-color: transparent;
+        color: transparent;
     }
 
     .participant {
@@ -553,6 +616,9 @@
         padding: 0.5rem;
         background: #2b463b;
         border-radius: 4px;
+    }
+    .monitor {
+        background-color: #25855d;
     }
 
     input[type="range"] {
