@@ -24,7 +24,7 @@
             event.channel.onmessage = (event) => {
                 const data = JSON.parse(event.data);
                 if (data.type === "participant") {
-                    par = i_participant({ peerId: par.peerId });
+                    par = i_par({ peerId: par.peerId });
                     par.name = data.name;
                 }
             };
@@ -61,8 +61,9 @@
             console.log(`Leaves: ${par.name}`);
         };
     }
-    // read or add new participant
-    function i_participant({ peerId, pc, ...etc }) {
+
+    // read or add new participant (par)
+    function i_par({ peerId, pc, ...etc }) {
         let par = participants.filter((par) => par.peerId == peerId)[0];
         let was_new = 0;
         if (pc) {
@@ -96,8 +97,8 @@
         return par;
     }
     // this becomes our monitor
-    function i_self_par(localStream) {
-        let par = i_participant({
+    function i_myself_par(localStream) {
+        let par = i_par({
             peerId: "",
             pc: {},
             name: userName,
@@ -137,7 +138,7 @@
                 await navigator.mediaDevices.getUserMedia(constraints);
             status = "Got microphone access";
 
-            let par = i_self_par(localStream);
+            let par = i_myself_par(localStream);
 
             // start signaling via websocket to get to webrtc...
             if (Signaling) {
@@ -148,7 +149,7 @@
             Signaling = new SignalingClient({
                 on_peer: ({ peerId, pc }) => {
                     // a peer connection, soon to receive tracks, name etc
-                    let par = i_participant({ peerId, pc });
+                    let par = i_par({ peerId, pc });
 
                     // watch it become 'connected' (or so)
                     wait_for_par_ready(par, () => {
@@ -308,22 +309,6 @@
     });
 
     // username related
-    let themain = $state();
-    let yourname;
-    let focus_yourname_once = true;
-    $effect(() => {
-        if (themain) {
-            // < fade in. this is for the awkward slow loads.
-            themain.style.display = "initial";
-        }
-        if (yourname && focus_yourname_once && userName == "you") {
-            focus_yourname_once = false;
-            setTimeout(() => {
-                yourname.focus();
-            }, 130);
-            console.log("focus yourname");
-        }
-    });
     function changeyourname(event) {
         userName = event.target.textContent;
     }
@@ -359,6 +344,42 @@
             userName_printable = userName;
         }
     });
+    let yourname;
+    let focus_yourname_once = true;
+    $effect(() => {
+        // have to put this after we may have loaded_username
+        if (yourname && focus_yourname_once && userName == "you") {
+            focus_yourname_once = false;
+            setTimeout(() => {
+                yourname.focus();
+            }, 130);
+            console.log("focus yourname");
+        }
+    });
+
+    // misc
+    // the interface reveals on first $effect()
+    // < blur?
+    let themain = $state();
+    $effect(() => {
+        if (themain) {
+            // < fade in. this is for the awkward slow loads.
+            themain.style.display = "initial";
+        }
+    })
+    // buttons word changes
+    let say_negate = $state("Ring")
+    let negating = $state(false)
+    function negate() {
+        if (status === "Disconnected") {
+            startConnection()
+            say_negate = "leave"
+        }
+        else {
+            stopConnection()
+            say_negate = "Ring"
+        }
+    }
 </script>
 
 <main class="container" style="display:none;" bind:this={themain}>
@@ -376,12 +397,8 @@
     </h1>
 
     <div class="controls">
-        <button onclick={startConnection} disabled={status !== "Disconnected"}>
-            Ring
-        </button>
-
-        <button onclick={stopConnection} disabled={status === "Disconnected"}>
-            Not
+        <button onclick={negate} disabled={negating}>
+            {say_negate}
         </button>
 
         <label>
@@ -396,17 +413,18 @@
                 <option value="320">320</option>
             </select>
         </label>
-    </div>
 
-    <div class="status">
         <p>Status: {status}</p>
         {#if errorMessage}
             <p class="error">{errorMessage}</p>
         {/if}
     </div>
 
+    <div class="status">
+    </div>
+
     <div class="participants">
-        <h2>Participants</h2>
+        <h1>Participants</h1>
         {#each participants as par (par.peerId)}
             <div class="participant">
                 <span>{par.name || par.peerId}</span>
@@ -445,8 +463,11 @@
         font-family: "RipeApricots", sans-serif;
         background: #4024;
         font-size: 2em;
-        padding: 22px;
+        padding: 9px;
         vertical-align: middle;
+    }
+    div,h1,button,select,yourname {
+        border-radius:1em;
     }
     :global(h1) {
         font-size: 330%;
@@ -460,16 +481,25 @@
     }
     .yourname {
         font-size: 170%;
-        color: #312b11;
-        text-shadow: 3px white 3px;
-        text-shadow: 3px 3px 2px white;
+        color: rgb(54, 19, 19);
+        text-shadow: 5px 3px 9px #aca;
     }
     span[contenteditable] {
-        border: 3px solid #84d;
+        border-bottom: 7px dashed #84d;
     }
     overhang {
         position: absolute;
         pointer-events: none;
+    }
+    button {
+        padding: 0.3rem 1rem;
+        cursor: pointer;
+        font-size: 8em;
+        line-height:0.3em;
+    }
+    button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
     }
 
     /* par bits */
@@ -504,16 +534,6 @@
         margin: 2rem 0;
     }
 
-    button {
-        padding: 0.3rem 1rem;
-        cursor: pointer;
-        font-size: 8em;
-    }
-
-    button:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-    }
 
     .status {
         margin-top: 2rem;
