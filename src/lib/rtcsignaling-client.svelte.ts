@@ -29,6 +29,9 @@ export class SignalingClient {
             for (const peerId of peers) {
                 const pc = this.createPeerConnection(peerId);
                 const offer = await pc.createOffer();
+
+                // meddle with bitrates
+
                 await pc.setLocalDescription(offer);
                 this.socket.emit('offer', {
                     targetId: peerId,  // This is who we want to connect to

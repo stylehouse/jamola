@@ -10,7 +10,7 @@
     let errorMessage = $state("");
     let userName = $state("you");
     let participants = $state([]);
-    let bitrates = new BitrateStats()
+    let bitrates = new BitrateStats();
     let localVolume = 0.7;
 
     // participants exchange names in a webrtc datachannel
@@ -49,7 +49,7 @@
         par.channel.onopen = () => {
             delete par.offline;
             // check again it's totally ready..?
-            if (par.channel.readyState != "open") debugger
+            if (par.channel.readyState != "open") debugger;
             announce_self();
             // console.log(`Data open: ${par.peerId}`);
         };
@@ -80,10 +80,10 @@
                 par.pc = pc;
             }
         }
-        etc && Object.assign(par, etc)
+        etc && Object.assign(par, etc);
         if (!par.type) {
             // subscribe this connection to bitrate monitoring
-            bitrates.add_par(par)
+            bitrates.add_par(par);
         }
 
         let names = participants.map((par) => par.peerId + ": " + par.name);
@@ -130,7 +130,7 @@
                 await navigator.mediaDevices.getUserMedia(constraints);
             status = "Got microphone access";
 
-            let par = i_self_par(localStream)
+            let par = i_self_par(localStream);
 
             // start signaling via websocket to get to webrtc...
             if (Signaling) {
@@ -240,7 +240,6 @@
         });
     }
 
-
     // switch everything off
     function stopConnection() {
         bitrates.close();
@@ -261,32 +260,46 @@
         errorMessage = "";
     }
 
-
-
-
-
-    
     let themain = $state();
-    let yourname
-    let focus_yourname_once = true
+    let yourname;
+    let focus_yourname_once = true;
     $effect(() => {
         if (themain) {
             themain.style.display = "initial";
         }
-        if (yourname && focus_yourname_once) {
-            focus_yourname_once = false
-            yourname.focus()
-            console.log("focus yourname")
+        if (yourname && focus_yourname_once && userName == "you") {
+            focus_yourname_once = false;
+            setTimeout(() => {
+                yourname.focus()
+            }, 130)
+            console.log("focus yourname");
         }
-
     });
     function changeyourname(event) {
         userName = event.target.textContent;
     }
-    let userName_printable = $state(userName)
+    let first_writingyourname = true
+    function writingyourname(event) {
+        // a noise filter
+        console.log("writingyourname",event)
+        if (event.key == 'Enter') {
+            event.preventDefault()
+        }
+        else {
+            if (first_writingyourname) {
+                first_writingyourname = false
+                if (userName == 'you') {
+                    userName_printable = ''
+                }
+            }
+        }
+    }
+    let userName_printable = $state(userName);
+    let loaded_username = false
     $effect(() => {
-        if (userName == "you") {
+        if (userName == "you" && !loaded_username) {
             // init
+            loaded_username = true
             if (localStorage.userName) {
                 userName = localStorage.userName;
             }
@@ -295,9 +308,8 @@
         }
         // check we aren't overwriting the source of this data
         if (yourname && yourname.textContent != userName) {
-            userName_printable = userName
+            userName_printable = userName;
         }
-        
     });
 
     onDestroy(() => {
@@ -306,13 +318,18 @@
 </script>
 
 <main class="container" style="display:none;" bind:this={themain}>
-    <h1><span class="welcometo">Welcome to</span> <span class="jamola">jamola</span>, <span 
-        contenteditable={status == "Disconnected"}
-        bind:this={yourname}
-        oninput={changeyourname}
-        class="yourname"
-        >{userName_printable}</span>
-        !</h1>
+    <h1>
+        <span class="welcometo">Welcome to</span>
+        <span class="jamola">jamola</span>,
+        <span
+            contenteditable={status == "Disconnected"}
+            bind:this={yourname}
+            oninput={changeyourname}
+            onkeypress={writingyourname}
+            class="yourname">{userName_printable}</span
+        >
+        !
+    </h1>
 
     <div class="controls">
         <button onclick={startConnection} disabled={status !== "Disconnected"}>
@@ -360,34 +377,39 @@
 
 <style>
     @font-face {
-        font-family: 'RipeApricots';
-        src: url('/RipeApricots.ttf') format('truetype');
+        font-family: "RipeApricots";
+        src: url("/RipeApricots.ttf") format("truetype");
         font-weight: normal;
         font-style: normal;
     }
-    :global(h1), :global(button) {
-        font-family: 'RipeApricots', sans-serif;
-        background:#4024;
-        padding:22px;
+    :global(h1),
+    :global(button) {
+        font-family: "RipeApricots", sans-serif;
+        background: #4024;
+        padding: 22px;
         vertical-align: middle;
-        font-size:230%
+    }
+    :global(h1) {
+        font-size: 330%;
     }
     .welcometo {
-        font-size:250%;
-        color:#11271e;
+        color: #11271e;
     }
     .jamola {
-        font-size:300%;
-        color:#2d0769;
+        font-size: 220%;
+        color: #2d0769;
     }
     .yourname {
-        font-size:250%;
-        color:#312b11;
+        font-size: 170%;
+        color: #312b11;
         text-shadow: 3px white 3px;
         text-shadow: 3px 3px 2px white;
     }
+    span[contenteditable] {
+        caret-width: 3px;
+    }
 
-     /* par bits */
+    /* par bits */
     .ohno {
         color: red;
         font: monospace;
@@ -402,9 +424,6 @@
         transform: scaleY(0.7);
         filter: blur(1px);
     }
-
-
-
 
     .container {
         max-width: 600px;
