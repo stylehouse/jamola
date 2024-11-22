@@ -227,7 +227,7 @@
             par.audio.srcObject = new MediaStream([e.track]);
             console.log("Got track", [par, par.audio.srcObject, localStream]);
             par.audio.play().catch(console.error);
-            status = "Got track";
+            status = "Got things";
         };
     }
     // Add this function to control bitrate parameters
@@ -339,8 +339,11 @@
             }
         }
     }
+    // make a printable version that we will update less
     let userName_printable = $state(userName);
     let loaded_username = false;
+    // resume the last username
+    // and copy to printable if a change
     $effect(() => {
         if (userName == "you" && !loaded_username) {
             // init
@@ -363,6 +366,7 @@
         if (yourname && focus_yourname_once && userName == "you") {
             focus_yourname_once = false;
             setTimeout(() => {
+                yourname.textContent = ""
                 yourname.focus();
             }, 130);
             console.log("focus yourname");
@@ -417,12 +421,94 @@
             localStorage.was_on = "call";
         }
     });
+
+    // have a title
+    let title = $state('untitled')
+    let yourtitle:Element
+    let loaded_title = false;
+    let first_writingyourtitle = true
+    // resume the last title
+    // and copy to printable if a change
+    $effect(() => {
+        if (title == "untitled" && !loaded_title) {
+            // init
+            loaded_title = true;
+            if (localStorage.title) {
+                title = localStorage.title;
+            }
+        } else {
+            localStorage.title = title;
+        }
+        // check we aren't overwriting the source of this data
+        if (yourtitle && yourtitle.textContent != title) {
+            title_printable = title;
+        }
+    });
+    let title_printable = $state(title)
+    function changeyourtitle(event) {
+        title = event.target.textContent;
+    }
+    function writingyourtitle(event) {
+        // a noise filter
+        console.log("writingyourtitle", event);
+        if (event.key == "Enter") {
+            console.log("Caught Enter, assume you wrote a title");
+            // unfocus - so the android keyboard should retract?
+            yourtitle.blur();
+            commit_titlechange();
+            event.preventDefault();
+        }
+    }
+    function focusonyourtitle(event) {
+        if (first_writingyourtitle) {
+            first_writingyourtitle = false;
+            // clear the default value
+            if (title == "untitled") {
+                yourtitle.textContent = ""
+                // yourtitle.focus()
+            }
+        }
+    }
+    // prevents the record changing title too quickly while typing
+    //  while not requiring a onblur() event to set it
+    let goable_title = $state(title)
+    $effect(() => {
+        if (title != goable_title) {
+            pend_titlechange()
+        }
+    })
+    // a unique object
+    let pending_titlechange = {}
+    function pend_titlechange() {
+        console.log("Pending began for "+title)
+        let thischange = pending_titlechange = {}
+        setTimeout(() => {
+            if (thischange == pending_titlechange) {
+                commit_titlechange()
+            }
+        },2200)
+    }
+    function commit_titlechange() {
+        pending_titlechange = {}
+        if (title != goable_title) {
+            goable_title = title
+        }
+    }
+    // the title button|label blanks the title
+    function letswriteatitle(event) {
+        if (yourtitle) {
+            yourtitle.textContent = ""
+            yourtitle.focus()
+        }
+    }
+    
+    
 </script>
 
 <main class="container" style="display:none;" bind:this={themain}>
     <h1>
-        <span class="welcometo">Welcome to</span>
-        <span class="jamola">jamola</span>,
+        <span class="welcometo overhang">Welcome to</span>
+        <span class="jamola"><a href="https://github.com/stylehouse/jamola">jamola</a></span>,
         <span
             contenteditable={status == "Disconnected"}
             bind:this={yourname}
@@ -439,7 +525,7 @@
         </button>
 
         <label>
-            <overhang>bitrate</overhang>
+            <span class="overhang">bitrate</span>
             <select
                 onchange={(e) => updateAudioBitrate(parseInt(e.target.value))}
             >
@@ -456,9 +542,28 @@
             <p class="error">{errorMessage}</p>
         {/if}
     </div>
-
     <div class="participants">
-        <h1 class="casual">Participants</h1>
+        <h1 class="casual" >
+
+
+            <button class="casual"
+                    onclick={letswriteatitle}
+                >Title</button>
+
+
+                <span
+                    contenteditable={status != "Disconnected"}
+                    bind:this={yourtitle}
+                    onfocus={focusonyourtitle}
+                    oninput={changeyourtitle}
+                    onkeypress={writingyourtitle}
+                    onblur={commit_titlechange}
+                    class="yourtitle"
+                    spellcheck="false"
+
+                    >{title_printable}</span>
+
+        </h1>
         {#each participants as par (par.peerId)}
             <div class="participant {par.type == 'monitor' && 'monitor'}">
                 <span class="theyname">{par.name || par.peerId}</span>
@@ -468,7 +573,7 @@
                     >{/if}
 
                 <label>
-                    <overhang>volume</overhang>
+                    <span class="overhang">volume</span>
                     <input
                         type="range"
                         min="0"
@@ -518,7 +623,16 @@
         font-size: 220%;
         color: #2d0769;
     }
+    .jamola a {
+        color:inherit;
+        /* text-decoration:inherit; */
+    }
     .yourname {
+        font-size: 170%;
+        color: rgb(54, 19, 19);
+        text-shadow: 5px 3px 9px #aca;
+    }
+    .yourtitle {
         font-size: 170%;
         color: rgb(54, 19, 19);
         text-shadow: 5px 3px 9px #aca;
@@ -526,7 +640,7 @@
     span[contenteditable] {
         border-bottom: 7px dashed #84d;
     }
-    overhang {
+    .overhang {
         position: absolute;
         pointer-events: none;
     }
@@ -555,6 +669,10 @@
     .casual {
         line-height: 0.3em;
         margin: 0em;
+    }
+    .casual button {
+        background-color: rgba(97, 88, 60, 0.322);
+        font-size:1.2em;
     }
     button:disabled {
         opacity: 0.5;
@@ -585,7 +703,7 @@
         transform: scaleY(0.7);
         filter: blur(1px);
     }
-    
+
     input[type="range"]::-webkit-slider-runnable-track {
         width: 100%;
         height: 18px;
