@@ -1,12 +1,10 @@
 // Recorder class to manage recording state and chunks for each participant
 export class parRecorder {
     par = $state()
-    constructor({par, uploadIntervalMs = 5000, title, bitrate, is_par_valid, get_parti}) { // 30 second default
+    constructor({par, uploadIntervalMs = 5000, title, bitrate}) { // 30 second default
         this.par = par;
         this.title = title == null ? 'untitled' : title
         this.bitrate = bitrate
-        this.is_par_valid = is_par_valid
-        this.get_parti = get_parti
         this.mediaRecorder = null;
         this.recordedChunks = [];
         this.uploadInterval = null;
@@ -91,10 +89,10 @@ export class parRecorder {
         if (this.recordedChunks.length < 1) return console.log("non-Segment: too tiny");
         // sanity
         if (!this.par.name) return console.warn(`non-Segment: no name (after ${milliseconds}ms)`)
-        if (!this.par.title) return console.warn(`non-Segment: no title`)
-        // we can't seem to ensure that this par is in the current set of participants,
-        //  it seems like a svelte5 object proxy problem. par!=this.par, yet par.pc==this.par.pc etc
-        // so don't worry about it
+        if (!this.title) return console.warn(`non-Segment: no title`)
+        // < we can't seem to ensure that this par is in the current set of participants,
+        //   it seems like a svelte5 object proxy problem. par!=this.par, yet par.pc==this.par.pc etc
+        //   so don't worry about it
 
         const blob = new Blob(this.recordedChunks, { type: 'audio/webm' });
         this.recordedChunks = []; // Clear for next segment
