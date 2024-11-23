@@ -180,17 +180,21 @@ async function openDB() {
 async function upload_recrecord({rec,good,bad}) {
     // Create form data for upload https://developer.mozilla.org/en-US/docs/Web/API/FormData/append
     const formData = new FormData();
+    let with_filename = {}
+    for (let key in rec) {
+        if (rec.hasOwnProperty(key)) {
+            if (rec.hasOwnProperty(key+'_filename')) {
+                with_filename[key] = rec[key+'_filename']
+            }
+        }
+    }
     for (let key in rec) {
         if (rec.hasOwnProperty(key)) {
             if (key.endsWith('_filename')) {
                 continue
             }
-            let filename = null
-            if (rec.hasOwnProperty(key+'_filename')) {
-                filename = key+'_filename'
-            }
-
             let value = rec[key];
+            let filename = with_filename[key]
             if (filename != null) {
                 formData.append(key,value,filename);
             }
