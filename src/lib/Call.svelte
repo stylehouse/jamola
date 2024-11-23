@@ -557,9 +557,9 @@
     
     $effect(() => {
         // Periodically retry failed uploads, eg now
-        retryRecordingUploads()
+        // retryRecordingUploads()
         // And every 5 minutes
-        setInterval(retryRecordingUploads, 5 * 60 * 1000);
+        // setInterval(retryRecordingUploads, 5 * 60 * 1000);
     })
 
     // < is it possible to reuse the encoded opus that was transmit to us as the recorded copy?
@@ -582,6 +582,9 @@
     <div class="controls">
         <button onclick={negate} disabled={negating}>
             {say_negate}
+        </button>
+        <button onclick={retryRecordingUploads} disabled={negating}>
+            upload
         </button>
 
         <label>

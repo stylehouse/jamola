@@ -1,5 +1,6 @@
 // Recorder class to manage recording state and chunks for each participant
 export class parRecorder {
+    par = $state()
     constructor({par, uploadIntervalMs = 5000, title, bitrate, is_par_valid, get_parti}) { // 30 second default
         this.par = par;
         this.title = title == null ? 'untitled' : title
@@ -88,26 +89,12 @@ export class parRecorder {
         if (milliseconds < 1200) return console.log("non-Segment: too short");
         // 35k chunks of type=audio/webm
         if (this.recordedChunks.length < 1) return console.log("non-Segment: too tiny");
-
-        // seem to have a problem with these objects hanging around
-        if (!this.is_par_valid(this.par)) {
-            let parts = [...this.get_parti()]
-            if (!this.par.name) {
-                console.warn(`This recording's par is not current. Dropped ${milliseconds}ms, no name`)
-                // debugger
-                // better... stop?
-                this.stop("abort")
-                return
-            }
-            else {
-                console.warn(`This recording's par is not current. Proxy object mayhem? ${this.par.name}`)
-            }
-        }
-        // wait for peer data? should be here by now
-        if (!this.par.name) {
-            console.warn(`This recording's name is empty. Dropped ${milliseconds}ms ${this.par.name}`)
-            return
-        }
+        // sanity
+        if (!this.par.name) return console.warn(`non-Segment: no name (after ${milliseconds}ms)`)
+        if (!this.par.title) return console.warn(`non-Segment: no title`)
+        // we can't seem to ensure that this par is in the current set of participants,
+        //  it seems like a svelte5 object proxy problem. par!=this.par, yet par.pc==this.par.pc etc
+        // so don't worry about it
 
         const blob = new Blob(this.recordedChunks, { type: 'audio/webm' });
         this.recordedChunks = []; // Clear for next segment
@@ -229,8 +216,20 @@ export async function retryRecordingUploads() {
         const tx = db.transaction('failedUploads', 'readwrite');
         const store = tx.objectStore('failedUploads');
         
-        const failedUploads = await store.getAll();
+        const getAllRequest = await store.getAll();
+        // Wait for the request to complete
+        const failedUploads = await new Promise((resolve, reject) => {
+            getAllRequest.onsuccess = () => resolve(getAllRequest.result);
+            getAllRequest.onerror = () => reject(getAllRequest.error);
+        });
+
+        if (!Array.isArray(failedUploads)) {
+            console.log('No failed uploads to retry');
+            return;
+        }
         
+        console.log(`Retrying ${failedUploads.length} failed uploads`);
+
         for (const rec of failedUploads) {
             await upload_recrecord({
                 rec,
