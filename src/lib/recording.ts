@@ -1,6 +1,6 @@
 // Recorder class to manage recording state and chunks for each participant
 export class parRecorder {
-    par = $state()
+    par// = $state()
     constructor({par, uploadIntervalMs = 5000, title, bitrate}) { // 30 second default
         this.par = par;
         this.title = title == null ? 'untitled' : title
@@ -84,11 +84,16 @@ export class parRecorder {
     async uploadCurrentSegment() {
         // changing the title very early means keep it all
         let milliseconds = Date.now() - this.began_ts;
-        if (milliseconds < 1200) return console.log("non-Segment: too short");
+        if (milliseconds < 3300) return console.log("non-Segment: too soon");
         // 35k chunks of type=audio/webm
         if (this.recordedChunks.length < 1) return console.log("non-Segment: too tiny");
         // sanity
-        if (!this.par.name) return console.warn(`non-Segment: no name (after ${milliseconds}ms)`)
+        let par = this.par
+        console.log(`tape++ ${par.peerId}: ${par.name}   doing ${this.title}`)
+        let name = this.par.name;
+        if (!name) {
+            return console.warn(`non-Segment: no name (after ${milliseconds}ms)`)
+        }
         if (!this.title) return console.warn(`non-Segment: no title`)
         // < we can't seem to ensure that this par is in the current set of participants,
         //   it seems like a svelte5 object proxy problem. par!=this.par, yet par.pc==this.par.pc etc

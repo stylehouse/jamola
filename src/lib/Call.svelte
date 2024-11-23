@@ -3,7 +3,7 @@
     import { SvelteMap } from "svelte/reactivity";
     import { SignalingClient } from "$lib/rtcsignaling-client.svelte";
     import { BitrateStats } from "$lib/bitratestats.svelte";
-    import { parRecorder,retryRecordingUploads } from "$lib/recording.svelte";
+    import { parRecorder,retryRecordingUploads } from "$lib/recording";
     
     let Signaling: SignalingClient;
     let localStream;
