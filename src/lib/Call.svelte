@@ -4,12 +4,14 @@
     import { SignalingClient } from "$lib/rtcsignaling-client.svelte";
     import { BitrateStats } from "$lib/bitratestats.svelte";
     import { parRecorder,retryRecordingUploads } from "$lib/recording";
+    import YourName from "./YourName.svelte";
     
     let Signaling: SignalingClient;
     let localStream;
     let status = $state("Disconnected");
     let errorMessage = $state("");
-    let userName = $state("you");
+
+    let userName = $state();
     let participants = $state([]);
     let bitrates = new BitrateStats();
     // it never seems to use more than 266 if given more
@@ -89,8 +91,7 @@
                 // stream|par.pc changes, same par|peerId
                 //  peerId comes from socket.io, is per their websocket
                 console.log(`i_par: stream changes, same peer: ${par.name}`)
-                // I haven't found a way to trigger this branch...
-                debugger
+                // hangup, change userName, Ring again causes this branch as you re-connect to each par
                 // bitratestats will notice this change itself
                 if (par.pc == pc) debugger;
                 // Stop existing recording if we're replacing the connection
@@ -98,7 +99,7 @@
                 if (par.recorder) {
                     par.recorder.stop();
                 }
-                par.pc && par.pc?.close();
+                par.pc?.close && par.pc?.close();
                 par.pc = pc;
             }
         }
@@ -341,7 +342,7 @@
     function stopConnection() {
         bitrates.close();
         participants.map(par => {
-            par.pc?.close();
+            par.pc?.close && par.pc?.close();
             if (par.recorder) {
                 par.recorder.stop()
             }
@@ -355,67 +356,6 @@
         errorMessage = "";
     }
 
-    //
-    // username related
-    //
-    function changeyourname(event) {
-        userName = event.target.textContent;
-    }
-    let first_writingyourname = true;
-    function writingyourname(event) {
-        // a noise filter
-        console.log("writingyourname", event);
-        if (event.key == "Enter") {
-            console.log("Caught Enter, assume you want to Ring now");
-            negate();
-            // unfocus - so the android keyboard should retract?
-            yourname.blur();
-            event.preventDefault();
-        } else {
-            if (first_writingyourname) {
-                first_writingyourname = false;
-                if (userName == "you") {
-                    userName_printable = "";
-                }
-            }
-        }
-    }
-    // make a printable version that we will update less
-    // svelte-ignore state_referenced_locally
-    let userName_printable = $state(userName);
-    let loaded_username = false;
-    // resume the last username
-    // and copy to printable if a change
-    $effect(() => {
-        if (userName == "you" && !loaded_username) {
-            // init
-            loaded_username = true;
-            if (localStorage.userName) {
-                userName = localStorage.userName;
-            }
-        } else {
-            localStorage.userName = userName;
-        }
-        // check we aren't overwriting the source of this data
-        if (yourname && yourname.textContent != userName) {
-            userName_printable = userName;
-        }
-    });
-    let yourname;
-    // ensnare the user in paperwork on their first visit
-    let focus_yourname_once = true;
-    let focus_yourname_after_ms = 720
-    $effect(() => {
-        // have to put this after we may have loaded_username
-        if (yourname && focus_yourname_once && userName == "you") {
-            focus_yourname_once = false;
-            setTimeout(() => {
-                yourname.textContent = ""
-                yourname.focus();
-            }, focus_yourname_after_ms);
-            console.log("focus yourname");
-        }
-    });
 
     //
     // misc
@@ -583,13 +523,7 @@
     <h1>
         <span class="welcometo overhang">Welcome to</span>
         <span class="jamola"><a href="https://github.com/stylehouse/jamola">jamola</a></span>,
-        <span
-            contenteditable={status == "Disconnected"}
-            bind:this={yourname}
-            oninput={changeyourname}
-            onkeypress={writingyourname}
-            class="yourname">{userName_printable}</span
-        >
+        <YourName bind:userName={userName} editable={status == "Disconnected"} {negate} ></YourName>
         !
     </h1>
 
@@ -703,11 +637,6 @@
     .jamola a {
         color:inherit;
         /* text-decoration:inherit; */
-    }
-    .yourname {
-        font-size: 170%;
-        color: rgb(54, 19, 19);
-        text-shadow: 5px 3px 9px #aca;
     }
     .yourtitle {
         font-size: 170%;
