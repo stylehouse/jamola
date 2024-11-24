@@ -608,38 +608,12 @@
 
                 {#if par.bitrate}<span class="bitrate">{par.bitrate} kbps</span
                     >{/if}
-                {#if par.lastByteCount}<span class="bitrate">{par.lastByteCount} kbps</span
-                    >{/if}
             </div>
         {/each}
     </div>
 </main>
 
 <style>
-    @font-face {
-        font-family: "RipeApricots";
-        src: url("/RipeApricots.ttf") format("truetype");
-        font-weight: normal;
-        font-style: normal;
-    }
-    :global(h1),
-    :global(button, select) {
-        font-family: "RipeApricots", sans-serif;
-        background: #4024;
-        font-size: 2em;
-        padding: 9px;
-        vertical-align: middle;
-    }
-    div,
-    h1,
-    button,
-    select,
-    yourname {
-        border-radius: 1em;
-    }
-    :global(h1) {
-        font-size: 330%;
-    }
     .welcometo {
         color: #11271e;
     }
@@ -656,13 +630,6 @@
         color: rgb(54, 19, 19);
         text-shadow: 5px 3px 9px #aca;
     }
-    span[contenteditable=true] {
-        border-bottom: 7px dashed #84d;
-    }
-    .overhang {
-        position: absolute;
-        pointer-events: none;
-    }
 
     .container {
         max-width: 600px;
@@ -674,76 +641,7 @@
         margin: 1rem 0;
     }
 
-    .controls {
-        display: flex;
-        gap: 1rem;
-        margin: 2rem 0;
-    }
-    button {
-        padding: 0.3rem 1rem;
-        cursor: pointer;
-        font-size: 8em;
-        line-height: 0.3em;
-    }
-    .casual {
-        line-height: 0.3em;
-        margin: 0em;
-    }
-    .casual button {
-        background-color: rgba(97, 88, 60, 0.322);
-        font-size:1.2em;
-    }
-    button:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-    }
-    .status {
-        color: rgb(17, 11, 75);
-        font-family: monospace;
-    }
-    .error {
-        color: red;
-        font-family: monospace;
-    }
 
-    /* par bits */
-
-    .ohno {
-        color: red;
-        font: monospace;
-    }
-    .techwhat {
-        color: cyan;
-        font: monospace;
-    }
-    .bitrate {
-        color: cyan;
-        font-family: monospace;
-        transform: scaleY(0.7);
-        filter: blur(1px);
-    }
-
-    input[type="range"]::-webkit-slider-runnable-track {
-        width: 100%;
-        height: 18px;
-        background: #ddd;
-        border-radius: 4px;
-    }
-
-    input[type="range"]::-moz-range-track {
-        width: 100%;
-        height: 8px;
-        background: #ddd;
-        border-radius: 4px;
-    }
-
-    input[type="range"]::-ms-track {
-        width: 100%;
-        height: 18px;
-        background: transparent;
-        border-color: transparent;
-        color: transparent;
-    }
 
     .participant {
         display: flex;
