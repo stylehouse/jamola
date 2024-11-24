@@ -8,9 +8,9 @@
     if (!userName) {
         userName = default_userName
     }
-    //
-    // username related
-    //
+    // the field
+    let yourname_el ;
+
     function changeyourname(event) {
         userName = event.target.textContent;
     }
@@ -22,7 +22,7 @@
             console.log("Caught Enter, assume you want to Ring now");
             negate();
             // unfocus - so the android keyboard should retract?
-            yourname.blur();
+            yourname_el.blur();
             // < since splitting from Call.svelte,
             //   this is also required to stop the Enter being entered
             editable = false
@@ -54,30 +54,29 @@
             localStorage.userName = userName;
         }
         // check we aren't overwriting the source of this data
-        if (yourname && yourname.textContent != userName) {
+        if (yourname_el && yourname_el.textContent != userName) {
             userName_printable = userName;
         }
     });
-    let yourname;
     // ensnare the user in paperwork on their first visit
     let focus_yourname_once = true;
     let focus_yourname_after_ms = 720
     $effect(() => {
         // have to put this after we may have loaded_username
-        if (yourname && focus_yourname_once && userName == default_userName) {
-            focus_yourname_once = false;
+        if (yourname_el && focus_yourname_once && userName == default_userName) {
             setTimeout(() => {
-                yourname.textContent = ""
-                yourname.focus();
+                yourname_el.textContent = ""
+                yourname_el.focus();
             }, focus_yourname_after_ms);
             console.log("focus yourname");
         }
+        focus_yourname_once = false;
     });
 </script>
 
 <span
     contenteditable={editable}
-    bind:this={yourname}
+    bind:this={yourname_el}
     oninput={changeyourname}
     onkeypress={writingyourname}
     class="yourname">{userName_printable}</span
