@@ -1,6 +1,6 @@
 export class BitrateStats {
     statsIntervals = new Map()
-    i_par :Function
+    i_par
     constructor(opt) {
         Object.assign(this,opt)
     }

@@ -1,20 +1,31 @@
 // Recorder class to manage recording state and chunks for each participant
+
+import type { Socket } from "socket.io-client"
+import type { SignalingClient } from "./ws-client.svelte"
+
 export class parRecorder {
     par// = $state()
-    constructor({par, uploadInterval_delta = 11, title, bitrate, i_par}) { // 30 second default
-        this.par = par;
-        this.i_par = i_par;
-        this.title = title == null ? 'untitled' : title
-        this.bitrate = bitrate
-        this.mediaRecorder = null;
-        this.recordedChunks = [];
-        this.uploadInterval = null;
-        this.uploadInterval_delta = uploadInterval_delta;
-        // this increases to the latest segmentation
-        this.began_ts = Date.now();
-        // this increases to the latest segmentation
-        this.start_ts = null;
-        this.sequenceNumber = 0;
+    uploadInterval_delta = 11 // seconds
+    title:string
+    bitrate:number
+    i_par:Function
+    Signaling:SignalingClient
+
+    mediaRecorder = null
+    recordedChunks = []
+    uploadInterval = null
+
+    // birthday of the recorder
+    began_ts = Date.now()
+    // this increases to the latest segmentation
+    start_ts = null
+    sequenceNumber = 0
+
+    constructor(opt) {
+        Object.assign(this,opt)
+        if (this.title == null) {
+            this.title = 'untitled'
+        }
     }
 
     start(stream) {
@@ -44,8 +55,6 @@ export class parRecorder {
             // Start recording
             // Request a new chunk every second for fine-grained recording
             this.mediaRecorder.start(1000);
-            
-            console.log(`Started recording for ${this.par.name}`);
         } catch (error) {
             console.error('Failed to start recording:', error);
         }
@@ -86,8 +95,13 @@ export class parRecorder {
         const sanitizedTitle = this.title.replace(/[^a-z\w0-9]/gi, '_');
         let filename = `${timestamp}_${sanitizedTitle}_${sanitizedName}_${this.sequenceNumber}.webm`;
         let rec = {
+            // < each peer's latency info...
+            //  < listening to the different jitterbuggings of a loop
+            //    depending on which peer experiencing it
+
             audio: blob,
-            audio_filename: filename,
+            filename,
+            // < observability of all this
             peerId: this.par.peerId,
             name: this.par.name,
             title: this.title,
@@ -124,10 +138,10 @@ export class parRecorder {
 
         let rec = await this.make_recrecord(blob)
         
-        await upload_recrecord({
+        await upload_recrecord(this.sock,{
             rec,
             good: () => {
-                console.log(`Uploaded ${rec.audio_filename}`);
+                console.log(`Uploaded ${rec.filename}`);
             },
             bad: (error) => {
                 console.error('Failed to upload audio segment: '+error);
@@ -170,53 +184,36 @@ async function openDB() {
     });
 }
 // your layer on top of this decides what to do if upload goes bad
-async function upload_recrecord({rec,good,bad}) {
-    // Create form data for upload https://developer.mozilla.org/en-US/docs/Web/API/FormData/append
-    const formData = new FormData();
-    let with_filename = {}
-    for (let key in rec) {
-        if (rec.hasOwnProperty(key)) {
-            if (rec.hasOwnProperty(key+'_filename')) {
-                with_filename[key] = rec[key+'_filename']
-            }
-        }
-    }
-    for (let key in rec) {
-        if (rec.hasOwnProperty(key)) {
-            if (key.endsWith('_filename')) {
-                continue
-            }
-            let value = rec[key];
-            let filename = with_filename[key]
-            if (filename != null) {
-                formData.append(key,value,filename);
-            }
-            else {
-                // < TEST can we filename=null it, not branch here?
-                formData.append(key,value);
-            }
-        }
-    }
-
+async function upload_recrecord(sock: () => Socket,{rec,good,bad}) {
     try {
-        const response = await fetch('/api/upload-audio', {
-            method: 'POST',
-            body: formData
+        // Convert Blob to ArrayBuffer for transmission
+        const arrayBuffer = await rec.audio.arrayBuffer();
+        
+        // Create metadata object (excluding the binary audio data)
+        const metadata = {};
+        for (let key in rec) {
+            if (rec.hasOwnProperty(key) && key !== 'audio') {
+                metadata[key] = rec[key];
+            }
+        }
+
+        sock().emit('audio-upload', {
+            metadata,
+            audioData: arrayBuffer
+        }, (response) => {
+            if (response.success) {
+                good();
+            } else {
+                bad(response.error);
+            }
         });
 
-        if (!response.ok) {
-            bad(`Error ${response.status}: ${response.statusText}`)
-        }
-        else {
-            good()
-        }
-
     } catch (error) {
-        bad(error)
+        bad(error);
     }
 }
 // retry mechanism for failed uploads
-export async function retryRecordingUploads() {
+export async function retryRecordingUploads(sock: () => Socket) {
     try {
         const db = await openDB();
         const tx = db.transaction('failedUploads', 'readwrite');
@@ -237,10 +234,10 @@ export async function retryRecordingUploads() {
         console.log(`Retrying ${failedUploads.length} failed uploads`);
 
         for (const rec of failedUploads) {
-            await upload_recrecord({
+            await upload_recrecord(sock,{
                 rec,
                 good: async () => {
-                    console.log(`Uploaded on retry: ${rec.audio_filename}`);
+                    console.log(`Uploaded on retry: ${rec.filename}`);
                     // Remove successful upload from IndexedDB
                     await store.delete(upload.id);
                 },

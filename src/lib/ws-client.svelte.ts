@@ -43,6 +43,7 @@ export class SignalingClient {
         // When a new peer joins
         this.socket.on('peer-joined', async ({ peerId }) => {
             console.log('New peer:', peerId);
+            // they are about to get peers-in-room and emit offer
         });
 
         // When we receive an offer

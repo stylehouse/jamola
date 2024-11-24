@@ -1,12 +1,13 @@
 <script lang="ts">
     import { onDestroy } from "svelte";
     import { SvelteMap } from "svelte/reactivity";
-    import { SignalingClient } from "$lib/rtcsignaling-client.svelte";
+    import { SignalingClient } from "$lib/ws-client.svelte";
     import { BitrateStats } from "$lib/bitratestats.svelte";
     import { parRecorder,retryRecordingUploads } from "$lib/recording";
     import YourName from "./YourName.svelte";
     
     let Signaling: SignalingClient;
+    let sock = () => Signaling?.socket
     let localStream;
     let status = $state("Disconnected");
     let errorMessage = $state("");
@@ -318,6 +319,7 @@
             title:goable_title,
             bitrate:target_bitrate,
             i_par,
+            sock,
         }
     }
 
@@ -505,10 +507,14 @@
     
     let quitervals = []
     $effect(() => {
-        // Periodically retry failed uploads, eg now
-        // retryRecordingUploads()
-        // And every 5 minutes
-        // quitervals.push(setInterval(retryRecordingUploads, 5 * 60 * 1000));
+        setTimeout(() => {
+            // Periodically retry failed uploads, eg now
+            retryRecordingUploads(sock)
+            // And every 5 minutes
+            quitervals.push(setInterval(() => {
+                retryRecordingUploads(sock)
+            }, 5 * 60 * 1000));
+        }, 3000)
     })
     function lets_upload() {
         // retryRecordingUploads()
