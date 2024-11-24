@@ -4,7 +4,6 @@ export class BitrateStats {
     }
     // Add stats monitoring function
     add_par(par) {
-        console.log(`Statsing Par: ${par.name}  ${par.peerId}`)
         if (this.statsIntervals.has(par.peerId)) {
             clearInterval(this.statsIntervals.get(par.peerId));
             this.statsIntervals.delete(par.peerId);
@@ -19,6 +18,10 @@ export class BitrateStats {
                     if (stat.type === "inbound-rtp" && stat.kind === "audio") {
                         const now = stat.timestamp;
                         const bytes = stat.bytesReceived;
+                        if (bytes < par.lastByteCount) {
+                            // par.pc must have been replaced
+                            par.lastByteCount = 0
+                        }
 
                         if (par.lastTimestamp > 0) {
                             // Calculate bitrate in kbps

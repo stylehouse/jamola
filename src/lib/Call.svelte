@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onDestroy, untrack } from "svelte";
+    import { onDestroy } from "svelte";
     import { SvelteMap } from "svelte/reactivity";
     import { SignalingClient } from "$lib/rtcsignaling-client.svelte";
     import { BitrateStats } from "$lib/bitratestats.svelte";
@@ -25,8 +25,13 @@
             event.channel.onmessage = (event) => {
                 const data = JSON.parse(event.data);
                 if (data.type === "participant") {
+                    // < for some reason we have to seek out the par again at this point
+                    //   not doing this leads to this.par.name being undefined
+                    //    much later in parRecorder.uploadCurrentSegment
+                    //    see "it seems like a svelte5 object proxy problem"
                     par = i_par({ peerId: par.peerId });
                     par.name = data.name;
+                    console.log(`Received name of ${par.peerId}: ${par.name}`)
                 }
             };
         };
@@ -76,12 +81,20 @@
                 par.audio = new Audio();
                 par.audio.volume = localVolume;
                 participants.push(par);
+                par.pc && bitrates.add_par(par);
+                // they record
+                // par.recorder = new parRecorder({par:par,...stuff_we_tell_parRecorder()})
             } else {
                 was_new = 1;
-                // allow that same object to take over..?
+                // stream|par.pc changes, same par|peerId
                 //  peerId comes from socket.io, is per their websocket
+                console.log(`i_par: stream changes, same peer: ${par.name}`)
+                // I haven't found a way to trigger this branch...
+                debugger
+                // bitratestats will notice this change itself
                 if (par.pc == pc) debugger;
                 // Stop existing recording if we're replacing the connection
+                //  it needs to be started again on a new MediaStream
                 if (par.recorder) {
                     par.recorder.stop();
                 }
@@ -92,17 +105,7 @@
 
         // you give them properties
         Object.assign(par, etc);
-        // they say their bitrate
-        if (!par.type) {
-            bitrates.add_par(par);
-        }
-
-        // they record
-        par.recorder = new parRecorder({par,...stuff_we_tell_parRecorder()})
-
-        let names = participants.map((par) => par.peerId + ": " + par.name);
-        console.log("i_participant: " + peerId, names);
-
+        
         return par;
     }
     // this becomes our monitor
@@ -148,6 +151,14 @@
         },
         video: false,
     };
+    async function startStreaming() {
+        // Get microphone stream
+        localStream ||=
+            await navigator.mediaDevices.getUserMedia(constraints);
+        status = "Got microphone access";
+
+        i_myself_par(localStream);
+    }
     async function startConnection() {
         if (!userName.trim()) {
             errorMessage = "Please enter your name first";
@@ -157,13 +168,10 @@
         status = "Plugging out";
         errorMessage = "";
         try {
-            // Get microphone stream
-            localStream ||=
-                await navigator.mediaDevices.getUserMedia(constraints);
-            status = "Got microphone access";
-
-            let par = i_myself_par(localStream);
-
+            if (!localStream) {
+                // once, before Signaling and peers arrive
+                await startStreaming()
+            }
             // start signaling via websocket to get to webrtc...
             if (Signaling) {
                 // should have been packed up
@@ -253,7 +261,7 @@
                 par.recorder.start(par.audio.srcObject);
             }
 
-            console.log("Got track", [par, par.audio.srcObject, localStream]);
+            // console.log("Got track", [par, par.audio.srcObject, localStream]);
             par.audio.play().catch(console.error);
             status = "Got things";
         };
@@ -283,7 +291,6 @@
                     // Wait for the connection to be established
                     par.pc.addEventListener("connectionstatechange", () => {
                         if (par.pc.connectionState === "connected") {
-                            // Set initial bitrate (e.g., 128 kbps for high quality Opus)
                             setAudioBitrate(sender, target_bitrate).catch(
                                 (error) =>
                                     console.error(
@@ -299,16 +306,12 @@
             }
         });
     }
-    function is_par_valid(par) {
-        return participants.includes(par)
-    }
     // Optional: Add a function to dynamically adjust bitrate
     function stuff_we_tell_parRecorder() {
         return {
             title:goable_title,
             bitrate:target_bitrate,
-            get_parti: () => participants,
-            is_par_valid,
+            i_par,
         }
     }
 
@@ -351,9 +354,6 @@
         status = "Disconnected";
         errorMessage = "";
     }
-    onDestroy(() => {
-        stopConnection();
-    });
 
     //
     // username related
@@ -381,6 +381,7 @@
         }
     }
     // make a printable version that we will update less
+    // svelte-ignore state_referenced_locally
     let userName_printable = $state(userName);
     let loaded_username = false;
     // resume the last username
@@ -401,7 +402,9 @@
         }
     });
     let yourname;
+    // ensnare the user in paperwork on their first visit
     let focus_yourname_once = true;
+    let focus_yourname_after_ms = 720
     $effect(() => {
         // have to put this after we may have loaded_username
         if (yourname && focus_yourname_once && userName == "you") {
@@ -409,7 +412,7 @@
             setTimeout(() => {
                 yourname.textContent = ""
                 yourname.focus();
-            }, 130);
+            }, focus_yourname_after_ms);
             console.log("focus yourname");
         }
     });
@@ -511,7 +514,7 @@
         }
     }
     // as will it being the default, once
-    function focusonyourtitle(event) {
+    function yourtitle_onfocus(event) {
         if (first_writingyourtitle) {
             first_writingyourtitle = false;
             // clear the default value
@@ -555,11 +558,22 @@
         }
     })
     
+    let quitervals = []
     $effect(() => {
         // Periodically retry failed uploads, eg now
         // retryRecordingUploads()
         // And every 5 minutes
-        // setInterval(retryRecordingUploads, 5 * 60 * 1000);
+        // quitervals.push(setInterval(retryRecordingUploads, 5 * 60 * 1000));
+    })
+    function lets_upload() {
+        // retryRecordingUploads()
+        
+        console.log("Ya"+2 )
+    }
+    $inspect(participants)
+    onDestroy(() => {
+        quitervals.map(clearInterval)
+        stopConnection();
     })
 
     // < is it possible to reuse the encoded opus that was transmit to us as the recorded copy?
@@ -583,7 +597,7 @@
         <button onclick={negate} disabled={negating}>
             {say_negate}
         </button>
-        <button onclick={retryRecordingUploads} disabled={negating}>
+        <button onclick={lets_upload} disabled={negating}>
             upload
         </button>
 
@@ -617,7 +631,7 @@
                 <span
                     contenteditable={status != "Disconnected"}
                     bind:this={yourtitle}
-                    onfocus={focusonyourtitle}
+                    onfocus={yourtitle_onfocus}
                     oninput={changeyourtitle}
                     onkeypress={writingyourtitle}
                     onblur={commit_titlechange}

@@ -1,8 +1,9 @@
 // Recorder class to manage recording state and chunks for each participant
 export class parRecorder {
     par// = $state()
-    constructor({par, uploadIntervalMs = 5000, title, bitrate}) { // 30 second default
+    constructor({par, uploadIntervalMs = 5000, title, bitrate, i_par}) { // 30 second default
         this.par = par;
+        this.i_par = i_par;
         this.title = title == null ? 'untitled' : title
         this.bitrate = bitrate
         this.mediaRecorder = null;
@@ -48,6 +49,21 @@ export class parRecorder {
             console.error('Failed to start recording:', error);
         }
     }
+    async stop(abort) {
+        if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+            this.mediaRecorder.stop();
+        }
+        
+        clearInterval(this.uploadInterval);
+        
+        // Final upload of any remaining data
+        !abort && await this.uploadCurrentSegment();
+        
+        // Clear resources
+        this.mediaRecorder = null;
+        this.recordedChunks = [];
+        this.uploadInterval = null;
+    }
 
     async title_changed(title) {
         this.uploadCurrentSegment()
@@ -58,7 +74,7 @@ export class parRecorder {
         this.bitrate = bitrate
     }
 
-    // assemble a labelled bit of tape
+    // assemble a labelled bit of tape!
     async make_recrecord(blob) {
         // so we can hopefully stitch them back together
         let start_ts = this.start_ts
@@ -89,10 +105,19 @@ export class parRecorder {
         if (this.recordedChunks.length < 1) return console.log("non-Segment: too tiny");
         // sanity
         let par = this.par
+        let still = this.i_par({peerId:par.peerId})
+        let fail = 0
+        if (par != still) {
+            if (!still.name) {
+                console.warn("No still.name")
+            }
+            par = this.par = still
+        }
         console.log(`tape++ ${par.peerId}: ${par.name}   doing ${this.title}`)
         let name = this.par.name;
-        if (!name) {
-            return console.warn(`non-Segment: no name (after ${milliseconds}ms)`)
+        if (!par.name) {
+
+            return console.warn(`non-Segment: no name (after ${milliseconds}ms)`,par,still,par==still)
         }
         if (!this.title) return console.warn(`non-Segment: no title`)
         // < we can't seem to ensure that this par is in the current set of participants,
@@ -129,23 +154,6 @@ export class parRecorder {
             console.error('Failed to store failed upload:', error);
         }
     }
-
-    async stop(abort) {
-        if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
-            this.mediaRecorder.stop();
-        }
-        
-        clearInterval(this.uploadInterval);
-        
-        // Final upload of any remaining data
-        !abort && await this.uploadCurrentSegment();
-        
-        // Clear resources
-        this.mediaRecorder = null;
-        this.recordedChunks = [];
-        this.uploadInterval = null;
-    }
-
 }
 // IndexedDB setup for failed uploads
 async function openDB() {
