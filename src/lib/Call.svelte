@@ -26,6 +26,40 @@
     let target_bitrate = 270;
     let localVolume = 0.7;
 
+    // these are good to switch off in DEV
+    let activate_uploading = 0
+    let activate_recording = 0
+
+    // via p2p datachannel
+    // announce title changes
+    let not_my_title = false
+    $effect(() => {
+        if (participants && title && title != "untitled") {
+            console.log("buzz title="+title)
+            if (not_my_title) {
+                // change came from peers, don't re-send it to everyone
+                not_my_title = false
+            }
+            else {
+                // your title should be told to everyone!
+                console.log("Tell all title="+title)
+                participants.map(par => {
+                    if (!par.channel || par.channel.readyState != "open") {
+                        return
+                    }
+                    console.log(`Tell par=${par.name}`)
+                    // <<< not getting to the other end
+                    par.channel.send(
+                        JSON.stringify({
+                            type: "title",
+                            title: title,
+                        }),
+                    );
+                })
+            }
+            
+        }
+    })
     // participants exchange names in a webrtc datachannel
     function createDataChannel(par) {
         par.channel = par.pc.createDataChannel("participants");
@@ -41,7 +75,14 @@
                     //    see "it seems like a svelte5 object proxy problem"
                     par = i_par({ peerId: par.peerId });
                     par.name = data.name;
-                    console.log(`Received name of ${par.peerId}: ${par.name}`)
+                    console.log(`Received name from ${par.peerId}: ${par.name}`)
+
+                    // 
+                }
+                if (data.type === "title") {
+                    not_my_title = true
+                    title = data.title;
+                    console.log(`Received title from ${par.peerId}: ${title}`)
                 }
             };
         };
@@ -97,8 +138,10 @@
                 par.audio.volume = localVolume;
                 participants.push(par);
                 par.pc && bitrates.add_par(par);
-                // they record
-                par.recorder = new parRecorder({par:par,...stuff_we_tell_parRecorder()})
+                if (activate_recording) {
+                    // they record
+                    par.recorder = new parRecorder({par:par,...stuff_we_tell_parRecorder()})
+                }
             } else {
                 was_new = 1;
                 // stream|par.pc changes, same par|peerId
@@ -424,21 +467,21 @@
     $effect(() => {
         if (title) {
             participants.map((par) => {
-                par.recorder.title_changed(title)
+                if (par.recorder) {
+                    par.recorder.title_changed(title)
+                }
             });
         }
     })
-    //     
-    
+    //
     let quitervals = []
     $effect(() => {
+        let retry = () => activate_uploading && Signaling && retryRecordingUploads(sock)
         setTimeout(() => {
             // Periodically retry failed uploads, eg now
-            retryRecordingUploads(sock)
+            retry()
             // And every 5 minutes
-            quitervals.push(setInterval(() => {
-                retryRecordingUploads(sock)
-            }, 5 * 60 * 1000));
+            quitervals.push(setInterval(retry, 5 * 60 * 1000));
         }, 3000)
     })
     function lets_upload() {

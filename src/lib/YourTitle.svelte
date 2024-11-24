@@ -79,10 +79,11 @@
     // a unique object
     let pending_titlechange = {}
     function pend_titlechange() {
-        console.log("Pending began for "+slow_title)
+        console.log("Pending began for title="+slow_title)
         let thischange = pending_titlechange = {}
         setTimeout(() => {
             if (thischange == pending_titlechange) {
+                console.log("Pending complete for title="+slow_title)
                 commit_titlechange()
             }
         },2200)

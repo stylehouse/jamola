@@ -141,7 +141,7 @@ export class parRecorder {
         await upload_recrecord(this.sock,{
             rec,
             good: () => {
-                console.log(`Uploaded ${rec.filename}`);
+                // console.log(`Uploaded ${rec.filename}`);
             },
             bad: (error) => {
                 console.error('Failed to upload audio segment: '+error);
