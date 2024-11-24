@@ -1,6 +1,8 @@
 export class BitrateStats {
     statsIntervals = new Map()
-    constructor() {
+    i_par :Function
+    constructor(opt) {
+        Object.assign(this,opt)
     }
     // Add stats monitoring function
     add_par(par) {
@@ -9,6 +11,8 @@ export class BitrateStats {
             this.statsIntervals.delete(par.peerId);
         }
         const interval = setInterval(async () => {
+        // to relocate a par. see "it seems like a svelte5 object proxy problem"
+            par = this.i_par({par})
             if (!par.pc || par.pc.connectionState !== "connected") return;
 
             try {

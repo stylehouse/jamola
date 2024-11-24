@@ -13,7 +13,7 @@
 
     let userName = $state();
     let participants = $state([]);
-    let bitrates = new BitrateStats();
+    let bitrates = new BitrateStats({i_par});
     // it never seems to use more than 266 if given more
     let target_bitrate = 270;
     let localVolume = 0.7;
@@ -72,8 +72,13 @@
 
     type Participant = {peerId:string,pc?:RTCPeerConnection,name?}
     // read or add new participant (par)
-    function i_par({ peerId, pc, ...etc }):Participant {
-        let par = participants.filter((par) => par.peerId == peerId)[0];
+    function i_par({ par, peerId, pc, ...etc }):Participant {
+        if (par && peerId == null) {
+            if (pc != null) throw 'pc'
+            // to relocate a par. see "it seems like a svelte5 object proxy problem"
+            peerId = par.peerId
+        }
+        par = participants.filter((par) => par.peerId == peerId)[0];
         let was_new = 0;
         if (pc) {
             if (!par) {
@@ -85,7 +90,7 @@
                 participants.push(par);
                 par.pc && bitrates.add_par(par);
                 // they record
-                // par.recorder = new parRecorder({par:par,...stuff_we_tell_parRecorder()})
+                par.recorder = new parRecorder({par:par,...stuff_we_tell_parRecorder()})
             } else {
                 was_new = 1;
                 // stream|par.pc changes, same par|peerId
@@ -510,7 +515,7 @@
         
         console.log("Ya"+2 )
     }
-    $inspect(participants)
+    // $inspect(participants)
     onDestroy(() => {
         quitervals.map(clearInterval)
         stopConnection();
@@ -596,6 +601,8 @@
                 </label>
 
                 {#if par.bitrate}<span class="bitrate">{par.bitrate} kbps</span
+                    >{/if}
+                {#if par.lastByteCount}<span class="bitrate">{par.lastByteCount} kbps</span
                     >{/if}
             </div>
         {/each}

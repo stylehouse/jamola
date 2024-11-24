@@ -1,7 +1,7 @@
 // Recorder class to manage recording state and chunks for each participant
 export class parRecorder {
     par// = $state()
-    constructor({par, uploadIntervalMs = 5000, title, bitrate, i_par}) { // 30 second default
+    constructor({par, uploadInterval_delta = 11, title, bitrate, i_par}) { // 30 second default
         this.par = par;
         this.i_par = i_par;
         this.title = title == null ? 'untitled' : title
@@ -9,7 +9,7 @@ export class parRecorder {
         this.mediaRecorder = null;
         this.recordedChunks = [];
         this.uploadInterval = null;
-        this.uploadIntervalMs = uploadIntervalMs;
+        this.uploadInterval_delta = uploadInterval_delta;
         // this increases to the latest segmentation
         this.began_ts = Date.now();
         // this increases to the latest segmentation
@@ -31,6 +31,7 @@ export class parRecorder {
             
             this.mediaRecorder.ondataavailable = (event) => {
                 if (event.data.size > 0) {
+                    // these are 35kb chunks of webm.
                     this.recordedChunks.push(event.data);
                 }
             };
@@ -38,7 +39,7 @@ export class parRecorder {
             // Start periodic uploads
             this.uploadInterval = setInterval(() => {
                 this.uploadCurrentSegment();
-            }, this.uploadIntervalMs);
+            }, this.uploadInterval_delta*1000);
 
             // Start recording
             // Request a new chunk every second for fine-grained recording
@@ -103,21 +104,15 @@ export class parRecorder {
         if (milliseconds < 3300) return console.log("non-Segment: too soon");
         // 35k chunks of type=audio/webm
         if (this.recordedChunks.length < 1) return console.log("non-Segment: too tiny");
-        // sanity
-        let par = this.par
-        let still = this.i_par({peerId:par.peerId})
-        let fail = 0
-        if (par != still) {
-            if (!still.name) {
-                console.warn("No still.name")
-            }
-            par = this.par = still
-        }
-        console.log(`tape++ ${par.peerId}: ${par.name}   doing ${this.title}`)
-        let name = this.par.name;
-        if (!par.name) {
 
-            return console.warn(`non-Segment: no name (after ${milliseconds}ms)`,par,still,par==still)
+        let par = this.par
+        // to relocate a par. see "it seems like a svelte5 object proxy problem"
+        par = this.par = this.i_par({par})
+
+        console.log(`tape++ ${par.peerId}: ${par.name}   doing ${this.title}`)
+        // sanity
+        if (!par.name) {
+            return console.warn(`non-Segment: no name (after ${milliseconds}ms)`,par)
         }
         if (!this.title) return console.warn(`non-Segment: no title`)
         // < we can't seem to ensure that this par is in the current set of participants,
