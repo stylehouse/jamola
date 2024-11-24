@@ -5,6 +5,7 @@
     import { BitrateStats } from "$lib/bitratestats.svelte";
     import { parRecorder,retryRecordingUploads } from "$lib/recording";
     import YourName from "./YourName.svelte";
+    import YourTitle from "./YourTitle.svelte";
     
     let Signaling: SignalingClient;
     let sock = () => Signaling?.socket
@@ -12,8 +13,14 @@
     let status = $state("Disconnected");
     let errorMessage = $state("");
 
+    // provided by YourName.svelte
     let userName = $state();
+    // title by YourTitle.svelte
+    let title = $state();
+
+    // that we i_par into
     let participants = $state([]);
+
     let bitrates = new BitrateStats({i_par});
     // it never seems to use more than 266 if given more
     let target_bitrate = 270;
@@ -316,7 +323,7 @@
     // Optional: Add a function to dynamically adjust bitrate
     function stuff_we_tell_parRecorder() {
         return {
-            title:goable_title,
+            title,
             bitrate:target_bitrate,
             i_par,
             sock,
@@ -413,97 +420,15 @@
         }
     });
 
-    //
-    // have a title
-    //
-    let title = $state('untitled')
-    let yourtitle:Element
-    let loaded_title = false;
-    let first_writingyourtitle = true
-    // resume the last title
-    // and copy to printable if a change
+    // title by YourTitle, can percolate to parRecorder
     $effect(() => {
-        if (title == "untitled" && !loaded_title) {
-            // init
-            loaded_title = true;
-            if (localStorage.title) {
-                title = localStorage.title;
-            }
-        } else {
-            localStorage.title = title;
-        }
-        // check we aren't overwriting the source of this data
-        if (yourtitle && yourtitle.textContent != title) {
-            title_printable = title;
-        }
-    });
-    let title_printable = $state(title)
-    function changeyourtitle(event) {
-        title = event.target.textContent;
-    }
-    function writingyourtitle(event) {
-        // a noise filter
-        console.log("writingyourtitle", event);
-        if (event.key == "Enter") {
-            console.log("Caught Enter, assume you wrote a title");
-            // unfocus - so the android keyboard should retract?
-            yourtitle.blur();
-            commit_titlechange();
-            event.preventDefault();
-        }
-    }
-
-    // the title button|label blanks the title
-    function letswriteatitle(event) {
-        if (yourtitle) {
-            yourtitle.textContent = ""
-            yourtitle.focus()
-        }
-    }
-    // as will it being the default, once
-    function yourtitle_onfocus(event) {
-        if (first_writingyourtitle) {
-            first_writingyourtitle = false;
-            // clear the default value
-            if (title == "untitled") {
-                yourtitle.textContent = ""
-            }
-        }
-    }
-
-    // prevents the record changing title too quickly while typing
-    //  while not requiring a onblur() event to set it
-    let goable_title = $state(title)
-    $effect(() => {
-        if (title != goable_title) {
-            pend_titlechange()
-        }
-    })
-    // a unique object
-    let pending_titlechange = {}
-    function pend_titlechange() {
-        console.log("Pending began for "+title)
-        let thischange = pending_titlechange = {}
-        setTimeout(() => {
-            if (thischange == pending_titlechange) {
-                commit_titlechange()
-            }
-        },2200)
-    }
-    function commit_titlechange() {
-        pending_titlechange = {}
-        if (title != goable_title) {
-            goable_title = title
-        }
-    }
-    // the recordings get the title, will segment on change
-    $effect(() => {
-        if (goable_title) {
+        if (title) {
             participants.map((par) => {
-                par.recorder.title_changed(goable_title)
+                par.recorder.title_changed(title)
             });
         }
     })
+    //     
     
     let quitervals = []
     $effect(() => {
@@ -565,27 +490,7 @@
         {/if}
     </div>
     <div class="participants">
-        <h1 class="casual" >
-
-
-            <button class="casual"
-                    onclick={letswriteatitle}
-                >Title</button>
-
-
-                <span
-                    contenteditable={status != "Disconnected"}
-                    bind:this={yourtitle}
-                    onfocus={yourtitle_onfocus}
-                    oninput={changeyourtitle}
-                    onkeypress={writingyourtitle}
-                    onblur={commit_titlechange}
-                    class="yourtitle"
-                    spellcheck="false"
-
-                    >{title_printable}</span>
-
-        </h1>
+        <YourTitle bind:title={title} editable={status != "Disconnected"} {Signaling}/>
         {#each participants as par (par.peerId)}
             <div class="participant {par.type == 'monitor' && 'monitor'}">
                 <span class="theyname">{par.name || par.peerId}</span>
