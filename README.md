@@ -31,6 +31,12 @@ This didn't work for me:
 pw-cli create-node adapter { factory.name=support.loopback node.name=FakeAudio }
 aplay -D FakeAudio '/media/s/12117025 dp/Music/Highsoul/0 worldish/VA - Kenny Graham, Guy Warren/Guy Warren - 1959 - themes for african drums/02 waltzing drums.mp3'
 ```
+Nor did:
+```
+sudo apt install sox
+sox -n -r 44100 -c 1 tone.wav synth 10 sine 440
+pactl load-module module-pipe-source source_name=tone_source file=tone.wav
+```
 
 ## TODO
 

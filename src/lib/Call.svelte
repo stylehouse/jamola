@@ -20,6 +20,7 @@
 
     // that we i_par into
     let participants = $state([]);
+    // $inspect(participants)
 
     let bitrates = new BitrateStats({i_par});
     // it never seems to use more than 266 if given more
@@ -64,9 +65,7 @@
                 // console.log("Reacted to received title")
                 return
             }
-            console.log("Tell all title="+title)
             participants.map(par => {
-                console.log(` - tell par=${par.name}`)
                 announce_title(par)
             })
             
@@ -81,7 +80,6 @@
         if (!par.channel || par.channel.readyState != "open") {
             return
         }
-        console.log(` - tell par=${par.name}`)
         par.channel.send(
             JSON.stringify({
                 type: "title",
@@ -239,23 +237,60 @@
         },
         video: false,
     };
+    // find input devices onload
+    let possible_audio_input_devices = $state()
+    $inspect("possible_audio_input_devices",possible_audio_input_devices)
+    $effect(async () => {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        possible_audio_input_devices = devices.filter(device => 
+            device.kind === 'audioinput' && device.label !== ''
+        );
+        if (!possible_audio_input_devices.length) {
+            errorMessage = "Looks like you have no audioinput devices."
+        }
+    })
+    let chosen_audio_device = null
+    function choose_audio_input_device(deviceId) {
+        console.log("switching to deviceId="+deviceId)
+        chosen_audio_device = deviceId
+        // If we're currently in a call, we need to switch devices
+        if (localStream) {
+            // Stop all tracks on the current stream
+            localStream.getTracks().forEach(track => track.stop());
+            
+            // Reset localStream to force a new getUserMedia call
+            localStream = null;
+            
+            // If currently connected, we'll need to rebuild connections
+            if (status !== "Disconnected") {
+                // Stop current connections
+                stopConnection();
+                
+                // Restart connection with new device
+                setTimeout(() => {
+                    negate(); // This will restart the connection
+                }, 100);
+            }
+        }
+    }
     async function startStreaming() {
+        // they might choose a stream, null for default
+        constraints.audio.deviceId = chosen_audio_device
         // Get microphone stream
         localStream ||=
             await navigator.mediaDevices.getUserMedia(constraints);
         status = "Got microphone access";
 
+        
         i_myself_par(localStream);
     }
     async function startConnection() {
-        if (!userName.trim()) {
-            errorMessage = "Please enter your name first";
-            return;
-        }
         // this will be, sync, after negate()
         status = "Plugging out";
+        let part = ''
         errorMessage = "";
         try {
+            part = 'startStreaming'
             if (!localStream) {
                 // once, before Signaling and peers arrive
                 await startStreaming()
@@ -266,8 +301,10 @@
                 debugger;
                 Signaling.close();
             }
+            part = 'Signaling'
             Signaling = new SignalingClient({
                 on_peer: ({ peerId, pc }) => {
+                    part = 'on_peer'
                     // a peer connection, soon to receive tracks, name etc
                     let par = i_par({ peerId, pc });
 
@@ -275,21 +312,24 @@
                     wait_for_par_ready(par, () => {
                         console.log("Par ready! " + par.peerId);
 
+                        part = 'give_localStream'
                         // input our stream to it
                         give_localStream(par);
 
+                        part = 'take_remoteStream'
                         // take audio from it
                         take_remoteStream(par);
 
                         // Set up data channel to send names
+                        part = 'createDataChannel'
                         createDataChannel(par);
                     });
                 },
             });
         } catch (error) {
-            errorMessage = `Error: ${error.message}`;
+            errorMessage = `Error in ${part}: ${error.message}`;
             status = "Error occurred";
-            console.error("Error:", error);
+            console.error(`Error in ${part}:`, error);
         }
     }
 
@@ -459,9 +499,12 @@
     });
     // buttons word changes
     let say_negate = $state("Ring");
-    let negating = $state(false);
     function negate() {
         if (status === "Disconnected") {
+            if (!userName.trim()) {
+                errorMessage = "Please enter your name first";
+                return;
+            }
             startConnection();
             if (status === "Disconnected") {
                 // we rely on this instantly changing
@@ -479,10 +522,13 @@
         if (resumable_once) {
             // init
             resumable_once = false;
-            if (localStorage.was_on && userName != "you") {
-                console.log("Resuming...");
-                setTimeout(() => negate(), 91);
-            }
+            // wait for navigator.mediaDevices.enumerateDevices
+            setTimeout(() => {
+                if (localStorage.was_on && userName != "you" && !errorMessage) {
+                    console.log("Resuming...");
+                    setTimeout(() => negate(), 291);
+                }
+            },40)
         }
     });
     // after the above, or it will store the default was_on=false
@@ -516,11 +562,9 @@
         }, 3000)
     })
     function lets_upload() {
-        // retryRecordingUploads()
-        
+        status = "Ping"
         console.log("Ya"+2 )
     }
-    // $inspect(participants)
     onDestroy(() => {
         quitervals.map(clearInterval)
         stopConnection();
@@ -538,11 +582,11 @@
     </h1>
 
     <div class="controls">
-        <button onclick={negate} disabled={negating}>
+        <button onclick={negate}>
             {say_negate}
         </button>
-        <button onclick={lets_upload} disabled={negating}>
-            upload
+        <button onclick={lets_upload}>
+            🍇
         </button>
 
         <label>
@@ -557,14 +601,27 @@
                 <option value="320">320</option>
             </select>
         </label>
+        <label>
+            <span class="overhang">input</span>
+            <select
+                onchange={(e) => choose_audio_input_device(e.target.value)}
+            >
+                {#each possible_audio_input_devices as device}
+                    
+                    <option value="{device.deviceId}">{device.label}</option>
+                {/each}
+            </select>
+        </label>
 
+    </div>
+    <div class="controls">
         <p class="status">{status}</p>
         {#if errorMessage}
             <p class="error">{errorMessage}</p>
         {/if}
     </div>
     <div class="participants">
-        <YourTitle {title} editable={status != "Disconnected"} {Signaling} onChange={we_titlechange}/>
+        <YourTitle {title} editable={status != "Disconnected"} onChange={we_titlechange}/>
 
 
         {#each participants as par (par.peerId)}
@@ -616,12 +673,19 @@
         max-width: 600px;
         margin: 0 auto;
         padding: 2rem;
+        display:block;
     }
 
     .setup {
         margin: 1rem 0;
     }
-
+    select {
+        max-width:3em;
+    }
+    select option {
+        background-color: #111b17;
+        color: #a89e89;
+    }
 
 
     .participant {
