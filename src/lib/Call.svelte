@@ -588,6 +588,8 @@
         <button onclick={lets_upload}>
             🍇
         </button>
+    </div>
+    <div class="controls">
 
         <label>
             <span class="overhang">bitrate</span>
@@ -616,10 +618,12 @@
     </div>
     <div class="controls">
         <p class="status">{status}</p>
-        {#if errorMessage}
-            <p class="error">{errorMessage}</p>
-        {/if}
     </div>
+    {#if errorMessage}
+    <div class="controls">
+        <p class="error">{errorMessage}</p>
+    </div>
+    {/if}
     <div class="participants">
         <YourTitle {title} editable={status != "Disconnected"} onChange={we_titlechange}/>
 
