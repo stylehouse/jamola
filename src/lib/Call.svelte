@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onDestroy } from "svelte";
+    import { onDestroy, untrack } from "svelte";
     import { SvelteMap } from "svelte/reactivity";
     import { SignalingClient } from "$lib/ws-client.svelte";
     import { BitrateStats } from "$lib/bitratestats.svelte";
@@ -32,34 +32,64 @@
 
     // via p2p datachannel
     // announce title changes
-    let not_my_title = false
+    //  when others connect 
+    // < on mynameis, dom titler sends title to newbie
+    // < on ~title here 1s after page load
+    // title broadcasting kicks in after we have a peer's name
+    let could_send_titles = false
+    // and we aren't the proponent of it...
+    //  meaning once the titler leaves nobody will tell joiners about it
+    let not_my_title = null
+    function we_titlechange(new_title) {
+        if (not_my_title == new_title) {
+            if (title != new_title) {
+                debugger
+            }
+            console.log("onchanged to receiving title")
+            return
+        }
+        not_my_title = null
+        title = new_title
+    }
+    function they_titlechange(new_title) {
+        title = not_my_title = new_title
+    }
     $effect(() => {
-        if (participants && title && title != "untitled") {
-            console.log("buzz title="+title)
-            if (not_my_title) {
-                // change came from peers, don't re-send it to everyone
-                not_my_title = false
+        if (title && title != "untitled") {
+            if (!could_send_titles) {
+                // console.log("Early to be titled")
+                return
             }
-            else {
-                // your title should be told to everyone!
-                console.log("Tell all title="+title)
-                participants.map(par => {
-                    if (!par.channel || par.channel.readyState != "open") {
-                        return
-                    }
-                    console.log(`Tell par=${par.name}`)
-                    // <<< not getting to the other end
-                    par.channel.send(
-                        JSON.stringify({
-                            type: "title",
-                            title: title,
-                        }),
-                    );
-                })
+            if (title == untrack(() => not_my_title)) {
+                // console.log("Reacted to received title")
+                return
             }
+            console.log("Tell all title="+title)
+            participants.map(par => {
+                console.log(` - tell par=${par.name}`)
+                announce_title(par)
+            })
             
         }
     })
+    // triggers 400ms after a par.name is sent
+    function announce_title(par) {
+        // opens the value for title change to react here from the above effect
+        could_send_titles = true
+        if (not_my_title == title) return
+        if (title == null || title == "untitled") return
+        if (!par.channel || par.channel.readyState != "open") {
+            return
+        }
+        console.log(` - tell par=${par.name}`)
+        par.channel.send(
+            JSON.stringify({
+                type: "title",
+                title: title,
+            }),
+        );
+    }
+
     // participants exchange names in a webrtc datachannel
     function createDataChannel(par) {
         par.channel = par.pc.createDataChannel("participants");
@@ -76,17 +106,18 @@
                     par = i_par({ peerId: par.peerId });
                     par.name = data.name;
                     console.log(`Received name from ${par.peerId}: ${par.name}`)
-
-                    // 
+                    
+                    // give some time 
+                    setTimeout(() => {
+                        announce_title(par)
+                    },400)
                 }
                 if (data.type === "title") {
-                    not_my_title = true
-                    title = data.title;
-                    console.log(`Received title from ${par.peerId}: ${title}`)
+                    they_titlechange(data.title)
+                    console.log(`Received title from ${par.name}: ${title}`)
                 }
             };
         };
-
         // Announce ourselves
         let announce_self = () => {
             // console.log("Sending participant");
@@ -533,7 +564,9 @@
         {/if}
     </div>
     <div class="participants">
-        <YourTitle bind:title={title} editable={status != "Disconnected"} {Signaling}/>
+        <YourTitle {title} editable={status != "Disconnected"} {Signaling} onChange={we_titlechange}/>
+
+
         {#each participants as par (par.peerId)}
             <div class="participant {par.type == 'monitor' && 'monitor'}">
                 <span class="theyname">{par.name || par.peerId}</span>
