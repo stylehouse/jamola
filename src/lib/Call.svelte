@@ -28,8 +28,21 @@
     let localVolume = 0.7;
 
     // these are good to switch off in DEV
-    let activate_uploading = 0
-    let activate_recording = 0
+    let activate_recording_reuploading = 0
+    let activate_recording = 1
+    // < perhaps via insertableStreams we can reuse
+    //   the encoded opus that was transmit to us as the recorded copy
+    //   user may internet too slow to upload 2x 240kbps (30kBps)
+    //   complicated to realise, we'd need YourShareOfRecording.svelte
+    //   lest everyone upload everything, at slightly different times
+    //   announce_title could come with a timestamp!
+    //    so we can make deterministic filenames to request from /upload/...
+    //    and non-local recordings wait and check the remote uploaded
+    // so everyone simply records and uploads their own localStream
+    //  then it's at least not transcoded
+    let activate_recording_for_peerIds = [""]
+    // < YourShareOfMixing.svelte - hierarchy for large crowds
+    //   for when it gets too big to send everyone to everyone direct
 
     // via p2p datachannel
     // announce title changes
@@ -167,8 +180,9 @@
                 par.audio.volume = localVolume;
                 participants.push(par);
                 par.pc && bitrates.add_par(par);
-                if (activate_recording) {
-                    // they record
+                if (activate_recording && (!activate_recording_for_peerIds
+                        || activate_recording_for_peerIds.includes(par.peerId))) {
+                    // they record (.start()) when a track arrives
                     par.recorder = new parRecorder({par:par,...stuff_we_tell_parRecorder()})
                 }
             } else {
@@ -394,19 +408,6 @@
             status = "Got things";
         };
     }
-    function setAudioBitrate(sender, bitrate) {
-        const params = sender.getParameters();
-        // Check if we have encoding parameters
-        if (!params.encodings) {
-            params.encodings = [{}];
-        }
-
-        // Set the maximum bitrate (in bps)
-        params.encodings[0].maxBitrate = bitrate * 1000; // Convert kbps to bps
-
-        // Apply the parameters
-        return sender.setParameters(params);
-    }
 
     // Modify your give_localStream function to include bitrate control
     function give_localStream(par) {
@@ -434,16 +435,19 @@
             }
         });
     }
-    // Optional: Add a function to dynamically adjust bitrate
-    function stuff_we_tell_parRecorder() {
-        return {
-            title,
-            bitrate:target_bitrate,
-            i_par,
-            sock,
+    function setAudioBitrate(sender, bitrate) {
+        const params = sender.getParameters();
+        // Check if we have encoding parameters
+        if (!params.encodings) {
+            params.encodings = [{}];
         }
-    }
 
+        // Set the maximum bitrate (in bps)
+        params.encodings[0].maxBitrate = bitrate * 1000; // Convert kbps to bps
+
+        // Apply the parameters
+        return sender.setParameters(params);
+    }
     function updateAudioBitrate(newBitrate) {
         target_bitrate = newBitrate;
         participants.map((par) => {
@@ -465,6 +469,15 @@
             }
         });
     }
+    function stuff_we_tell_parRecorder() {
+        return {
+            title,
+            bitrate:target_bitrate,
+            i_par,
+            sock,
+        }
+    }
+
 
     // switch everything off
     function stopConnection() {
@@ -518,6 +531,7 @@
     }
     // auto-resume - good for debugging when all clients refresh all the time
     let resumable_once = true;
+    let resumable_storable = $state(false)
     $effect(() => {
         if (resumable_once) {
             // init
@@ -526,17 +540,20 @@
             setTimeout(() => {
                 if (localStorage.was_on && userName != "you" && !errorMessage) {
                     console.log("Resuming...");
-                    setTimeout(() => negate(), 291);
+                    negate()
                 }
-            },40)
+                resumable_storable = 1
+            },240)
         }
     });
     // after the above, or it will store the default was_on=false
     $effect(() => {
-        if (status === "Disconnected") {
-            delete localStorage.was_on;
-        } else {
-            localStorage.was_on = "call";
+        if (resumable_storable) {
+            if (status === "Disconnected") {
+                delete localStorage.was_on;
+            } else {
+                localStorage.was_on = "call";
+            }
         }
     });
 
@@ -553,7 +570,7 @@
     //
     let quitervals = []
     $effect(() => {
-        let retry = () => activate_uploading && Signaling && retryRecordingUploads(sock)
+        let retry = () => activate_recording_reuploading && Signaling && retryRecordingUploads(sock)
         setTimeout(() => {
             // Periodically retry failed uploads, eg now
             retry()
@@ -569,8 +586,6 @@
         quitervals.map(clearInterval)
         stopConnection();
     })
-
-    // < is it possible to reuse the encoded opus that was transmit to us as the recorded copy?
 </script>
 
 <main class="container" style="display:none;" bind:this={themain}>
@@ -632,7 +647,7 @@
             <div class="participant {par.type == 'monitor' && 'monitor'}">
                 <span class="theyname">{par.name || par.peerId}</span>
                 {#if par.type}<span class="streamtype">{par.type}</span>{/if}
-                {#if par.offline}<span class="ohno">offline</span>{/if}
+                {#if par.offline}<span class="error">offline</span>{/if}
                 {#if par.constate}<span class="techwhat">{par.constate}</span
                     >{/if}
 

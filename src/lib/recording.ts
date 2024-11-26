@@ -28,12 +28,12 @@ export class parRecorder {
         }
     }
 
-    start(stream) {
+    start(stream:MediaStream) {
         try {
             // Use high-quality audio encoding
             const options = {
                 mimeType: 'audio/webm;codecs=opus',
-                audioBitsPerSecond: 270000
+                audioBitsPerSecond: this.bitrate * 1000,
             };
             
             this.mediaRecorder = new MediaRecorder(stream, options);
@@ -85,7 +85,7 @@ export class parRecorder {
     }
 
     // assemble a labelled bit of tape!
-    async make_recrecord(blob) {
+    async make_rec_record(blob) {
         // so we can hopefully stitch them back together
         let start_ts = this.start_ts
         let end_ts = this.start_ts = Date.now();
@@ -136,7 +136,7 @@ export class parRecorder {
         const blob = new Blob(this.recordedChunks, { type: 'audio/webm' });
         this.recordedChunks = []; // Clear for next segment
 
-        let rec = await this.make_recrecord(blob)
+        let rec = await this.make_rec_record(blob)
         
         await upload_recrecord(this.sock,{
             rec,
@@ -183,6 +183,7 @@ async function openDB() {
         };
     });
 }
+// a par-agnostic uploader for the two ways to get here
 // your layer on top of this decides what to do if upload goes bad
 async function upload_recrecord(sock: () => Socket,{rec,good,bad}) {
     try {
@@ -196,7 +197,10 @@ async function upload_recrecord(sock: () => Socket,{rec,good,bad}) {
                 metadata[key] = rec[key];
             }
         }
-
+        if (!sock()) {
+            return bad("no sock")
+        }
+        
         sock().emit('audio-upload', {
             metadata,
             audioData: arrayBuffer

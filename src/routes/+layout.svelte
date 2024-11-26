@@ -58,12 +58,9 @@
         font-family: monospace;
     }
     :global(.error) {
-        color: red;
+        color: rgb(150, 0, 0);
         font-family: monospace;
-    }
-    :global(.ohno) {
-        color: red;
-        font: monospace;
+        text-shadow: 1px 1px 3px rgb(194, 194, 194);
     }
     :global(.techwhat) {
         color: cyan;
