@@ -10,7 +10,6 @@ export class parRecorder {
     title_ts:number
     bitrate:number
     i_par:Function
-    Signaling:SignalingClient
 
     mediaRecorder:MediaRecorder = null
     recordedChunks = []
@@ -46,18 +45,17 @@ export class parRecorder {
             this.mediaRecorder.ondataavailable = (event) => {
                 if (event.data.size > 0) {
                     // these are 35kb chunks of webm.
-                    console.log("Recorder pushed "+event.data.size)
+                    if (event.data.size < 33000 || event.data.size > 37000) {
+                        // console.log("Recorder pushed "+event.data.size)
+                    }
                     this.recordedChunks.push(event.data);
                 }
                 if (this.segmenting) {
                     this.segmenting_complete()
                 }
             };
-
             // Start periodic uploads
-            this.uploadInterval = setInterval(() => {
-                this.uploadCurrentSegment();
-            }, this.uploadInterval_delta*1000);
+            this.restart_uploadInterval()
 
             // Start recording
             // Request a new chunk every second for fine-grained recording
@@ -66,9 +64,50 @@ export class parRecorder {
             console.error('Failed to start recording:', error);
         }
     }
-    async uploadCurrentSegment() {
-        if (this.reasons_to_avoid_segmentation()) {
-            return
+    
+    restart_uploadInterval() {
+        let delay = this.uploadInterval_delta*1000
+        this.uploadInterval = setInterval(() => {
+            // the usual place to do this, not via title change
+            this.uploadCurrentSegment();
+            this.next_upload_time = Date.now() + delay
+        },delay);
+        this.next_upload_time = Date.now() + delay
+    }
+    reasons_to_avoid_segmentation() {
+        // changing the title very early means keep it all
+        //  also that various things are changing it!?
+        let milliseconds = Date.now() - this.began_ts;
+        if (milliseconds < 3300) return console.log("non-Segment: too soon"), 1;
+        // 35k chunks of type=audio/webm
+        if (this.recordedChunks.length < 1) {
+            return console.log("non-Segment: too tiny"), 1;
+        }
+
+    }
+    more_reasons_to_avoid_segmentation() {
+        // sanity
+        if (!this.par.name) {
+            return console.warn(`non-Segment: no name`,this.par), 1
+        }
+        if (!this.title) return console.warn(`non-Segment: no title`), 1
+            if (!this.title_ts) return console.warn(`non-Segment: no title_ts`), 1
+        // < we can't seem to ensure that this par is in the current set of participants,
+        //   it seems like a svelte5 object proxy problem. par!=this.par, yet par.pc==this.par.pc etc
+        //   so don't worry about it
+    }
+
+    async uploadCurrentSegment(title_changing) {
+        if (title_changing) {
+            // title from peer, very early potentially...
+            // no segment is too small to sync start_ts
+            // pass this for debug info
+            this.title_changing = true
+        }   
+        else {
+            if (this.reasons_to_avoid_segmentation()) {
+                return
+            }
         }
         // it may be very short, but this.recordedChunks.length>0
 
@@ -81,7 +120,7 @@ export class parRecorder {
 
         // switch the recorder off and on.
         // < hopefully none of the stream is missing?
-        if (this.mediaRecorder.state == 'recording') {
+        if (this.is_rolling()) {
             // try to make each blob we get a webm-contained playable thing
             this.mediaRecorder.stop();
             this.mediaRecorder.start(1000);
@@ -91,9 +130,29 @@ export class parRecorder {
         }
         // wait for that last bit of data til now to drain...
         this.segmenting = true
+        // this make have been customised but should now resume
+        if (!this.uploadInterval) {
+            this.restart_uploadInterval()
+        }
+    }
+    is_rolling() {
+        return this.mediaRecorder && this.mediaRecorder.state == 'recording'
     }
     // and resume segmenting afrom the data handler
     async segmenting_complete() {
+        let let_go = () => {
+            delete this.segmenting
+            // .stop() lets us upload before spraying down with null
+            this.onsegmented && this.onsegmented()
+        }
+        let title_changing = this.title_changing && ", title_changing" || ""
+        delete this.title_changing
+        if (this.recordedChunks.length < 1) {
+            // tiny bit of time, nothing else came available
+            console.warn("no-Segmented"+title_changing,this.recordedChunks);
+            return let_go()
+        }
+
         let par = this.par
         console.log(`tape++ ${par.name} - ${this.title}`)
         // flush tape to blob
@@ -106,42 +165,67 @@ export class parRecorder {
             rec,
             good: () => {
                 // console.log(`Uploaded ${rec.filename}`);
+                let_go()
             },
             bad: (error) => {
                 console.error('Failed to upload audio segment: '+error);
                 // Store failed uploads for retry
                 this.handleFailedUpload(rec);
+                let_go()
             },
         })
         
-        delete this.segmenting
-        this.onsegmented && this.onsegmented()
     }
-    async stop(abort) {
+    async stop(let_go) {
         if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
             // https://developer.mozilla.org/en-US/docs/Web/API/MediaRecorder/stop_event
             this.mediaRecorder.stop();
             // this.requestData()
         }
-        
         clearInterval(this.uploadInterval);
         
         // Final upload of any remaining data
-        !abort && await this.uploadCurrentSegment();
+        await this.uploadCurrentSegment();
         
-        // Clear resources
-        this.mediaRecorder = null;
-        this.recordedChunks = [];
-        this.uploadInterval = null;
+        this.onsegmented = () => {
+            // Clear resources
+            this.mediaRecorder = null;
+            this.recordedChunks = [];
+            this.uploadInterval = null;
+            // and those waiting for us to upload the last bit
+            let_go && let_go()
+        }
     }
-
-    async title_changed({title,title_ts}) {
+    // used by title setters to sync everyone's segmenting start_ts
+    // < check how bad sync it
+    segment_time_left() {
+        if (!this.next_upload_time) {
+            console.error("No next_upload_time")
+            // they take this to mean noop
+            return 0
+        }
+        return Date.now() - this.next_upload_time
+    }
+    async title_changed({title,title_ts,sequenceNumber,time_left}) {
         this.uploadCurrentSegment()
         this.title = title
         this.title_ts = title_ts
-        this.sequenceNumber = 0
+        // titles from a peer also come with:
+        this.sequenceNumber = sequenceNumber || 0
+        if (time_left) {
+            // sync the first segment's end time with that of the titler
+            clearInterval(this.uploadInterval)
+            delete this.uploadInterval
+            setTimeout(() => {
+                console.log("Segmenting due to title + time_left from peer")
+                // we need to avoid any: non-Segment: too soon
+                //  when we are 0.5s after page load and a title comes,
+                this.uploadCurrentSegment('title_changing');
+            },time_left)
+        }
     }
     async bitrate_changed(bitrate) {
+        console.log("Segmenting due to ~bitrate")
         this.uploadCurrentSegment()
         this.bitrate = bitrate
     }
@@ -174,26 +258,6 @@ export class parRecorder {
             sequenceNumber: this.sequenceNumber++,
         }
         return rec
-    }
-
-    reasons_to_avoid_segmentation() {
-        // changing the title very early means keep it all
-        let milliseconds = Date.now() - this.began_ts;
-        if (milliseconds < 3300) return console.log("non-Segment: too soon"), 1;
-        // 35k chunks of type=audio/webm
-        if (this.recordedChunks.length < 1) return console.log("non-Segment: too tiny"), 1;
-
-    }
-    more_reasons_to_avoid_segmentation() {
-        // sanity
-        if (!this.par.name) {
-            return console.warn(`non-Segment: no name`,this.par), 1
-        }
-        if (!this.title) return console.warn(`non-Segment: no title`), 1
-            if (!this.title_ts) return console.warn(`non-Segment: no title_ts`), 1
-        // < we can't seem to ensure that this par is in the current set of participants,
-        //   it seems like a svelte5 object proxy problem. par!=this.par, yet par.pc==this.par.pc etc
-        //   so don't worry about it
     }
 
     async handleFailedUpload(rec) {

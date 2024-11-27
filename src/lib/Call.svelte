@@ -17,6 +17,7 @@
     let userName = $state();
     // title by YourTitle.svelte
     let title = $state();
+    // $inspect(title)
 
     // that we i_par into
     let participants = $state([]);
@@ -66,6 +67,9 @@
     let not_my_title = null
     // the recording gets grouped by when the title started
     let title_ts = null
+    // peers sync their sequenceNumber and segment end time
+    //  from the msg:title handler to the ~title reaction to parRecorder
+    let title_syncinfo = null
     function we_titlechange(new_title) {
         if (not_my_title == new_title) {
             if (title != new_title) {
@@ -77,11 +81,13 @@
         not_my_title = null
         title = new_title
         title_ts = Date.now()
+        title_syncinfo = null
     }
     // they title change
     par_msg_handler['title'] = (par,d) => {
         title = not_my_title = d.title
         title_ts = d.title_ts
+        title_syncinfo = d
         console.log(`Received title from ${par.name}: ${title}`)
     }
     $effect(() => {
@@ -105,7 +111,29 @@
         if (title) {
             participants.map((par) => {
                 if (par.recorder) {
-                    par.recorder.title_changed({title,title_ts})
+                    let syncinfo = null
+                    if (title == not_my_title) {
+                        // was remote
+                        if (title_syncinfo) {
+                            syncinfo = title_syncinfo
+                            title_syncinfo = null
+                        }
+                        else {
+                            console.warn("had no title_syncinfo")
+                        }
+                    }
+                    else {
+                        if (title_syncinfo) {
+                            console.warn("had title_syncinfo but is my title")
+                        }
+                    }
+                    if (syncinfo && syncinfo.title != title) {
+                        console.warn("had different titles to syncinfo")
+                    }
+                    if (syncinfo && syncinfo.title_ts != title_ts) {
+                        console.warn("had different title_ts to syncinfo")
+                    }
+                    par.recorder.title_changed({...(syncinfo||{}),title,title_ts})
                 }
             });
         }
@@ -120,6 +148,21 @@
         }
     }
 
+    function stuff_we_tell_parRecorder_via_title_changed() {
+        // one of these will know what segment 
+        let apar
+        participants.map((par) => {
+            if (!par.recorder || !par.recorder.is_rolling()) return
+            apar = par.recorder
+        });
+        let time_left = apar && apar.segment_time_left() || 0
+        let sequenceNumber = apar && apar.sequenceNumber || 0
+        return {
+            title,title_ts,
+            time_left,sequenceNumber
+        }
+    }
+
     // triggers 400ms after a par.name is received, if we own the title
     function announce_title(par) {
         // opens the path for title change to react here from the above effect
@@ -127,7 +170,11 @@
         if (not_my_title == title) return
         if (title == null || title == "untitled") return
         
-        par.emit && par.emit("title",{title,title_ts})
+
+        par.emit && par.emit(
+            "title",
+            stuff_we_tell_parRecorder_via_title_changed()
+        )
     }
     par_msg_handler['participant'] = (par,{name}) => {
         par.name = name;
@@ -138,6 +185,7 @@
             announce_title(par)
         },400)
     }
+
     par_msg_handler['latency_ping'] = (par,{timestamp}) => {
         par.emit("latency_pong",{timestamp})
     }
@@ -236,6 +284,7 @@
                 if (par.pc == pc) debugger;
                 // Stop existing recording if we're replacing the connection
                 //  it needs to be started again on a new MediaStream
+                // < will it?
                 if (par.recorder) {
                     par.recorder.stop();
                 }
@@ -515,16 +564,18 @@
     // switch everything off
     function stopConnection() {
         measuring.close();
+        let let_go = () => {
+            Signaling && Signaling.close();
+            Signaling = null;
+        }
         participants.map(par => {
             par.pc?.close && par.pc?.close();
             if (par.recorder) {
-                par.recorder.stop()
+                par.recorder.stop(let_go)
             }
             par.audio.pause();
             par.audio.srcObject = null;
         });
-        Signaling && Signaling.close();
-        Signaling = null;
 
         status = "Disconnected";
         errorMessage = "";
