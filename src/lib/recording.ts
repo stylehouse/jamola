@@ -31,6 +31,9 @@ export class parRecorder {
 
     start(stream:MediaStream) {
         try {
+            // reset per segment
+            this.start_ts = Date.now();
+            // see also began_ts, title_ts
             // Use high-quality audio encoding
             const options = {
                 mimeType: 'audio/webm;codecs=opus',
@@ -38,10 +41,6 @@ export class parRecorder {
             };
             
             this.mediaRecorder = new MediaRecorder(stream, options);
-            // reset per segment
-            this.start_ts = Date.now();
-            // see also began_ts, title_ts
-            
             this.mediaRecorder.ondataavailable = (event) => {
                 if (event.data.size > 0) {
                     // these are 35kb chunks of webm.
@@ -61,10 +60,40 @@ export class parRecorder {
             console.error('Failed to start recording:', error);
         }
     }
+    async uploadCurrentSegment() {
+        if (this.reasons_to_avoid_segmentation()) {
+            return
+        }
+        // to relocate a par. see "it seems like a svelte5 object proxy problem"
+        let par = this.par
+        par = this.par = this.i_par({par})
+        console.log(`tape++ ${par.peerId}: ${par.name}   doing ${this.title}`)
+        if (this.more_reasons_to_avoid_segmentation()) {
+            return
+        }
+
+        // flush tape to blob
+        const blob = new Blob(this.recordedChunks, { type: 'audio/webm' });
+        this.recordedChunks = []; // Clear for next segment
+        // label (tuple)
+        let rec = await this.make_rec_record(blob)
+        
+        await upload_recrecord(this.sock,{
+            rec,
+            good: () => {
+                // console.log(`Uploaded ${rec.filename}`);
+            },
+            bad: (error) => {
+                console.error('Failed to upload audio segment: '+error);
+                // Store failed uploads for retry
+                this.handleFailedUpload(rec);
+            },
+        })
+    }
     async stop(abort) {
         if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+            // https://developer.mozilla.org/en-US/docs/Web/API/MediaRecorder/stop_event
             this.mediaRecorder.stop();
-            // < may be required to tell it to flush the rest via ondataavailable
             // this.requestData()
         }
         
@@ -137,36 +166,6 @@ export class parRecorder {
         // < we can't seem to ensure that this par is in the current set of participants,
         //   it seems like a svelte5 object proxy problem. par!=this.par, yet par.pc==this.par.pc etc
         //   so don't worry about it
-    }
-    async uploadCurrentSegment() {
-        if (this.reasons_to_avoid_segmentation()) {
-            return
-        }
-        // to relocate a par. see "it seems like a svelte5 object proxy problem"
-        let par = this.par
-        par = this.par = this.i_par({par})
-        console.log(`tape++ ${par.peerId}: ${par.name}   doing ${this.title}`)
-        if (this.more_reasons_to_avoid_segmentation()) {
-            return
-        }
-
-        // flush tape to blob
-        const blob = new Blob(this.recordedChunks, { type: 'audio/webm' });
-        this.recordedChunks = []; // Clear for next segment
-        // label (tuple)
-        let rec = await this.make_rec_record(blob)
-        
-        await upload_recrecord(this.sock,{
-            rec,
-            good: () => {
-                // console.log(`Uploaded ${rec.filename}`);
-            },
-            bad: (error) => {
-                console.error('Failed to upload audio segment: '+error);
-                // Store failed uploads for retry
-                this.handleFailedUpload(rec);
-            },
-        })
     }
     async handleFailedUpload(rec) {
         // Store failed upload in IndexedDB for retry
