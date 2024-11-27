@@ -15,6 +15,8 @@ export class parRecorder {
     mediaRecorder:MediaRecorder = null
     recordedChunks = []
     uploadInterval:any = null
+    // true while uploadCurrentSegment is about to have a batch of recordedChunks
+    segmenting:boolean
 
     // birthday of the recorder
     began_ts = Date.now()
@@ -44,7 +46,11 @@ export class parRecorder {
             this.mediaRecorder.ondataavailable = (event) => {
                 if (event.data.size > 0) {
                     // these are 35kb chunks of webm.
+                    console.log("Recorder pushed "+event.data.size)
                     this.recordedChunks.push(event.data);
+                }
+                if (this.segmenting) {
+                    this.segmenting_complete()
                 }
             };
 
@@ -64,14 +70,32 @@ export class parRecorder {
         if (this.reasons_to_avoid_segmentation()) {
             return
         }
+        // it may be very short, but this.recordedChunks.length>0
+
         // to relocate a par. see "it seems like a svelte5 object proxy problem"
         let par = this.par
         par = this.par = this.i_par({par})
-        console.log(`tape++ ${par.peerId}: ${par.name}   doing ${this.title}`)
         if (this.more_reasons_to_avoid_segmentation()) {
             return
         }
 
+        // switch the recorder off and on.
+        // < hopefully none of the stream is missing?
+        if (this.mediaRecorder.state == 'recording') {
+            // try to make each blob we get a webm-contained playable thing
+            this.mediaRecorder.stop();
+            this.mediaRecorder.start(1000);
+        }
+        else {
+            // you must have hit stop() already
+        }
+        // wait for that last bit of data til now to drain...
+        this.segmenting = true
+    }
+    // and resume segmenting afrom the data handler
+    async segmenting_complete() {
+        let par = this.par
+        console.log(`tape++ ${par.name} - ${this.title}`)
         // flush tape to blob
         const blob = new Blob(this.recordedChunks, { type: 'audio/webm' });
         this.recordedChunks = []; // Clear for next segment
@@ -89,6 +113,9 @@ export class parRecorder {
                 this.handleFailedUpload(rec);
             },
         })
+        
+        delete this.segmenting
+        this.onsegmented && this.onsegmented()
     }
     async stop(abort) {
         if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
@@ -148,6 +175,7 @@ export class parRecorder {
         }
         return rec
     }
+
     reasons_to_avoid_segmentation() {
         // changing the title very early means keep it all
         let milliseconds = Date.now() - this.began_ts;
@@ -167,6 +195,7 @@ export class parRecorder {
         //   it seems like a svelte5 object proxy problem. par!=this.par, yet par.pc==this.par.pc etc
         //   so don't worry about it
     }
+
     async handleFailedUpload(rec) {
         // Store failed upload in IndexedDB for retry
         try {

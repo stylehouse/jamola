@@ -6,6 +6,10 @@ hifi internet telephony for musicians
 
 In-browser jam space. Uses WebRTC to stream everyone's microphones to each other at high bitrates.
 
+# features
+
+You can set a title for everyone. Doing so syncronises everyone's recordings, which are uploaded to the server.
+
 # install
 
 Have a look into `install.sh` which will ask for duckdns secrets, get LetsEncrypt ssl for you, and run it all.
@@ -31,6 +35,7 @@ This didn't work for me:
 pw-cli create-node adapter { factory.name=support.loopback node.name=FakeAudio }
 aplay -D FakeAudio '/media/s/12117025 dp/Music/Highsoul/0 worldish/VA - Kenny Graham, Guy Warren/Guy Warren - 1959 - themes for african drums/02 waltzing drums.mp3'
 ```
+
 Nor did:
 ```
 sudo apt install sox

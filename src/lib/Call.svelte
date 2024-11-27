@@ -82,7 +82,7 @@
     par_msg_handler['title'] = (par,d) => {
         title = not_my_title = d.title
         title_ts = d.title_ts
-        console.log(`Received title from ${par.nafme}: ${title}`)
+        console.log(`Received title from ${par.name}: ${title}`)
     }
     $effect(() => {
         if (title && title != "untitled") {
