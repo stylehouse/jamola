@@ -20,8 +20,20 @@
 
     // that we i_par into
     let participants = $state([]);
+    // par can .msg()
+    let par_msg_handler = {}
     // $inspect(participants)
 
+    // par.bitrate kbps going through par.pc
+    // par.latency ms one-way to this peer
+    // < for recordings
+    // < par.delay the stream. cause a larger buffer
+    //    determining where the playhead is with speed|slow. 
+    //   so I can tune in different rhythms we can be out of time in
+    //    creating slightly different music at each end, necessarily.
+    //   or delaying our monitor to occur as our peer experiences our stream arriving
+    //    so our playing has to lead the beat but on tape will be on the beat.
+    //     might be extra hard since less time to think? or extra fresh...
     let measuring = new Measuring({i_par});
     // it never seems to use more than 266 if given more
     let target_bitrate = 270;
@@ -44,23 +56,16 @@
     // < YourShareOfMixing.svelte - hierarchy for large crowds
     //   for when it gets too big to send everyone to everyone direct
 
-    // peer latency data next to the par kbps.
-    // < for recordings
-    // < I want to delay the stream. cause a larger buffer
-    //    determining where the playhead is with speed|slow. 
-    //   so I can tune in different rhythms we can be out of time in
-    //    creating slightly different music at each end, necessarily.
-
     // via p2p datachannel
     // announce title changes
     //  when others connect 
-    // < on mynameis, dom titler sends title to newbie
-    // < on ~title here 1s after page load
     // title broadcasting kicks in after we have a peer's name
     let could_send_titles = false
     // and we aren't the proponent of it...
     //  meaning once the titler leaves nobody will tell joiners about it
     let not_my_title = null
+    // the recording gets grouped by when the title started
+    let title_ts = null
     function we_titlechange(new_title) {
         if (not_my_title == new_title) {
             if (title != new_title) {
@@ -71,9 +76,13 @@
         }
         not_my_title = null
         title = new_title
+        title_ts = Date.now()
     }
-    function they_titlechange(new_title) {
-        title = not_my_title = new_title
+    // they title change
+    par_msg_handler['title'] = (par,d) => {
+        title = not_my_title = d.title
+        title_ts = d.title_ts
+        console.log(`Received title from ${par.nafme}: ${title}`)
     }
     $effect(() => {
         if (title && title != "untitled") {
@@ -91,69 +100,87 @@
             
         }
     })
-    // triggers 400ms after a par.name is sent
+    // ~title -> parRecorder
+    $effect(() => {
+        if (title) {
+            participants.map((par) => {
+                if (par.recorder) {
+                    par.recorder.title_changed({title,title_ts})
+                }
+            });
+        }
+    })
+    function stuff_we_tell_parRecorder() {
+        return {
+            title,
+            title_ts,
+            bitrate:target_bitrate,
+            i_par,
+            sock,
+        }
+    }
+
+    // triggers 400ms after a par.name is received, if we own the title
     function announce_title(par) {
-        // opens the value for title change to react here from the above effect
+        // opens the path for title change to react here from the above effect
         could_send_titles = true
         if (not_my_title == title) return
         if (title == null || title == "untitled") return
-        if (!par.channel || par.channel.readyState != "open") {
-            return
-        }
-        par.channel.send(
-            JSON.stringify({
-                type: "title",
-                title: title,
-            }),
-        );
+        
+        par.emit && par.emit("title",{title,title_ts})
+    }
+    par_msg_handler['participant'] = (par,{name}) => {
+        par.name = name;
+        console.log(`Received name from ${par.peerId}: ${par.name}`)
+        
+        // give some time 
+        setTimeout(() => {
+            announce_title(par)
+        },400)
+    }
+    par_msg_handler['latency_ping'] = (par,{timestamp}) => {
+        par.emit("latency_pong",{timestamp})
+    }
+    par_msg_handler['latency_pong'] = (par,{timestamp}) => {
+        measuring.handle_latency_pong(par, timestamp);
     }
 
     // participants exchange names in a webrtc datachannel
     function createDataChannel(par) {
         par.channel = par.pc.createDataChannel("participants");
+        // you (eg Measuring) can send messages, they may get dropped
+        par.msg = (data) => {
+            if (!par.channel || par.channel.readyState != "open") {
+                return
+            }
+            par.channel.send(JSON.stringify(data))
+        }
+        // like socket.io
+        par.emit = (type,data) => {
+            par.msg({type,...data})
+        }
         // the receiver is this other channel they sent us
         //  I don't know why we have to call it "participants" then
         par.pc.ondatachannel = (event) => {
             event.channel.onmessage = (event) => {
                 const data = JSON.parse(event.data);
-                if (data.type === "participant") {
-                    // < for some reason we have to seek out the par again at this point
-                    //   not doing this leads to this.par.name being undefined
-                    //    much later in parRecorder.uploadCurrentSegment
-                    //    see "it seems like a svelte5 object proxy problem"
-                    par = i_par({ peerId: par.peerId });
-                    par.name = data.name;
-                    console.log(`Received name from ${par.peerId}: ${par.name}`)
-                    
-                    // give some time 
-                    setTimeout(() => {
-                        announce_title(par)
-                    },400)
+                let handler = par_msg_handler[data.type]
+                if (!handler) {
+                    return console.warn(`No handler for par=${par.name} message: `,data)
                 }
-                if (data.type === "title") {
-                    they_titlechange(data.title)
-                    console.log(`Received title from ${par.name}: ${title}`)
-                }
-                if (data.type === "latency_ping") {
-                    par.channel.send(JSON.stringify({
-                        type: "latency_pong",
-                        timestamp: data.timestamp
-                    }));
-                }
-                if (data.type === "latency_pong") {
-                    measuring.handle_latency_pong(par, data.timestamp);
-                }
+                // < for some reason we have to seek out the par again at this point
+                //   not doing this leads to this.par.name being undefined
+                //    much later in parRecorder.uploadCurrentSegment
+                //    see "it seems like a svelte5 object proxy problem"
+                par = i_par({ peerId: par.peerId });
+
+                handler(par,data)
             };
         };
         // Announce ourselves
         let announce_self = () => {
             // console.log("Sending participant");
-            par.channel.send(
-                JSON.stringify({
-                    type: "participant",
-                    name: userName,
-                }),
-            );
+            par.emit("participant",{name:userName})
             // once
             announce_self = () => {};
         };
@@ -165,8 +192,6 @@
 
         par.channel.onopen = () => {
             delete par.offline;
-            // check again it's totally ready..?
-            if (par.channel.readyState != "open") debugger;
             announce_self();
             // console.log(`Data open: ${par.peerId}`);
         };
@@ -485,14 +510,6 @@
             }
         });
     }
-    function stuff_we_tell_parRecorder() {
-        return {
-            title,
-            bitrate:target_bitrate,
-            i_par,
-            sock,
-        }
-    }
 
 
     // switch everything off
@@ -573,16 +590,6 @@
         }
     });
 
-    // title by YourTitle, can percolate to parRecorder
-    $effect(() => {
-        if (title) {
-            participants.map((par) => {
-                if (par.recorder) {
-                    par.recorder.title_changed(title)
-                }
-            });
-        }
-    })
     //
     let quitervals = []
     $effect(() => {

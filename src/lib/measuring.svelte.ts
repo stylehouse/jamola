@@ -61,7 +61,7 @@ export class LatencyStats {
             return
         }
         // here every 3s
-        console.log(`latency del ${par.name}`)
+        // console.log(`latency del ${par.name}`)
 
         const startTime = Date.now();
         if (par.channel.readyState == 'open') {

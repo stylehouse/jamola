@@ -7,13 +7,14 @@ export class parRecorder {
     par// = $state()
     uploadInterval_delta = 11 // seconds
     title:string
+    title_ts:number
     bitrate:number
     i_par:Function
     Signaling:SignalingClient
 
-    mediaRecorder = null
+    mediaRecorder:MediaRecorder = null
     recordedChunks = []
-    uploadInterval = null
+    uploadInterval:any = null
 
     // birthday of the recorder
     began_ts = Date.now()
@@ -39,6 +40,7 @@ export class parRecorder {
             this.mediaRecorder = new MediaRecorder(stream, options);
             // reset per segment
             this.start_ts = Date.now();
+            // see also began_ts, title_ts
             
             this.mediaRecorder.ondataavailable = (event) => {
                 if (event.data.size > 0) {
@@ -62,6 +64,8 @@ export class parRecorder {
     async stop(abort) {
         if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
             this.mediaRecorder.stop();
+            // < may be required to tell it to flush the rest via ondataavailable
+            // this.requestData()
         }
         
         clearInterval(this.uploadInterval);
@@ -75,9 +79,11 @@ export class parRecorder {
         this.uploadInterval = null;
     }
 
-    async title_changed(title) {
+    async title_changed({title,title_ts}) {
         this.uploadCurrentSegment()
         this.title = title
+        this.title_ts = title_ts
+        this.sequenceNumber = 0
     }
     async bitrate_changed(bitrate) {
         this.uploadCurrentSegment()
@@ -86,13 +92,14 @@ export class parRecorder {
 
     // assemble a labelled bit of tape!
     async make_rec_record(blob) {
-        // so we can hopefully stitch them back together
+        // this is probably too much data to collect
+        let title_ts = this.title_ts
         let start_ts = this.start_ts
         let end_ts = this.start_ts = Date.now();
         // from a set of these filenames?
-        const timestamp = new Date(start_ts).toISOString().replace(/[:.]/g, '-');
-        const sanitizedName = this.par.name.replace(/[^a-z\w0-9]/gi, '_');
-        const sanitizedTitle = this.title.replace(/[^a-z\w0-9]/gi, '_');
+        const timestamp = new Date(title_ts).toISOString().replace(/[:.]/g, '-');
+        const sanitizedName = (this.par.name+'').replace(/[^a-z\w0-9]/gi, '_');
+        const sanitizedTitle = (this.title+'').replace(/[^a-z\w0-9]/gi, '_');
         let filename = `${timestamp}_${sanitizedTitle}_${sanitizedName}_${this.sequenceNumber}.webm`;
         let rec = {
             // < each peer's latency info...
@@ -105,37 +112,48 @@ export class parRecorder {
             peerId: this.par.peerId,
             name: this.par.name,
             title: this.title,
+            title_ts,
             start_ts,
             end_ts,
             sequenceNumber: this.sequenceNumber++,
         }
         return rec
     }
-    
-    async uploadCurrentSegment() {
+    reasons_to_avoid_segmentation() {
         // changing the title very early means keep it all
         let milliseconds = Date.now() - this.began_ts;
-        if (milliseconds < 3300) return console.log("non-Segment: too soon");
+        if (milliseconds < 3300) return console.log("non-Segment: too soon"), 1;
         // 35k chunks of type=audio/webm
-        if (this.recordedChunks.length < 1) return console.log("non-Segment: too tiny");
+        if (this.recordedChunks.length < 1) return console.log("non-Segment: too tiny"), 1;
 
-        let par = this.par
-        // to relocate a par. see "it seems like a svelte5 object proxy problem"
-        par = this.par = this.i_par({par})
-
-        console.log(`tape++ ${par.peerId}: ${par.name}   doing ${this.title}`)
+    }
+    more_reasons_to_avoid_segmentation() {
         // sanity
-        if (!par.name) {
-            return console.warn(`non-Segment: no name (after ${milliseconds}ms)`,par)
+        if (!this.par.name) {
+            return console.warn(`non-Segment: no name`,this.par), 1
         }
-        if (!this.title) return console.warn(`non-Segment: no title`)
+        if (!this.title) return console.warn(`non-Segment: no title`), 1
+            if (!this.title_ts) return console.warn(`non-Segment: no title_ts`), 1
         // < we can't seem to ensure that this par is in the current set of participants,
         //   it seems like a svelte5 object proxy problem. par!=this.par, yet par.pc==this.par.pc etc
         //   so don't worry about it
+    }
+    async uploadCurrentSegment() {
+        if (this.reasons_to_avoid_segmentation()) {
+            return
+        }
+        // to relocate a par. see "it seems like a svelte5 object proxy problem"
+        let par = this.par
+        par = this.par = this.i_par({par})
+        console.log(`tape++ ${par.peerId}: ${par.name}   doing ${this.title}`)
+        if (this.more_reasons_to_avoid_segmentation()) {
+            return
+        }
 
+        // flush tape to blob
         const blob = new Blob(this.recordedChunks, { type: 'audio/webm' });
         this.recordedChunks = []; // Clear for next segment
-
+        // label (tuple)
         let rec = await this.make_rec_record(blob)
         
         await upload_recrecord(this.sock,{
