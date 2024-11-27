@@ -2,7 +2,7 @@
     import { onDestroy, untrack } from "svelte";
     import { SvelteMap } from "svelte/reactivity";
     import { SignalingClient } from "$lib/ws-client.svelte";
-    import { BitrateStats } from "$lib/bitratestats.svelte";
+    import { Measuring } from "$lib/measuring.svelte";
     import { parRecorder,retryRecordingUploads } from "$lib/recording";
     import YourName from "./YourName.svelte";
     import YourTitle from "./YourTitle.svelte";
@@ -22,7 +22,7 @@
     let participants = $state([]);
     // $inspect(participants)
 
-    let bitrates = new BitrateStats({i_par});
+    let measuring = new Measuring({i_par});
     // it never seems to use more than 266 if given more
     let target_bitrate = 270;
     let localVolume = 0.7;
@@ -43,6 +43,13 @@
     let activate_recording_for_peerIds = [""]
     // < YourShareOfMixing.svelte - hierarchy for large crowds
     //   for when it gets too big to send everyone to everyone direct
+
+    // peer latency data next to the par kbps.
+    // < for recordings
+    // < I want to delay the stream. cause a larger buffer
+    //    determining where the playhead is with speed|slow. 
+    //   so I can tune in different rhythms we can be out of time in
+    //    creating slightly different music at each end, necessarily.
 
     // via p2p datachannel
     // announce title changes
@@ -127,6 +134,15 @@
                     they_titlechange(data.title)
                     console.log(`Received title from ${par.name}: ${title}`)
                 }
+                if (data.type === "latency_ping") {
+                    par.channel.send(JSON.stringify({
+                        type: "latency_pong",
+                        timestamp: data.timestamp
+                    }));
+                }
+                if (data.type === "latency_pong") {
+                    measuring.handle_latency_pong(par, data.timestamp);
+                }
             };
         };
         // Announce ourselves
@@ -179,7 +195,7 @@
                 par.audio = new Audio();
                 par.audio.volume = localVolume;
                 participants.push(par);
-                par.pc && bitrates.add_par(par);
+                par.pc && measuring.add_par(par);
                 if (activate_recording && (!activate_recording_for_peerIds
                         || activate_recording_for_peerIds.includes(par.peerId))) {
                     // they record (.start()) when a track arrives
@@ -481,7 +497,7 @@
 
     // switch everything off
     function stopConnection() {
-        bitrates.close();
+        measuring.close();
         participants.map(par => {
             par.pc?.close && par.pc?.close();
             if (par.recorder) {
@@ -665,6 +681,8 @@
 
                 {#if par.bitrate}<span class="bitrate">{par.bitrate} kbps</span
                     >{/if}
+                {#if par.latency}<span class="bitrate latency">{par.latency} ms</span
+                    >{/if}
             </div>
         {/each}
     </div>
@@ -718,6 +736,12 @@
     }
     .monitor {
         background-color: #25855d;
+    }
+    .bitrate {
+        width:2em;
+    }
+    .latency {
+        color:#2d0768
     }
 
     input[type="range"] {
