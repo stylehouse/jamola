@@ -69,10 +69,23 @@ export abstract class AudioEffectoid {
         fore = fore.slice(-1)[0]
         return {fore,aft}
     }
-    get AC {
+    get AC() {
         let AC = this.par.audioContext
         if (!AC) throw "!AC"
         return AC
+    }
+    destroy() {
+        // Find and disconnect all properties ending with 'Node'
+        Object.keys(this)
+            .filter(key => key.endsWith('Node') && this[key] instanceof AudioNode)
+            .forEach(key => {
+                try {
+                    this[key].disconnect();
+                    this[key] = null;
+                } catch (error) {
+                    console.warn(`Error disconnecting ${key}:`, error);
+                }
+            });
     }
 }
 export class FreshStream extends AudioEffectoid {
@@ -96,7 +109,7 @@ export class Delaysagne extends AudioEffectoid {
         this.sourceNode = this.AC.createMediaStreamSource(stream);
         this.delayNode = this.AC.createDelay(5);
         
-        delayNode.delayTime.setValueAtTime(this.delay / 1000, this.AC.currentTime);
+        this.delayNode.delayTime.setValueAtTime(this.delay / 1000, this.AC.currentTime);
         
         this.sourceNode
             .connect(this.delayNode)
@@ -126,7 +139,7 @@ export class Gainorator extends AudioEffectoid {
     private sourceNode: MediaStreamAudioSourceNode | null = null;
     private gainNode: GainNode | null = null;
     private analyserNode: AnalyserNode | null = null;
-    
+
     // Stores to track volume and peak levels
     public volumeLevel = $state(0);
     public peakLevel = $state(0);
@@ -134,6 +147,7 @@ export class Gainorator extends AudioEffectoid {
 
     private dataArray: Uint8Array;
     private bufferLength: number;
+    private meterUpdateId: number
 
     constructor(opt) {
         super(opt)
@@ -192,7 +206,7 @@ export class Gainorator extends AudioEffectoid {
             this.peakLevel = peak;
 
             // Continue metering
-            requestAnimationFrame(meterUpdate);
+            this.meterUpdateId = requestAnimationFrame(meterUpdate);
         };
 
         meterUpdate();
@@ -203,22 +217,21 @@ export class Gainorator extends AudioEffectoid {
         if (this.gainNode) {
             // Limit gain to prevent distortion
             const clampedGain = Math.min(Math.max(value, 0), 2);
-            this.gainNode.gain.setValueAtTime(clampedGain, this.audioContext.currentTime);
+            this.gainNode.gain.setValueAtTime(clampedGain, this.AC.currentTime);
             this.gainValue = clampedGain;
         }
     }
 
-    // Disconnect all audio nodes
-    disconnect() {
-        if (this.sourceNode) {
-            this.sourceNode.disconnect();
-            this.sourceNode = null;
-        }
-    }
-
-    // Cleanup method
     destroy() {
-        this.disconnect();
-        this.audioContext.close();
+        // Call base class destroy to handle node disconnection
+        super.destroy();
+    
+        // Stop metering animation
+        cancelAnimationFrame(this.meterUpdateId);
+    
+        // Reset internal state
+        this.volumeLevel = 0;
+        this.peakLevel = 0;
+        this.gainValue = 1;
     }
 }
