@@ -4,11 +4,19 @@ hifi internet telephony for musicians
 
 # description
 
-In-browser jam space. Uses WebRTC to stream everyone's microphones to each other at high bitrates.
+In-browser jam space with recording. Self hosted via docker, for the web. Uses WebRTC to stream everyone's microphones to each other at high bitrates.
 
 # features
 
-You can set a title for everyone. Doing so syncronises everyone's recordings, which are uploaded to the server.
+You can set a title for everyone. Doing so syncronises everyone's recordings' info, which are uploaded to the server.
+
+The server is a svelte+vite+nodejs webserver behind a forwarding Caddy webserver for https.
+
+# requirements
+
+- docker
+- duckdns
+- upnpc or other port forward access for your router (device between local and inter networks)
 
 # install
 
@@ -16,7 +24,17 @@ Have a look into `install.sh` which will ask for duckdns secrets, get LetsEncryp
 
 Which implies how you might run `docker compose up` subsequently, or `upnpc -r 443 tcp 9443` or so to forward ports on an ongoing basis, perhaps you'd add this to `docker-compose.yaml` if it works. My consumer router wouldn't let me forward 80|443 via upnp, I had to log in with the default password and define a new service to have internal port = 9443 etc.
 
-# development notes
+# contributing
+
+Yes please. Open to chats about what's up.
+
+# community
+
+Pending arrival. Hopefully it'll be big.
+
+# notes
+
+It's a svelte dev server.
 
 ## dns in your network
 
@@ -29,6 +47,8 @@ And browse `https://voulais.duckdns.org:9443/`.
 Apparently this can be done on a rooted Android as well. Or do your own DNS, host it elsewhere, or use it elsewhere. Your local art gallery may have free wifi reachable from a nice place.
 
 ## fake input devices
+
+Would be nice to test with. I usually use "Monitor of EasyEffects Sink" which handles feedback well. 
 
 This didn't work for me:
 ```
@@ -45,10 +65,31 @@ pactl load-module module-pipe-source source_name=tone_source file=tone.wav
 
 ## TODO
 
+### Having gain knobs and meters.
+
+User should start playing loudly and adjust their levels
+                                to frame that intensity.
+
+Also I think we could learn something from EasyEffects.
+I recommend it.
+I particularly use a Limiter
+ for accidental mega-loud-machine-noise-surges
+     from glitching software,
+and AutoGain
+ to standardise the volume of things in general,
+ which also manages surfing feedback very well.
+
+ Laptop power supplies running your stereo
+  will also switch off if over-amped
+ during noise surges.
+
+So something about taking care of your ears.
+
+### other
+
  - text chat
  - recording and saving, as many tracks? they might want aligning depending on who is timing-dominant wrt latency...
  - dockerise coturn server as well (how necessary is this?)
  - stabilise latency - to the beat or fraction of. feeling what it is.
- - input stream selector
  - on|off video, quality controls
 

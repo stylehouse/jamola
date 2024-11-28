@@ -6,6 +6,7 @@
     import { parRecorder,retryRecordingUploads } from "$lib/recording";
     import YourName from "./YourName.svelte";
     import YourTitle from "./YourTitle.svelte";
+    import { CookedStream, FreshStream, Gainorator } from "./audio.svelte";
     
     let Signaling: SignalingClient;
     let sock = () => Signaling?.socket
@@ -250,7 +251,15 @@
         };
     }
 
-    type Participant = {peerId:string,pc?:RTCPeerConnection,name?}
+    type Participant = {
+        peerId:string,
+        pc?:RTCPeerConnection,
+        name?:string,
+        fresh?:CookedStream,
+        gain?:Gainorator,
+        cooked?:CookedStream,
+        audio:HTMLAudioElement
+    }
     // read or add new participant (par)
     function i_par({ par, peerId, pc, ...etc }):Participant {
         if (par && peerId == null) {
@@ -265,15 +274,27 @@
                 was_new = 2;
                 // new par
                 par = { peerId, pc };
+                par.fresh = new FreshStream({par})
+                par.cooked = new CookedStream({par})
+                par.gain = new Gainorator({par})
                 par.audio = new Audio();
                 par.audio.volume = localVolume;
-                participants.push(par);
+                // < the above should probably become:
+                // < does this mean each participant becomes an output stream from the browser?
+                par.audioContext = new AudioContext()
+                // the last effect has nowhere to flow on to
+                par.cooked.on_output = (stream) => {
+                    par.audio.srcObject = stream
+                }
+
                 par.pc && measuring.add_par(par);
                 if (activate_recording && (!activate_recording_for_peerIds
                         || activate_recording_for_peerIds.includes(par.peerId))) {
                     // they record (.start()) when a track arrives
                     par.recorder = new parRecorder({par:par,...stuff_we_tell_parRecorder()})
                 }
+
+                participants.push(par);
             } else {
                 was_new = 1;
                 // stream|par.pc changes, same par|peerId
@@ -299,7 +320,7 @@
         return par;
     }
     // this becomes our monitor
-    function i_myself_par(localStream) {
+    function i_myself_par() {
         let par = i_par({
             peerId: "",
             pc: {},
@@ -311,28 +332,22 @@
             let many = []
             localStream.getTracks().forEach((track) => {
                 many.push(track)
-                // Create a new MediaStream for monitoring
-                const monitorStream = new MediaStream([track]);
-                
-                par.audio.srcObject = monitorStream
-                par.audio.volume = 0;
-                par.audio.play().catch(console.error);
-
-                // Start recording this same stream
-                try {
-                } catch (error) {
-                    console.error("Failed to start self recording:", error);
-                }
             });
             if (many.length != 1) {
                 console.warn(`odd number of tracks`,many)
             }
+            par.fresh.input(new MediaStream([many[0]]))
+            par.audio.volume = 0;
+            par.audio.play().catch(console.error);
         }
-        if (par.recorder) {
+        if (par.gain && par.effects && !par.effects.includes(par.gain)) {
+            i_par_effect(par,par.gain)
+        }
+        if (par.recorder && !par.recorder.is_rolling()) {
             par.recorder.start(par.audio.srcObject);
-            console.log("Started recording self stream");
         }
     }
+
     function volumeChange(par) {
         console.log("Volume is " + par.audio.volume);
     }
@@ -394,7 +409,7 @@
             status = "Got microphone access";
         }
         // every-Ring stuff like par.recorder.start()
-        i_myself_par(localStream);
+        i_myself_par();
     }
     async function startConnection() {
         // this will be, sync, after negate()
@@ -491,7 +506,7 @@
     // take audio from a peer
     function take_remoteStream(par) {
         par.pc.ontrack = (e) => {
-            par.audio.srcObject = new MediaStream([e.track]);
+            par.fresh.input(new MediaStream([e.track]))
 
             // Start recording the received stream
             if (par.recorder) {
