@@ -307,24 +307,31 @@
             type: "monitor",
         });
         delete par.pc;
-        localStream.getTracks().forEach((track) => {
-            // Create a new MediaStream for monitoring
-            const monitorStream = new MediaStream([track]);
-            
-            par.audio.srcObject = monitorStream
-            par.audio.volume = 0;
-            par.audio.play().catch(console.error);
+        if (!par.audio.srcObject) {
+            let many = []
+            localStream.getTracks().forEach((track) => {
+                many.push(track)
+                // Create a new MediaStream for monitoring
+                const monitorStream = new MediaStream([track]);
+                
+                par.audio.srcObject = monitorStream
+                par.audio.volume = 0;
+                par.audio.play().catch(console.error);
 
-            // Start recording this same stream
-            try {
-                if (par.recorder) {
-                    par.recorder.start(monitorStream);
-                    console.log("Started recording self stream");
+                // Start recording this same stream
+                try {
+                } catch (error) {
+                    console.error("Failed to start self recording:", error);
                 }
-            } catch (error) {
-                console.error("Failed to start self recording:", error);
+            });
+            if (many.length != 1) {
+                console.warn(`odd number of tracks`,many)
             }
-        });
+        }
+        if (par.recorder) {
+            par.recorder.start(par.audio.srcObject);
+            console.log("Started recording self stream");
+        }
     }
     function volumeChange(par) {
         console.log("Volume is " + par.audio.volume);
@@ -378,14 +385,15 @@
         }
     }
     async function startStreaming() {
-        // they might choose a stream, null for default
-        constraints.audio.deviceId = chosen_audio_device
-        // Get microphone stream
-        localStream ||=
-            await navigator.mediaDevices.getUserMedia(constraints);
-        status = "Got microphone access";
-
-        
+        if (!localStream) {
+            // they might choose a stream, null for default
+            constraints.audio.deviceId = chosen_audio_device
+            // Get microphone stream
+            localStream ||=
+                await navigator.mediaDevices.getUserMedia(constraints);
+            status = "Got microphone access";
+        }
+        // every-Ring stuff like par.recorder.start()
         i_myself_par(localStream);
     }
     async function startConnection() {
@@ -395,11 +403,8 @@
         errorMessage = "";
         try {
             part = 'startStreaming'
-            if (!localStream) {
-                // once, before Signaling and peers arrive
-                await startStreaming()
-            }
-            // start signaling via websocket to get to webrtc...
+            await startStreaming()
+            // start signaling via websocket to bootstrap webrtc sessions...
             if (Signaling) {
                 // should have been packed up
                 debugger;
