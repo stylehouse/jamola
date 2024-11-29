@@ -74,13 +74,13 @@ export abstract class AudioEffectoid {
     check_wiring(just_did_input) {
         // < in such a way that completes par.effects, once
         let {fore,aft} = this.get_wired_in()
-        console.log(`------ ${fore?.constructor?.name} -> ${this.constructor?.name} -> ${aft?.constructor?.name}`)
+        // console.log(`------ ${fore?.constructor?.name} -> ${this.constructor?.name} -> ${aft?.constructor?.name}`)
         
         // we only have our abstract notion of par.effects, that we must sync to:
         if (fore && fore.output) {
             // source side of this, output side of that
             if (this.stream != fore.output) {
-                console.log(`wiring ${fore.constructor.name} into ${this.constructor.name}`)
+                // console.log(`wiring ${fore.constructor.name} into ${this.constructor.name}`)
                 if (just_did_input) {
                     debugger
                 }
@@ -90,7 +90,7 @@ export abstract class AudioEffectoid {
         if (aft && this.output) {
             // vise versa
             if (this.output != aft.stream) {
-                console.log(`wiring ${this.constructor.name} into ${aft.constructor.name}`)
+                // console.log(`wiring ${this.constructor.name} into ${aft.constructor.name}`)
                 return aft.input(this.output)
             }
         }
@@ -213,8 +213,6 @@ export class Gainorator extends AudioEffectoid {
         // Create gain node
         this.gainNode = this.AC.createGain();
         this.gainNode.gain.value = 1;
-
-        console.log("Created a Gainorator")
     }
 
     // Process incoming audio stream

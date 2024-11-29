@@ -73,7 +73,6 @@ export class parRecorder {
         let uploadInterval_backwhenIwas = this.uploadInterval = setInterval(() => {
             console.log("An uploadinterval!")
             if (uploadInterval_backwhenIwas != this.uploadInterval) {
-                debugger
                 clearInterval(uploadInterval_backwhenIwas)
                 return
             }
@@ -150,7 +149,6 @@ export class parRecorder {
     // and resume segmenting afrom the data handler
     async segmenting_complete() {
         let let_go = () => {
-            delete this.segmenting
             // .stop() lets us upload before spraying down with null
             this.onsegmented && this.onsegmented()
         }
@@ -191,7 +189,6 @@ export class parRecorder {
             this.mediaRecorder.stop();
             // this.requestData()
         }
-        clearInterval(this.uploadInterval);
         
         // Final upload of any remaining data
         await this.uploadCurrentSegment();
@@ -240,17 +237,32 @@ export class parRecorder {
         this.bitrate = bitrate
     }
 
-    // assemble a labelled bit of tape!
-    async make_rec_record(blob) {
-        // this is probably too much data to collect
-        let title_ts = this.title_ts
-        let start_ts = this.start_ts
-        let end_ts = this.start_ts = Date.now();
-        // from a set of these filenames?
+
+    form_filename({title_ts,title,name,sequenceNumber}) {
         const timestamp = new Date(title_ts).toISOString().replace(/[:.]/g, '-');
         const sanitizedName = (this.par.name+'').replace(/[^a-z\w0-9]/gi, '_');
         const sanitizedTitle = (this.title+'').replace(/[^a-z\w0-9]/gi, '_');
-        let filename = `${timestamp}_${sanitizedTitle}_${sanitizedName}_${this.sequenceNumber}.webm`;
+        const paddedSequenceNumber = String(sequenceNumber).padStart(4, '0');
+        return [
+            timestamp, 
+            sanitizedTitle, 
+            paddedSequenceNumber, 
+            sanitizedName
+        ].join('_') + '.webm';
+    }
+
+    // assemble a labelled bit of tape!
+    async make_rec_record(blob) {
+        // this is probably too much data to collect
+        if (!this.start_ts) throw "!start"
+        // from a set of these filenames?
+        let filename = this.form_filename({
+            title_ts: this.title_ts,
+            title: this.title,
+            name: this.par.name,
+            sequenceNumber: this.sequenceNumber,
+        })
+        
         let rec = {
             // < each peer's latency info...
             //  < listening to the different jitterbuggings of a loop
@@ -262,9 +274,9 @@ export class parRecorder {
             peerId: this.par.peerId,
             name: this.par.name,
             title: this.title,
-            title_ts,
-            start_ts,
-            end_ts,
+            title_ts: this.title_ts,
+            start_ts: this.start_ts,
+            end_ts: (this.start_ts = Date.now()),
             sequenceNumber: this.sequenceNumber++,
         }
         return rec

@@ -9,7 +9,7 @@
     import { CookedStream, FreshStream, Gainorator } from "./audio.svelte";
     
     let Signaling: SignalingClient;
-    let sock = () => Signaling?.socket
+    let sock = () => Signaling?.socket && Signaling.socket.connected && Signaling.socket
     let localStream;
     let status = $state("Disconnected");
     let errorMessage = $state("");
@@ -18,7 +18,7 @@
     let userName = $state();
     // title by YourTitle.svelte
     let title = $state();
-    // $inspect(title)
+    $inspect(title)
 
     // that we i_par into
     let participants = $state([]);
@@ -113,6 +113,7 @@
             participants.map((par) => {
                 if (par.recorder) {
                     let syncinfo = null
+                    if (par.recorder.title == title) return
                     if (title == not_my_title) {
                         // was remote
                         if (title_syncinfo) {
@@ -338,7 +339,6 @@
     //   so we also do this in i_myself_par(), as we reconnect (reRing)
     // < we should be able to record audio without a connection! an offline webapp.
     function might_hit_play_on_par_recorder(par) {
-        console.log(`Might start recorder, par.name`)
         if (!par.recorder) return
         if (!par.audio.srcObject) return
         if (par.recorder.is_rolling()) return
@@ -348,7 +348,6 @@
         //     ie in post ie post-production, which can mean any treatment not live
         //    since it's better to record clear audio
         //     and make it into a reverb cloud after decoded
-        console.log(`Will start recorder, par.name`)
         par.recorder.start(par.audio.srcObject);
     }
     // this becomes our monitor

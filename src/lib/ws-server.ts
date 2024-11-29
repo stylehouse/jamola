@@ -31,7 +31,13 @@ function UploadServer(socket,io) {
 	socket.on('audio-upload', async (data,callback) => {
 		try {
 		  const { metadata, audioData } = data;
-		  const filename = metadata.filename;
+		  const filename = metadata.filename
+		  if (filename.match(/[^.\w-]/)) {
+			  return callback({
+				  success: false,
+				  error: `filename is /[^\w-]/`
+			  });
+		  }
 		  const metaFilename = filename.replace(/\.\w+$/, '.json');
 		  
 		  if (filename == metaFilename) {
