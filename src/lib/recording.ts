@@ -51,6 +51,9 @@ export class parRecorder {
                     this.recordedChunks.push(event.data);
                 }
                 if (this.segmenting) {
+                    // with the stop(),start() trick to make each piece playable,
+                    //  we need to go and catch this event in the middle of segmenting
+                    delete this.segmenting
                     this.segmenting_complete()
                 }
             };
@@ -67,7 +70,13 @@ export class parRecorder {
     
     restart_uploadInterval() {
         let delay = this.uploadInterval_delta*1000
-        this.uploadInterval = setInterval(() => {
+        let uploadInterval_backwhenIwas = this.uploadInterval = setInterval(() => {
+            console.log("An uploadinterval!")
+            if (uploadInterval_backwhenIwas != this.uploadInterval) {
+                debugger
+                clearInterval(uploadInterval_backwhenIwas)
+                return
+            }
             // the usual place to do this, not via title change
             this.uploadCurrentSegment();
             this.next_upload_time = Date.now() + delay
@@ -188,6 +197,7 @@ export class parRecorder {
         await this.uploadCurrentSegment();
         
         this.onsegmented = () => {
+            this.uploadInterval && clearInterval(this.uploadInterval);
             // Clear resources
             this.mediaRecorder = null;
             this.recordedChunks = [];
