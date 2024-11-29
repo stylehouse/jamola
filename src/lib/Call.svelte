@@ -74,7 +74,7 @@
     function we_titlechange(new_title) {
         if (not_my_title == new_title) {
             if (title != new_title) {
-                debugger
+                throw "we_titlechange title!title"
             }
             console.log("onchanged to receiving title")
             return
@@ -134,6 +134,7 @@
                     if (syncinfo && syncinfo.title_ts != title_ts) {
                         console.warn("had different title_ts to syncinfo")
                     }
+                    console.log(`~title=${title} -> parRecorder `+(syncinfo?"(sync)":""))
                     par.recorder.title_changed({...(syncinfo||{}),title,title_ts})
                 }
             });
@@ -179,7 +180,7 @@
     }
     par_msg_handler['participant'] = (par,{name}) => {
         par.name = name;
-        console.log(`Received name from ${par.peerId}: ${par.name}`)
+        // console.log(`Received name from ${par.peerId}: ${par.name}`)
         
         // give some time 
         setTimeout(() => {
@@ -274,7 +275,7 @@
                 par = { peerId, pc };
                 // < the par.audio should probably become a feed to audioContext
                 // < does this mean each participant becomes an output stream from the browser?
-                par.audioContext = new AudioContext()
+                par.audioContext = window.an_audioContext ||= new AudioContext()
                 par.audio = new Audio();
                 par.audio.volume = localVolume;
                 // the stream first goes through:
@@ -284,7 +285,15 @@
                 
                 // the last effect has nowhere to flow on to
                 par.cooked.on_output = (stream) => {
-                    par.audio.srcObject = stream
+                    // output via webaudio, not an <audio>
+                    const audioSource = par.audioContext.createMediaStreamSource(stream);
+                    const audioDestination = par.audioContext.createMediaStreamDestination();
+                    
+                    audioSource.connect(audioDestination);
+                    
+                    par.audio.srcObject = audioDestination.stream;
+
+                    console.log(`on_output is: ${par.name}`)
 
                     // also, now is a good time to:
                     par.audio.play().catch(console.error);
@@ -329,15 +338,18 @@
     //   so we also do this in i_myself_par(), as we reconnect (reRing)
     // < we should be able to record audio without a connection! an offline webapp.
     function might_hit_play_on_par_recorder(par) {
-        if (par.recorder && par.audio.srcObject && !par.recorder.is_rolling()) {
-            // < take the recording just after par.gain and par.delay
-            //    but before par.reverb|echo and the messier|refinable effects
-            //    and apply|refine the later effects on listen...
-            //     ie in post ie post-production, which can mean any treatment not live
-            //    since it's better to record clear audio
-            //     and make it into a reverb cloud after decoded
-            par.recorder.start(par.audio.srcObject);
-        }
+        console.log(`Might start recorder, par.name`)
+        if (!par.recorder) return
+        if (!par.audio.srcObject) return
+        if (par.recorder.is_rolling()) return
+        // < take the recording just after par.gain and par.delay
+        //    but before par.reverb|echo and the messier|refinable effects
+        //    and apply|refine the later effects on listen...
+        //     ie in post ie post-production, which can mean any treatment not live
+        //    since it's better to record clear audio
+        //     and make it into a reverb cloud after decoded
+        console.log(`Will start recorder, par.name`)
+        par.recorder.start(par.audio.srcObject);
     }
     // this becomes our monitor
     function i_myself_par() {
@@ -632,8 +644,7 @@
             }
             startConnection();
             if (status === "Disconnected") {
-                // we rely on this instantly changing
-                debugger;
+                throw "we rely on this instantly changing"
             }
             say_negate = "leave";
         } else {

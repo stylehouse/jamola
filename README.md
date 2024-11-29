@@ -4,25 +4,25 @@ hifi internet telephony for musicians
 
 # description
 
-In-browser jam space with recording. Self hosted via docker, for the web. Uses WebRTC to stream everyone's microphones to each other at high bitrates.
+In-browser jam space with recording. Self hosted (in docker compose) multiplayer webapp. Uses WebRTC to stream everyone's microphones to each other at high bitrates.
 
 # features
 
-You can set a title for everyone. Doing so syncronises everyone's recordings' info, which are uploaded to the server.
+You can set a title for everyone, which makes everyone's uploads to the server more coherent.
 
-The server is a svelte+vite+nodejs webserver behind a forwarding Caddy webserver for https.
+The server is a svelte+vite+nodejs webserver behind a forwarding Caddy webserver, the easiest way to attain https.
 
 # requirements
 
-- docker
-- duckdns
+- docker-compose
+- a duckdns account
 - upnpc or other port forward access for your router (device between local and inter networks)
 
 # install
 
 Have a look into `install.sh` which will ask for duckdns secrets, get LetsEncrypt ssl for you, and run it all.
 
-Which implies how you might run `docker compose up` subsequently, or `upnpc -r 443 tcp 9443` or so to forward ports on an ongoing basis, perhaps you'd add this to `docker-compose.yaml` if it works. My consumer router wouldn't let me forward 80|443 via upnp, I had to log in with the default password and define a new service to have internal port = 9443 etc.
+Which implies how you might run `docker compose up` subsequently, or `upnpc -r 443 tcp 9443` or so to forward ports on an ongoing basis, perhaps you'd add this to `docker-compose.yaml` if it works. My consumer router wouldn't let me forward 80|443 via upnp, I had to log in with the default password > forwarding > define a new "service" type to have internal port = 9443, add a use of it pointing at my "device", which was in a list. YMMV
 
 # contributing
 

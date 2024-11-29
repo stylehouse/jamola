@@ -15,60 +15,105 @@ export type streamables = MediaStream|AudioEffectoid
 
 export abstract class AudioEffectoid {
     par:ParticipantWithEffects
+    
     // the foremost input to a thing
     stream:MediaStream
     output:MediaStream
-    audioContext = new AudioContext()
+
+    // subclasses must have an order
+    // < and a constructor? or if they have a constructor, it has to set this.order,
+    //   before calling super.constructor -> get_wired_in, which needs order.
+    //   wanting to define it in subclasses as a default, eg 'order = 30'
+    order:number
+
     constructor(opt:{par,stream}) {
         Object.assign(this,opt)
+        // to par.effects=[]
+        this.get_wired_in()
     }
     input(stream) {
         // this is the behaviour of the *Stream objects
         // simply places, so we can rewire anything anywhere between them
-        this.output = this.stream = stream
+        this.stream = stream
+        // more here, eventually presenting
+        this.output = this.stream
+
         // makes sure this leads somewhere, which can't be done without this.output made up?
         //  may set off a bunch more input() through par.effects
-        this.check_wiring()
+        this.check_wiring('just_did_input')
+        
         // CookedStream uses this
         // as the final effect in the effects, elsewhere go
         this.on_output && this.on_output(stream)
     }
 
+    stream_to_Node(stream) {
+        this.stream = stream
+        return this.streamNode = this.AC.createMediaStreamSource(stream);
+    }
+    Node_to_output(Node) {
+        this.outputNode = this.AC.createMediaStreamDestination()
+        Node.connect(this.outputNode)
+        this.output = this.outputNode.stream
+    }
+    // check if we need to input() this stream
+    is_streaming_this(stream) {
+        if (stream == this.stream) {
+            // as above
+            return 1
+        }
+        if (stream == this.stream && this.stream.mediaStream) {
+            // processor nodes want this made into a node as well, so...
+            // < is it much more efficient to have only all the nodes connecting
+            //   and only mediastream at the very ends of par.effects?
+            return 1
+        }
+    }
+
     // may cause .input(stream) from one to the next along par.effects = []
-    check_wiring() {
+    check_wiring(just_did_input) {
         // < in such a way that completes par.effects, once
-        let {fore,aft} = this.get_wired_in(this.par)
+        let {fore,aft} = this.get_wired_in()
+        console.log(`------ ${fore?.constructor?.name} -> ${this.constructor?.name} -> ${aft?.constructor?.name}`)
+        
         // we only have our abstract notion of par.effects, that we must sync to:
-        if (fore) {
+        if (fore && fore.output) {
             // source side of this, output side of that
-            if (fore.output != this.stream) {
-                console.log(`wiring ${fore} into ${this}`)
+            if (this.stream != fore.output) {
+                console.log(`wiring ${fore.constructor.name} into ${this.constructor.name}`)
+                if (just_did_input) {
+                    debugger
+                }
                 return this.input(fore.output)
             }
         }
-        if (aft) {
+        if (aft && this.output) {
             // vise versa
-            if (aft.stream != this.output) {
-                console.log(`wiring ${this} into ${aft}`)
+            if (this.output != aft.stream) {
+                console.log(`wiring ${this.constructor.name} into ${aft.constructor.name}`)
                 return aft.input(this.output)
             }
         }
     }
     // get realised in the chain of audio processors on par.effects
-    get_wired_in(par) {
+    get_wired_in() {
+        let par = this.par
         par.effects ||= []
+        let effects = par.effects
+        if (this.order == null) debugger
         // card trick crud
         let fore = []
-        while (par.effects[0] && par.effects[0].order < this.order) {
-            if (par.effects[0] == effect) {
-                par.effects.shift();
-                continue
-            }
+        while (par.effects[0] && par.effects[0].order+'' < this.order+'') {
             fore.push(par.effects.shift())
+        }
+        if (par.effects[0] == this) {
+            // supposing we have unique orders
+            par.effects.shift();
         }
         // the spot
         let aft = par.effects[0]
-        par.effects.unshift(...fore,par)
+        par.effects.unshift(this)
+        par.effects.unshift(...fore)
         fore = fore.slice(-1)[0]
         return {fore,aft}
     }
@@ -77,46 +122,56 @@ export abstract class AudioEffectoid {
         if (!AC) throw "!AC"
         return AC
     }
-    destroy() {
+    disconnect_all_nodes(and_null) {
         // Find and disconnect all properties ending with 'Node'
         Object.keys(this)
             .filter(key => key.endsWith('Node') && this[key] instanceof AudioNode)
             .forEach(key => {
                 try {
                     this[key].disconnect();
-                    this[key] = null;
+                    if (and_null) {
+                        this[key] = null;
+                    }
                 } catch (error) {
                     console.warn(`Error disconnecting ${key}:`, error);
                 }
             });
+
+    }
+    destroy() {
+        disconnect_all_nodes('and_null')
     }
 }
 export class FreshStream extends AudioEffectoid {
-    order = 0
+    constructor(opt) {
+        super({order:0, ...opt})
+    }
 }
 export class CookedStream extends AudioEffectoid {
-    order = 999
+    constructor(opt) {
+        super({order:999, ...opt})
+    }
     on_output = Function
 }
 
 // Stream buffering or slight time travels
 export class Delaysagne extends AudioEffectoid {
-    order = 22
     delay = 500 // ms
+    constructor(opt) {
+        super({order:666, ...opt})
+    }
     input(stream: MediaStream) {
-        this.sourceNode = this.AC.createMediaStreamSource(stream);
+        this.disconnect_all_nodes()
+        this.stream_to_Node(stream).connect(this.delayNode)
+        
         this.delayNode = this.AC.createDelay(5);
         
         this.delayNode.delayTime.setValueAtTime(this.delay / 1000, this.AC.currentTime);
         
-        this.sourceNode
-            .connect(this.delayNode)
-            .connect(
-                this.output = this.AC.createMediaStreamDestination()
-            );
+        this.Node_to_output(this.delayNode)
 
         // Go on inputting
-        this.check_wiring()
+        this.check_wiring('just_did_input')
     }
 
     // would it be where to do this?
@@ -133,7 +188,6 @@ export class Delaysagne extends AudioEffectoid {
 }
 
 export class Gainorator extends AudioEffectoid {
-    order = 22
     private sourceNode: MediaStreamAudioSourceNode | null = null;
     private gainNode: GainNode | null = null;
     private analyserNode: AnalyserNode | null = null;
@@ -148,7 +202,7 @@ export class Gainorator extends AudioEffectoid {
     private meterUpdateId: number
 
     constructor(opt) {
-        super(opt)
+        super({order:12, ...opt})
         
         // Create analyser node for metering
         this.analyserNode = this.AC.createAnalyser();
@@ -159,32 +213,27 @@ export class Gainorator extends AudioEffectoid {
         // Create gain node
         this.gainNode = this.AC.createGain();
         this.gainNode.gain.value = 1;
+
+        console.log("Created a Gainorator")
     }
 
     // Process incoming audio stream
     input(stream: MediaStream) {
-        // Clean up any existing connections
-        this.disconnect();
-
-        // Create source node from stream
-        this.sourceNode = this.AC.createMediaStreamSource(stream);
-
-        this.sourceNode
-            .connect(this.gainNode)
-            .connect(this.analyserNode)
-            .connect(
-                this.output = this.AC.createMediaStreamDestination()
-            );
+        this.disconnect_all_nodes()
+        this.stream_to_Node(stream).connect(this.gainNode)
+        this.gainNode.connect(this.analyserNode);
+        this.Node_to_output(this.analyserNode)
 
         // Start metering
         this.startMetering();
         // Go on inputting
-        this.check_wiring()
+        this.check_wiring('just_did_input')
     }
 
     // Start continuous volume metering
     private startMetering() {
         const meterUpdate = () => {
+            cancelAnimationFrame(this.meterUpdateId);
             // Get volume data
             this.analyserNode.getByteTimeDomainData(this.dataArray);
             
@@ -206,8 +255,7 @@ export class Gainorator extends AudioEffectoid {
             // Continue metering
             this.meterUpdateId = requestAnimationFrame(meterUpdate);
         };
-
-        meterUpdate();
+        this.meterUpdateId = requestAnimationFrame(meterUpdate);
     }
 
     // Set gain level
