@@ -705,8 +705,12 @@
     <h1>
         <span class="welcometo overhang">Welcome to</span>
         <span class="jamola"><a href="https://github.com/stylehouse/jamola">jamola</a></span>,
-        <YourName bind:userName={userName} editable={status == "Disconnected"} {negate} ></YourName>
-        !
+        <span style="display:inline-block">
+                <YourName bind:userName={userName} 
+                    editable={status == "Disconnected"}
+                    {negate}
+                ></YourName>
+            <span style="font-size:24%">!</span></span>
     </h1>
 
     <div class="controls">

@@ -79,7 +79,7 @@
     bind:this={yourname_el}
     oninput={changeyourname}
     onkeypress={writingyourname}
-    class="yourname">{userName_printable}</span
+    class="yourname" style="{userName == default_userName ? 'border:2px solid black' : ''}">{userName_printable}</span
 >
 
 <style>
@@ -88,5 +88,7 @@
         font-size: 170%;
         color: rgb(54, 19, 19);
         text-shadow: 5px 3px 9px #aca;
+        min-width: 1em;
+        display: inline-block;
     }
 </style>
