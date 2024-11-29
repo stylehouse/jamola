@@ -29,6 +29,9 @@ export abstract class AudioEffectoid {
         // makes sure this leads somewhere, which can't be done without this.output made up?
         //  may set off a bunch more input() through par.effects
         this.check_wiring()
+        // CookedStream uses this
+        // as the final effect in the effects, elsewhere go
+        this.on_output && this.on_output(stream)
     }
 
     // may cause .input(stream) from one to the next along par.effects = []
@@ -65,7 +68,7 @@ export abstract class AudioEffectoid {
         }
         // the spot
         let aft = par.effects[0]
-        par.effects.unshift(...fore,effect)
+        par.effects.unshift(...fore,par)
         fore = fore.slice(-1)[0]
         return {fore,aft}
     }
@@ -94,11 +97,6 @@ export class FreshStream extends AudioEffectoid {
 export class CookedStream extends AudioEffectoid {
     order = 999
     on_output = Function
-    input(stream) {
-        super(stream)
-        // as the final effect in the effects, elsewhere go
-        this.on_output(stream)
-    }
 }
 
 // Stream buffering or slight time travels

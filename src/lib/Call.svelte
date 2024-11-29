@@ -268,23 +268,27 @@
             peerId = par.peerId
         }
         par = participants.filter((par) => par.peerId == peerId)[0];
-        let was_new = 0;
         if (pc) {
             if (!par) {
-                was_new = 2;
                 // new par
                 par = { peerId, pc };
+                // < the par.audio should probably become a feed to audioContext
+                // < does this mean each participant becomes an output stream from the browser?
+                par.audioContext = new AudioContext()
+                par.audio = new Audio();
+                par.audio.volume = localVolume;
+                // the stream first goes through:
                 par.fresh = new FreshStream({par})
                 par.cooked = new CookedStream({par})
                 par.gain = new Gainorator({par})
-                par.audio = new Audio();
-                par.audio.volume = localVolume;
-                // < the above should probably become:
-                // < does this mean each participant becomes an output stream from the browser?
-                par.audioContext = new AudioContext()
+                
                 // the last effect has nowhere to flow on to
                 par.cooked.on_output = (stream) => {
                     par.audio.srcObject = stream
+
+                    // also, now is a good time to:
+                    par.audio.play().catch(console.error);
+                    might_hit_play_on_par_recorder(par)
                 }
 
                 par.pc && measuring.add_par(par);
@@ -296,7 +300,6 @@
 
                 participants.push(par);
             } else {
-                was_new = 1;
                 // stream|par.pc changes, same par|peerId
                 //  peerId comes from socket.io, is per their websocket
                 console.log(`i_par: stream changes, same peer: ${par.name}`)
@@ -319,6 +322,23 @@
         
         return par;
     }
+    // the one place to start recordings
+    // occurs two ways:
+    //  usually, streams arriving cause a par.cooked.on_output()
+    //  the local stream only "arrives" and causes that once though
+    //   so we also do this in i_myself_par(), as we reconnect (reRing)
+    // < we should be able to record audio without a connection! an offline webapp.
+    function might_hit_play_on_par_recorder(par) {
+        if (par.recorder && par.audio.srcObject && !par.recorder.is_rolling()) {
+            // < take the recording just after par.gain and par.delay
+            //    but before par.reverb|echo and the messier|refinable effects
+            //    and apply|refine the later effects on listen...
+            //     ie in post ie post-production, which can mean any treatment not live
+            //    since it's better to record clear audio
+            //     and make it into a reverb cloud after decoded
+            par.recorder.start(par.audio.srcObject);
+        }
+    }
     // this becomes our monitor
     function i_myself_par() {
         let par = i_par({
@@ -338,14 +358,8 @@
             }
             par.fresh.input(new MediaStream([many[0]]))
             par.audio.volume = 0;
-            par.audio.play().catch(console.error);
         }
-        if (par.gain && par.effects && !par.effects.includes(par.gain)) {
-            i_par_effect(par,par.gain)
-        }
-        if (par.recorder && !par.recorder.is_rolling()) {
-            par.recorder.start(par.audio.srcObject);
-        }
+        might_hit_play_on_par_recorder(par)
     }
 
     function volumeChange(par) {
@@ -408,7 +422,7 @@
                 await navigator.mediaDevices.getUserMedia(constraints);
             status = "Got microphone access";
         }
-        // every-Ring stuff like par.recorder.start()
+        // every-Ring stuff
         i_myself_par();
     }
     async function startConnection() {
@@ -507,14 +521,8 @@
     function take_remoteStream(par) {
         par.pc.ontrack = (e) => {
             par.fresh.input(new MediaStream([e.track]))
-
-            // Start recording the received stream
-            if (par.recorder) {
-                par.recorder.start(par.audio.srcObject);
-            }
-
             // console.log("Got track", [par, par.audio.srcObject, localStream]);
-            par.audio.play().catch(console.error);
+            // this is usually the status while connected
             status = "Got things";
         };
     }
