@@ -288,10 +288,10 @@
                     // < output via webaudio, not an <audio>
                     // const audioSource = par.audioContext.createMediaStreamSource(stream);
                     // const audioDestination = par.audioContext.createMediaStreamDestination();
-                    
                     // audioSource.connect(audioDestination);
+                    // par.audio.srcObject = audioDestination.stream;
                     
-                    par.audio.srcObject = audioDestination.stream;
+                    par.audio.srcObject = stream;
 
                     console.log(`on_output is: ${par.name}`)
 
