@@ -285,11 +285,11 @@
                 
                 // the last effect has nowhere to flow on to
                 par.cooked.on_output = (stream) => {
-                    // output via webaudio, not an <audio>
-                    const audioSource = par.audioContext.createMediaStreamSource(stream);
-                    const audioDestination = par.audioContext.createMediaStreamDestination();
+                    // < output via webaudio, not an <audio>
+                    // const audioSource = par.audioContext.createMediaStreamSource(stream);
+                    // const audioDestination = par.audioContext.createMediaStreamDestination();
                     
-                    audioSource.connect(audioDestination);
+                    // audioSource.connect(audioDestination);
                     
                     par.audio.srcObject = audioDestination.stream;
 
