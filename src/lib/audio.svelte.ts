@@ -160,12 +160,12 @@ export class Delaysagne extends AudioEffectoid {
     delay = 500 // ms
     constructor(opt) {
         super({order:666, ...opt})
+        this.delayNode = this.AC.createDelay(5);
     }
     input(stream: MediaStream) {
         this.disconnect_all_nodes()
         this.stream_to_Node(stream).connect(this.delayNode)
         
-        this.delayNode = this.AC.createDelay(5);
         
         this.delayNode.delayTime.setValueAtTime(this.delay / 1000, this.AC.currentTime);
         

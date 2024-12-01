@@ -6,7 +6,7 @@
     import { parRecorder,retryRecordingUploads } from "$lib/recording";
     import YourName from "./YourName.svelte";
     import YourTitle from "./YourTitle.svelte";
-    import { CookedStream, FreshStream, Gainorator } from "./audio.svelte";
+    import { CookedStream, Delaysagne, FreshStream, Gainorator } from "./audio.svelte";
     
     let Signaling: SignalingClient;
     let sock = () => Signaling?.socket && Signaling.socket.connected && Signaling.socket
@@ -283,6 +283,7 @@
                 // the stream first goes through:
                 par.fresh = new FreshStream({par})
                 par.cooked = new CookedStream({par})
+                par.delay = new Delaysagne({par})
                 par.gain = new Gainorator({par})
                 
                 // the last effect has nowhere to flow on to
