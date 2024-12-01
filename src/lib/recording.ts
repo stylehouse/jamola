@@ -2,7 +2,7 @@
 
 import type { Socket } from "socket.io-client"
 import type { SignalingClient } from "./ws-client.svelte"
-
+//
 export class parRecorder {
     par// = $state()
     uploadInterval_delta = 11 // seconds
@@ -71,7 +71,6 @@ export class parRecorder {
     restart_uploadInterval() {
         let delay = this.uploadInterval_delta*1000
         let uploadInterval_backwhenIwas = this.uploadInterval = setInterval(() => {
-            console.log("An uploadinterval!")
             if (uploadInterval_backwhenIwas != this.uploadInterval) {
                 clearInterval(uploadInterval_backwhenIwas)
                 return

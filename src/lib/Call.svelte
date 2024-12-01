@@ -18,7 +18,7 @@
     let userName = $state();
     // title by YourTitle.svelte
     let title = $state();
-    $inspect(title)
+    $inspect('title',title)
 
     // that we i_par into
     let participants = $state([]);
@@ -70,13 +70,13 @@
     let title_ts = null
     // peers sync their sequenceNumber and segment end time
     //  from the msg:title handler to the ~title reaction to parRecorder
-    let title_syncinfo = null
+    let title_syncinfo = $state(null)
     function we_titlechange(new_title) {
         if (not_my_title == new_title) {
             if (title != new_title) {
                 throw "we_titlechange title!title"
             }
-            console.log("onchanged to receiving title")
+            // console.log("onchanged to receiving title")
             return
         }
         not_my_title = null
@@ -109,11 +109,12 @@
     })
     // ~title -> parRecorder
     $effect(() => {
-        if (title) {
+        if (title || title_syncinfo) {
             participants.map((par) => {
                 if (par.recorder) {
                     let syncinfo = null
-                    if (par.recorder.title == title) return
+                    // we may receive the same title if we reload the page
+                    if (!title_syncinfo && par.recorder.title == title) return
                     if (title == not_my_title) {
                         // was remote
                         if (title_syncinfo) {
@@ -294,8 +295,6 @@
                     
                     par.audio.srcObject = stream;
 
-                    console.log(`on_output is: ${par.name}`)
-
                     // also, now is a good time to:
                     par.audio.play().catch(console.error);
                     might_hit_play_on_par_recorder(par)
@@ -446,8 +445,8 @@
             await startStreaming()
             // start signaling via websocket to bootstrap webrtc sessions...
             if (Signaling) {
-                // should have been packed up
-                debugger;
+                // user is clicking the button rapidly
+                //  will find Signaling waiting for uploads to finish
                 Signaling.close();
             }
             part = 'Signaling'

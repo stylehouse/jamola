@@ -21,9 +21,10 @@ export abstract class AudioEffectoid {
     output:MediaStream
 
     // subclasses must have an order
-    // < and a constructor? or if they have a constructor, it has to set this.order,
-    //   before calling super.constructor -> get_wired_in, which needs order.
-    //   wanting to define it in subclasses as a default, eg 'order = 30'
+    // they have to define it in the call to super(opt)
+    //  before calling get_wired_in, which needs order.
+    // < wanting to define it in subclasses as a default, eg 'order = 30'
+    //   but it seems to not get set until after the constructor() part of the object
     order:number
 
     constructor(opt:{par,stream}) {
