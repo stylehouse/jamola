@@ -6,7 +6,7 @@
     import { parRecorder,retryRecordingUploads } from "$lib/recording";
     import YourName from "./YourName.svelte";
     import YourTitle from "./YourTitle.svelte";
-    import { CookedStream, Delaysagne, FreshStream, Gainorator } from "./audio.svelte";
+    import { CookedStream, Delaysagne, FreshStream, Gainorator, Gaintrol } from "./audio.svelte";
     
     let Signaling: SignalingClient;
     let sock = () => Signaling?.socket && Signaling.socket.connected && Signaling.socket
@@ -39,11 +39,11 @@
     let measuring = new Measuring({i_par});
     // it never seems to use more than 266 if given more
     let target_bitrate = 270;
-    let localVolume = 0.7;
+    let default_volume = 0.7;
 
     // these are good to switch off in DEV
     let activate_recording_reuploading = 0
-    let activate_recording = 1
+    let activate_recording = 0
     // < perhaps via insertableStreams we can reuse
     //   the encoded opus that was transmit to us as the recorded copy
     //   user may internet too slow to upload 2x 240kbps (30kBps)
@@ -182,7 +182,7 @@
     }
     par_msg_handler['participant'] = (par,{name}) => {
         par.name = name;
-        // console.log(`Received name from ${par.peerId}: ${par.name}`)
+        console.log(`Received name from ${par.peerId}: ${par.name}`)
         
         // give some time 
         setTimeout(() => {
@@ -274,30 +274,29 @@
         if (pc) {
             if (!par) {
                 // new par
-                par = { peerId, pc };
+                par = { peerId, pc, i_par };
                 // < the par.audio should probably become a feed to audioContext
                 // < does this mean each participant becomes an output stream from the browser?
                 par.audioContext = window.an_audioContext ||= new AudioContext()
-                par.audio = new Audio();
-                par.audio.volume = localVolume;
                 // the stream first goes through:
                 par.fresh = new FreshStream({par})
                 par.cooked = new CookedStream({par})
                 par.delay = new Delaysagne({par})
+                // the microphone domesticator
                 par.gain = new Gainorator({par})
+                // how much goes into the mix you hear now
+                par.vol = new Gaintrol({par})
+                par.vol.setGain(default_volume)
                 
                 // the last effect has nowhere to flow on to
                 par.cooked.on_output = (stream) => {
-                    // < output via webaudio, not an <audio>
-                    // const audioSource = par.audioContext.createMediaStreamSource(stream);
-                    // const audioDestination = par.audioContext.createMediaStreamDestination();
-                    // audioSource.connect(audioDestination);
-                    // par.audio.srcObject = audioDestination.stream;
-                    
-                    par.audio.srcObject = stream;
+                    // now output via webaudio from the last effect, not an <audio>
+                    if (0 && par.peerId == "") {
+                        par.audio.srcObject = stream;
 
-                    // also, now is a good time to:
-                    par.audio.play().catch(console.error);
+                        // also, now is a good time to:
+                        par.audio.play().catch(console.error);
+                    }
                     might_hit_play_on_par_recorder(par)
                 }
 
@@ -359,22 +358,18 @@
             type: "monitor",
         });
         delete par.pc;
-        if (!par.audio.srcObject) {
-            let many = []
-            localStream.getTracks().forEach((track) => {
-                many.push(track)
-            });
-            if (many.length != 1) {
-                console.warn(`odd number of tracks`,many)
-            }
-            par.fresh.input(new MediaStream([many[0]]))
-            par.audio.volume = 0;
+        if (!par.fresh.stream) {
+            par.fresh.input(localStream)
+            // < don't listen to yourself?
+            par.vol && par.vol.setGain(0)
         }
         might_hit_play_on_par_recorder(par)
     }
 
-    function volumeChange(par) {
-        console.log("Volume is " + par.audio.volume);
+    function volumeChange(e,par) {
+        let level = e.target.value * 1
+        console.log("Volume is " + level);
+        par.vol.setGain(level)
     }
     // mainly
     // having no voice-only audio processing is essential for hifi
@@ -531,7 +526,11 @@
     // take audio from a peer
     function take_remoteStream(par) {
         par.pc.ontrack = (e) => {
-            par.fresh.input(new MediaStream([e.track]))
+            // < multiple tracks
+            
+            par.fresh.input(e.streams[0])
+            // par.audio.srcObject = e.streams[0]
+            // par.audio.play()
             // console.log("Got track", [par, par.audio.srcObject, localStream]);
             // this is usually the status while connected
             status = "Got things";
@@ -611,11 +610,11 @@
             par.pc?.close && par.pc?.close();
             if (par.recorder) {
                 par.recorder.stop(let_go)
+                let_go = () => {}
             }
-            par.audio.pause();
-            par.audio.srcObject = null;
         });
 
+        let_go()
         status = "Disconnected";
         errorMessage = "";
     }
@@ -768,18 +767,19 @@
                     >{/if}
 
                 <label>
-                    <span class="overhang">volume</span>
+                    <span class="overhang">vol</span>
                     <input
                         type="range"
                         min="0"
-                        max="1"
+                        max="2"
                         step="0.1"
-                        bind:value={par.audio.volume}
-                        onchange={() => volumeChange(par)}
+                        onchange={(e) => volumeChange(e,par)}
                     />
                 </label>
 
-                {#if par.bitrate}<span class="bitrate">{par.bitrate} kbps</span
+                {#if par.gain}<span class="bitrate">{Math.round(par.gain.peakLevel*1000)/1000} dB</span
+                    >{/if}
+                {#if par.bitrate}<span class="bitrate" style="filter:hue(45deg)">{par.bitrate} kbps</span
                     >{/if}
                 {#if par.latency}<span class="bitrate latency">{par.latency} ms</span
                     >{/if}

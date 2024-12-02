@@ -124,6 +124,7 @@ function SignalingServer(socket,io) {
 
 	// Handle SDP offer/answer exchange
 	socket.on('offer', (data: { targetId: string, offer: RTCSessionDescription }) => {
+		// console.log('offer',data.offer);
 		socket.to(data.targetId).emit('offer', {
 			offer: data.offer,
 			offererId: socket.id
@@ -131,6 +132,7 @@ function SignalingServer(socket,io) {
 	});
 
 	socket.on('answer', (data: { targetId: string, answer: RTCSessionDescription }) => {
+		// console.log('answer',data.answer);
 		socket.to(data.targetId).emit('answer', {
 			answer: data.answer,
 			answererId: socket.id
@@ -139,6 +141,7 @@ function SignalingServer(socket,io) {
 
 	// Handle ICE candidate exchange
 	socket.on('ice-candidate', (data: { targetId: string, candidate: RTCIceCandidate }) => {
+		// console.log('candidate',data.candidate);
 		socket.to(data.targetId).emit('ice-candidate', {
 			candidate: data.candidate,
 			from: socket.id
