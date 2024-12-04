@@ -342,8 +342,10 @@ export class Gainorator extends AudioEffectoid {
             const peak = Math.max(...this.dataArray) / 255;
             this.peakLevel = peak;
 
-            // Continue metering
-            this.meterUpdateId = requestAnimationFrame(meterUpdate);
+            setTimeout(() => {
+                // Continue metering
+                this.meterUpdateId = requestAnimationFrame(meterUpdate);
+            }, 150)
         };
         this.meterUpdateId = requestAnimationFrame(meterUpdate);
     }
