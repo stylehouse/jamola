@@ -281,7 +281,7 @@
                 // the stream first goes through:
                 par.fresh = new FreshStream({par})
                 par.cooked = new CookedStream({par})
-                par.delay = new Delaysagne({par})
+                // par.delay = new Delaysagne({par})
                 // the microphone domesticator
                 par.gain = new Gainorator({par})
                 // how much goes into the mix you hear now
@@ -290,15 +290,18 @@
                 
                 // the last effect has nowhere to flow on to
                 par.cooked.on_output = (stream) => {
-                    // now output via webaudio from the last effect, not an <audio>
-                    if (0 && par.peerId == "") {
-                        par.audio.srcObject = stream;
-
-                        // also, now is a good time to:
-                        par.audio.play().catch(console.error);
+                    if (!par.cooked.output) {
+                        debugger
                     }
+                    // now output via webaudio from the last (this) effect, not an <audio>
                     might_hit_play_on_par_recorder(par)
                 }
+
+                setTimeout(() => {
+                    if (par.cooked.output) return
+                    // should have it by now
+                    debugger
+                },500)
 
                 par.pc && measuring.add_par(par);
                 if (activate_recording && (!activate_recording_for_peerIds
@@ -339,7 +342,7 @@
     // < we should be able to record audio without a connection! an offline webapp.
     function might_hit_play_on_par_recorder(par) {
         if (!par.recorder) return
-        if (!par.audio.srcObject) return
+        if (!par.cooked.output) return
         if (par.recorder.is_rolling()) return
         // < take the recording just after par.gain and par.delay
         //    but before par.reverb|echo and the messier|refinable effects
@@ -347,7 +350,7 @@
         //     ie in post ie post-production, which can mean any treatment not live
         //    since it's better to record clear audio
         //     and make it into a reverb cloud after decoded
-        par.recorder.start(par.audio.srcObject);
+        par.recorder.start(par.cooked.output);
     }
     // this becomes our monitor
     function i_myself_par() {
@@ -368,7 +371,6 @@
 
     function volumeChange(e,par) {
         let level = e.target.value * 1
-        console.log("Volume is " + level);
         par.vol.setGain(level)
     }
     // mainly

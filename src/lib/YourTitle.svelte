@@ -97,7 +97,7 @@
 <h1 class="casual">
     <button 
         class="casual"
-        on:click={clearTitle}
+        onclick={clearTitle}
     >
         Title
     </button>
@@ -107,9 +107,9 @@
         contenteditable={editable}
         class="yourtitle"
         spellcheck="false"
-        on:input={handleTitleChange}
-        on:keypress={handleKeyPress}
-        on:focus={handleFocus}
-        on:blur={handleBlur}
+        oninput={handleTitleChange}
+        onkeypress={handleKeyPress}
+        onfocus={handleFocus}
+        onblur={handleBlur}
     >{displayTitle}</span>
 </h1>

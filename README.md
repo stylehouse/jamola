@@ -63,6 +63,11 @@ sox -n -r 44100 -c 1 tone.wav synth 10 sine 440
 pactl load-module module-pipe-source source_name=tone_source file=tone.wav
 ```
 
+I would have another Linux somewhere, select "Monitor of ..." as microphone, and run:
+```
+mplayer -loop 0 *.flac
+```
+
 ## TODO
 
 ### Having gain knobs and meters.

@@ -63,6 +63,13 @@ export abstract class AudioEffectoid {
                 this.output = this.outputNode.stream
             }
             else {
+                this.output = stream.stream
+                if (!this.output) {
+                    // prep something to record from
+                    this.outputNode ||= this.AC.createMediaStreamDestination()
+                    stream.connect(this.outputNode)
+                    this.output = this.outputNode.stream
+                }
                 stream.connect(this.AC.destination)
             }
         }
