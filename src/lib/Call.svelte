@@ -229,9 +229,7 @@
                 handler(par,data)
             };
         };
-        // Announce ourselves
         let announce_self = () => {
-            // console.log("Sending participant");
             par.emit("participant",{name:userName})
             // once
             announce_self = () => {};
@@ -359,6 +357,8 @@
             pc: {},
             name: userName,
             type: "monitor",
+            // < better than type:monitor is:
+            local: true,
         });
         delete par.pc;
         if (!par.fresh.stream) {
@@ -388,14 +388,27 @@
     // find input devices onload
     let possible_audio_input_devices = $state()
     $inspect("possible_audio_input_devices",possible_audio_input_devices)
-    $effect(async () => {
+    async function enumerateDevices() {
         const devices = await navigator.mediaDevices.enumerateDevices();
+        console.log("Yer devices: ", devices)
         possible_audio_input_devices = devices.filter(device => 
             device.kind === 'audioinput' && device.label !== ''
         );
         if (!possible_audio_input_devices.length) {
-            errorMessage = "Looks like you have no audioinput devices."
+            if (navigator.userAgent.includes('Firefox/')) {
+                // Firefox doesn't let this info out before your actual request for a mic
+            }
+            else if (userAgent.includes('Safari/') && !userAgent.includes('Chrome/')) {
+                errorMessage = "Please grant audio permissions (try the icons in the address bar, eg AA)."
+            }
+            else {
+                errorMessage = "Looks like you have no audio devices, you should try anyway"
+
+            }
         }
+    }
+    $effect(async () => {
+        enumerateDevices()
     })
     let chosen_audio_device = null
     function choose_audio_input_device(deviceId) {
@@ -634,7 +647,7 @@
             themain.style.display = "initial";
         }
     });
-    // buttons word changes
+    // button's word changes
     let say_negate = $state("Ring");
     function negate() {
         if (status === "Disconnected") {
@@ -739,6 +752,7 @@
             <span class="overhang">input</span>
             <select
                 onchange={(e) => choose_audio_input_device(e.target.value)}
+                onpointerdown={() => enumerateDevices()}
             >
                 {#each possible_audio_input_devices as device}
                     

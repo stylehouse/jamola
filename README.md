@@ -67,6 +67,13 @@ I would have another Linux somewhere, select "Monitor of ..." as microphone, and
 ```
 mplayer -loop 0 *.flac
 ```
+I ended up using that other computer for testing, here are some commands:
+```
+ssh v x11vnc -display :0 -localhost -forever -shared -rfbauth .local/share/vnc/passwd
+ssh -L 5900:localhost:5900 v
+vncviewer localhost
+```
+
 
 ## TODO
 
