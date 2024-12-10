@@ -7,6 +7,7 @@
     import YourName from "./YourName.svelte";
     import YourTitle from "./YourTitle.svelte";
     import { CookedStream, Delaysagne, FreshStream, Gainorator, Gaintrol } from "./audio.svelte";
+    import { createDataChannel } from "./coms.svelte";
     
     let Signaling: SignalingClient;
     let sock = () => Signaling?.socket && Signaling.socket.connected && Signaling.socket
@@ -153,7 +154,7 @@
     }
 
     function stuff_we_tell_parRecorder_via_title_changed() {
-        // one of these will know what segment 
+        // one of these will know what segment the group is up to
         let apar
         participants.map((par) => {
             if (!par.recorder || !par.recorder.is_rolling()) return
@@ -195,61 +196,6 @@
     }
     par_msg_handler['latency_pong'] = (par,{timestamp}) => {
         measuring.handle_latency_pong(par, timestamp);
-    }
-
-    // participants exchange names in a webrtc datachannel
-    function createDataChannel(par) {
-        par.channel = par.pc.createDataChannel("participants");
-        // you (eg Measuring) can send messages, they may get dropped
-        par.msg = (data) => {
-            if (!par.channel || par.channel.readyState != "open") {
-                return
-            }
-            par.channel.send(JSON.stringify(data))
-        }
-        // like socket.io
-        par.emit = (type,data) => {
-            par.msg({type,...data})
-        }
-        // the receiver is this other channel they sent us
-        //  I don't know why we have to call it "participants" then
-        par.pc.ondatachannel = (event) => {
-            event.channel.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                let handler = par_msg_handler[data.type]
-                if (!handler) {
-                    return console.warn(`No handler for par=${par.name} message: `,data)
-                }
-                // < for some reason we have to seek out the par again at this point
-                //   not doing this leads to this.par.name being undefined
-                //    much later in parRecorder.uploadCurrentSegment
-                //    see "it seems like a svelte5 object proxy problem"
-                par = i_par({ peerId: par.peerId });
-
-                handler(par,data)
-            };
-        };
-        let announce_self = () => {
-            par.emit("participant",{name:userName})
-            // once
-            announce_self = () => {};
-        };
-        // when ready
-        if (par.channel.readyState === "open") {
-            debugger;
-            announce_self();
-        }
-
-        par.channel.onopen = () => {
-            delete par.offline;
-            announce_self();
-            // console.log(`Data open: ${par.peerId}`);
-        };
-        par.channel.onclose = () => {
-            par.offline = 1;
-            delete par.bitrate;
-            console.log(`Leaves: ${par.name}`);
-        };
     }
 
     type Participant = {
@@ -481,7 +427,7 @@
 
                         // Set up data channel to send names
                         part = 'createDataChannel'
-                        createDataChannel(par);
+                        createDataChannel({par,par_msg_handler,userName,i_par});
                     });
                 },
             });
