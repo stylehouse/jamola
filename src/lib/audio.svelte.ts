@@ -26,6 +26,8 @@ export abstract class AudioEffectoid {
     // < wanting to define it in subclasses as a default, eg 'order = 30'
     //   but it seems to not get set until after the constructor() part of the object
     order:number
+    // subclasses may have Knob.svelte for each:
+    controls: AudioControl[]
 
     constructor(opt:{par}) {
         Object.assign(this,opt)
@@ -203,6 +205,7 @@ export abstract class AudioEffectoid {
         this.disconnect_all_nodes('and_null')
     }
 }
+// < detangle these's implementations from AudioEffectoid?
 export class FreshStream extends AudioEffectoid {
     constructor(opt) {
         super({order:0, ...opt})
@@ -215,52 +218,117 @@ export class CookedStream extends AudioEffectoid {
     on_output = Function
 }
 
+
+// things get interactive
+class AudioControl {
+    min = 0
+    max = 2
+    step = 0.025
+    name?:string
+    // where value resides on the parent
+    fec_key:string
+    fec:AudioEffectoid
+    constructor(opt) {
+        // the fec is this, the effect we're for
+        this.fec = opt.this;
+        delete opt.this;
+        Object.assign(this,opt)
+        this.name ||= this.fec_key || "qua"
+    }
+    get_Knob_props() {
+        let propos = {
+            min: this.min,
+            max: this.max,
+            step: this.step,
+            value: this.fec[this.fec_key],
+            // < how to just do a bindable $value from here...
+            //   it would need to come from and to this.*...
+            feed: (value) => {
+                this.set(value)
+            }
+        }
+        console.log(`made props for fec:${this.fec.name} con:${this.name}`,{this:this,propos})
+        return propos
+    }
+    set(value) {
+        this.fec[this.fec_key] = value
+        this.on_set?.(value)
+    }
+}
+
 // Stream buffering or slight time travels
 export class Delaysagne extends AudioEffectoid {
     delay = 121 // ms
     constructor(opt) {
         super({order:666, ...opt})
+        this.controls = [
+            new AudioControl({
+                fec: this,
+                fec_key: 'delay',
+                max: 2200,
+                step: 10,
+                unit: 'ms',
+                on_set:() => this.set_delay(),
+            })
+        ]
+
         this.delayNode = this.AC.createDelay(5);
     }
     input(stream) {
         this.input_to_Node(stream,this.delayNode)
         
-        
-        this.delayNode.delayTime.setValueAtTime(this.delay / 1000, this.AC.currentTime);
-        
+        this.set_delay()
+
         this.output_Node(this.delayNode)
 
         // Go on inputting
         this.check_wiring('just_did_input')
     }
+    set_delay() {
+        this.delayNode.delayTime.setValueAtTime(this.delay / 1000, this.AC.currentTime);
+    }
 
-    // would it be where to do this?
-    adjustStreamTiming(speed: number = 1.0) {
-        let par = this.par
-        if (!par.audio || !par.audio.srcObject) return;
+    // < basically where to do speed-up and slow-down to adjust stream buffer|latency?
+}
 
-        // For more advanced timing manipulation
-        const audioElement = par.audio;
-        if ('playbackRate' in audioElement) {
-            audioElement.playbackRate = speed;
-        }
+
+
+
+
+// thing with gain ness
+export class AudioGainEffectoid extends AudioEffectoid {
+    // < what is this supposed to be? -23dB?
+    public gainValue = $state(0.85);
+
+    private gainNode: GainNode | null = null;
+    // < got "super not a function" error if we super() all the way up this subtyping
+    init_gain() {
+        (this.controls ||= []).push(
+            new AudioControl({
+                fec: this,
+                fec_key: 'gainValue',
+                name: 'gain',
+                on_set:() => this.set_gain(),
+            })
+        )
+        this.gainNode = this.AC.createGain();
+        this.gainNode.gain.value = 0.85;
+    }
+
+    // Set gain level
+    set_gain() {
+        console.log("Done gain twid "+this.gainValue)
+        this.gainNode.gain.setValueAtTime(this.gainValue, this.AC.currentTime);
     }
 }
 
 // used as a final fader on the mix end of the chain
 // deciding how much of everything we want,
 //  rather than where is a clear level to record at
-export class Gaintrol extends AudioEffectoid {
-    private gainNode: GainNode | null = null;
-
-    public gainValue = $state(1);
-
+export class Gaintrol extends AudioGainEffectoid {
     constructor(opt) {
         super({order:8, ...opt})
-        
-        // Create gain node
-        this.gainNode = this.AC.createGain();
-        this.gainNode.gain.value = 1;
+        this.init_gain()
     }
 
     // Process incoming audio stream
@@ -272,27 +340,15 @@ export class Gaintrol extends AudioEffectoid {
         // Go on inputting
         this.check_wiring('just_did_input')
     }
-
-
-    // Set gain level
-    setGain(value: number) {
-        if (this.gainNode) {
-            // Limit gain to prevent distortion
-            const clampedGain = Math.min(Math.max(value, 0), 2);
-            this.gainNode.gain.setValueAtTime(clampedGain, this.AC.currentTime);
-            this.gainValue = clampedGain;
-        }
-    }
 }
-export class Gainorator extends AudioEffectoid {
-    private sourceNode: MediaStreamAudioSourceNode | null = null;
-    private gainNode: GainNode | null = null;
+
+export class Gainorator extends AudioGainEffectoid {
+    // looks at the signal after gaining
     private analyserNode: AnalyserNode | null = null;
 
     // Stores to track volume and peak levels
     public volumeLevel = $state(0);
     public peakLevel = $state(0);
-    public gainValue = $state(1);
 
     private dataArray: Uint8Array;
     private bufferLength: number;
@@ -300,6 +356,7 @@ export class Gainorator extends AudioEffectoid {
 
     constructor(opt) {
         super({order:12, ...opt})
+        this.init_gain()
         
         // Create gain node
         this.gainNode = this.AC.createGain();
@@ -356,6 +413,8 @@ export class Gainorator extends AudioEffectoid {
             const peak = Math.max(...this.dataArray) / 255;
             this.peakLevel = peak;
 
+            // < Check for low entropy, eg all bytes are 127
+
             setTimeout(() => {
                 // Continue metering
                 this.meterUpdateId = requestAnimationFrame(meterUpdate);
@@ -364,15 +423,6 @@ export class Gainorator extends AudioEffectoid {
         this.meterUpdateId = requestAnimationFrame(meterUpdate);
     }
 
-    // Set gain level
-    setGain(value: number) {
-        if (this.gainNode) {
-            // Limit gain to prevent distortion
-            const clampedGain = Math.min(Math.max(value, 0), 2);
-            this.gainNode.gain.setValueAtTime(clampedGain, this.AC.currentTime);
-            this.gainValue = clampedGain;
-        }
-    }
 
     destroy() {
         // Call base class destroy to handle node disconnection

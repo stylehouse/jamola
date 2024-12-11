@@ -206,6 +206,15 @@
 		value = dec(v)
 	}
 
+	// outputs
+	// fast callback
+	let feed_value = value
+	$effect(() => {
+		if (feed && value != null && value != feed_value) {
+			feed(value)
+			feed_value = value
+		}
+	})
 	// the min and max values cause the knob to lean either way
 	let lean = $state()
 	$effect(() => {

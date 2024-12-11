@@ -225,14 +225,15 @@
                 par.audioContext = window.an_audioContext ||= new AudioContext()
                 // the stream first goes through:
                 par.fresh = new FreshStream({par})
-                par.cooked = new CookedStream({par})
-                // par.delay = new Delaysagne({par})
                 // the microphone domesticator
                 par.gain = new Gainorator({par})
-                // how much goes into the mix you hear now
+                // par.delay = new Delaysagne({par})
+                // how much goes into the mix you hear
                 par.vol = new Gaintrol({par})
-                par.vol.setGain(default_volume)
+                let hear = par.local ? 0 : default_volume
+                par.vol.set_gain(hear)
                 
+                par.cooked = new CookedStream({par})
                 // the last effect has nowhere to flow on to
                 par.cooked.on_output = (stream) => {
                     if (!par.cooked.output) {
@@ -246,7 +247,7 @@
                     if (par.cooked.output) return
                     // should have it by now
                     debugger
-                },500)
+                },2500)
 
                 par.pc && measuring.add_par(par);
                 if (activate_recording && (!activate_recording_for_peerIds
@@ -310,16 +311,10 @@
         delete par.pc;
         if (!par.fresh.stream) {
             par.fresh.input(localStream)
-            // < don't listen to yourself?
-            par.vol && par.vol.setGain(0)
         }
         might_hit_play_on_par_recorder(par)
     }
 
-    function volumeChange(e,par) {
-        let level = e.target.value * 1
-        par.vol.setGain(level)
-    }
     // mainly
     // having no voice-only audio processing is essential for hifi
     // < high bitrate
@@ -728,17 +723,6 @@
                 {#if par.offline}<span class="error">offline</span>{/if}
                 {#if par.constate}<span class="techwhat">{par.constate}</span
                     >{/if}
-
-                <label>
-                    <span class="overhang">vol</span>
-                    <input
-                        type="range"
-                        min="0"
-                        max="2"
-                        step="0.1"
-                        onchange={(e) => volumeChange(e,par)}
-                    />
-                </label>
 
                 <Rack {par} ></Rack>
             </div>

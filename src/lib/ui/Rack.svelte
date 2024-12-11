@@ -37,16 +37,15 @@
                     role="button"
                     >{fec.name}</span>
 
-                <label>
-                    <Knob
-                        type="range"
-                        min="0"
-                        max="2"
-                        step="0.1"
-                        bind:value={par.gain.gainValue}
-                    >
-                    </Knob>
-                </label>
+                    {#each fec.controls as con (con.this_key)}
+                        <label>
+                            {con.name}
+                            <Knob
+                                {...con.get_Knob_props()}
+                            >
+                            </Knob>
+                        </label>
+                    {/each}
 
             </span>
         {/each}
