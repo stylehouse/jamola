@@ -3,25 +3,22 @@
 // participants exchange names in a webrtc datachannel
 // one is attached to the par:
 export function createDataChannel({par,par_msg_handler,userName,i_par}) {
-    if (par.channel) {
-        debugger
-    }
-    par.channel = par.pc.createDataChannel("participants");
-    // you (eg Measuring) can send messages, they may get dropped
-    par.msg = (data) => {
+    let original = !par.channel
+    par.channel ||= par.pc.createDataChannel("participants");
+
+    // you (eg Measuring) can send messages.
+    // like socket.io
+    par.emit = (type,data) => {
         if (!par.channel || par.channel.readyState != "open") {
             return
         }
-        par.channel.send(JSON.stringify(data))
-    }
-    // like socket.io
-    par.emit = (type,data) => {
-        par.msg({type,...data})
+        par.channel.send(JSON.stringify({type,...data}))
     }
     // the receiver is this other channel they sent us
-    //  I don't know why we have to call it "participants" then
-    par.pc.ondatachannel = (event) => {
-        event.channel.onmessage = (event) => {
+    // put handlers of replies in par_msg_handler.$type
+    par.pc.ondatachannel = ({channel}) => {
+        par.their_channel = channel
+        par.their_channel.onmessage = (event) => {
             const data = JSON.parse(event.data);
             let handler = par_msg_handler[data.type]
             if (!handler) {
@@ -41,7 +38,6 @@ export function createDataChannel({par,par_msg_handler,userName,i_par}) {
         // once
         announce_self = () => {};
     };
-    // when ready
     if (par.channel.readyState === "open") {
         debugger;
         announce_self();
