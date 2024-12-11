@@ -8,6 +8,7 @@
     import YourTitle from "./YourTitle.svelte";
     import { CookedStream, Delaysagne, FreshStream, Gainorator, Gaintrol } from "./audio.svelte";
     import { createDataChannel } from "./coms.svelte";
+    import Rack from "./ui/Rack.svelte";
     
     let Signaling: SignalingClient;
     let sock = () => Signaling?.socket && Signaling.socket.connected && Signaling.socket
@@ -739,12 +740,7 @@
                     />
                 </label>
 
-                {#if par.gain}<span class="bitrate">{Math.round(par.gain.peakLevel*1000)/1000} dB</span
-                    >{/if}
-                {#if par.bitrate}<span class="bitrate" style="filter:hue(45deg)">{par.bitrate} kbps</span
-                    >{/if}
-                {#if par.latency}<span class="bitrate latency">{par.latency} ms</span
-                    >{/if}
+                <Rack {par} ></Rack>
             </div>
         {/each}
     </div>
@@ -798,12 +794,6 @@
     }
     .monitor {
         background-color: #25855d;
-    }
-    .bitrate {
-        width:2em;
-    }
-    .latency {
-        color:#2d0768
     }
 
     input[type="range"] {

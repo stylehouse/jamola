@@ -29,6 +29,7 @@ export abstract class AudioEffectoid {
 
     constructor(opt:{par}) {
         Object.assign(this,opt)
+        this.name ||= this.constructor.name
         // to par.effects=[]
         this.get_wired_in()
     }
@@ -343,7 +344,13 @@ export class Gainorator extends AudioEffectoid {
             const rms = Math.sqrt(sum / this.bufferLength);
             
             // Update volume level (0-1 range)
-            this.volumeLevel = Math.min(rms * 2, 1);
+            // Raw RMS calculation typically produces values between 0 and ~0.5
+            // Multiplying by 2 stretches this to a 0-1 range, which is more useful for UI representation
+            let level = Math.min(rms * 2, 1);
+            // Scale logarithmically, so smaller signals are more visible
+            // Adding 1 ensures we don't take log(0)
+            // Multiplying RMS by 10 spreads out the lower values
+            this.volumeLevel = Math.min(Math.log10(1 + level * 10) / 1, 1);
 
             // Check for peak (clipping)
             const peak = Math.max(...this.dataArray) / 255;
