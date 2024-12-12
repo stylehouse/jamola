@@ -9,6 +9,7 @@
     import { CookedStream, Delaysagne, FreshStream, Gainorator, Gaintrol } from "./audio.svelte";
     import { createDataChannel } from "./coms.svelte";
     import Rack from "./ui/Rack.svelte";
+    import { userAgent } from "./Y";
     
     let Signaling: SignalingClient;
     let sock = () => Signaling?.socket && Signaling.socket.connected && Signaling.socket
@@ -208,6 +209,96 @@
         cooked?:CookedStream,
         audio:HTMLAudioElement
     }
+
+    // life and times
+    let par_life = {
+        // a new par, a new pc
+        new_pc(par) {
+            // < the par.audio should probably become a feed to audioContext
+            // < does this mean each participant becomes an output stream from the browser?
+            par.audioContext = window.an_audioContext ||= new AudioContext()
+            
+            par_life.new_effects(par)
+
+            measuring.add_par(par);
+
+            if (activate_recording && (!activate_recording_for_peerIds
+                    || activate_recording_for_peerIds.includes(par.peerId))) {
+                // they record (.start()) when a track arrives
+                par.recorder = new parRecorder({par:par,...stuff_we_tell_parRecorder()})
+            }
+        },
+        // old par, new pc!?
+        new_pc_again(par,pc) {
+            // stream|par.pc changes, same par|peerId
+            //  peerId comes from socket.io, is per their websocket
+            console.log(`i_par: stream changes, same peer: ${par.name}`)
+            // hangup, change userName, Ring again causes this branch as you re-connect to each par
+            // bitratestats will notice this change itself
+            if (par.pc == pc) debugger;
+            // Stop existing recording if we're replacing the connection
+            //  it needs to be started again on a new MediaStream
+            // < will it?
+            if (par.recorder) {
+                par.recorder.stop();
+            }
+            par.pc?.close && par.pc?.close();
+            par.pc = pc;
+        },
+        new_effects(par) {
+            // some stream will be given to:
+            par.fresh = new FreshStream({par})
+            // the microphone domesticator
+            par.gain = new Gainorator({par})
+            par.delay = new Delaysagne({par})
+            // how much goes into the mix you hear
+            par.vol = new Gaintrol({par})
+
+            let hear = par.local ? 0 : default_volume
+            par.vol.set_gain(hear)
+            
+            par.cooked = new CookedStream({par})
+            // the last effect has nowhere to flow on to
+            par.cooked.on_output = (stream) => {
+                par_life.have_output(par,stream)
+            }
+
+            setTimeout(() => {
+                if (par.cooked.output) return
+                // should have it by now
+                debugger
+            },2500)
+        },
+
+        have_output(par,stream) {
+            if (!par.cooked.output) {
+                debugger
+            }
+            // now output via webaudio from the last (this) effect, not an <audio>
+            par_life.may_record(par)
+        },
+
+        // the one place to start recordings
+        // occurs two ways:
+        //  usually, streams arriving cause a par.cooked.on_output()
+        //  the local stream only "arrives" and causes that once though
+        //   so we also do this in i_myself_par(), as we reconnect (reRing)
+        // < we should be able to record audio without a connection! an offline webapp.
+        may_record(par) {
+            if (!par.recorder) return
+            if (!par.cooked.output) return console.log("No cooked output")
+            if (par.recorder.is_rolling()) return
+            // < take the recording just after par.gain and par.delay
+            //    but before par.reverb|echo and the messier|refinable effects
+            //    and apply|refine the later effects on listen...
+            //     ie in post ie post-production, which can mean any treatment not live
+            //    since it's better to record clear audio
+            //     and make it into a reverb cloud after decoded
+            par.recorder.start(par.cooked.output);
+        },
+
+    }
+
     // read or add new participant (par)
     function i_par({ par, peerId, pc, ...etc }):Participant {
         if (par && peerId == null) {
@@ -220,58 +311,12 @@
             if (!par) {
                 // new par
                 par = { peerId, pc, i_par };
-                // < the par.audio should probably become a feed to audioContext
-                // < does this mean each participant becomes an output stream from the browser?
-                par.audioContext = window.an_audioContext ||= new AudioContext()
-                // the stream first goes through:
-                par.fresh = new FreshStream({par})
-                // the microphone domesticator
-                par.gain = new Gainorator({par})
-                par.delay = new Delaysagne({par})
-                // how much goes into the mix you hear
-                par.vol = new Gaintrol({par})
-                let hear = par.local ? 0 : default_volume
-                par.vol.set_gain(hear)
-                
-                par.cooked = new CookedStream({par})
-                // the last effect has nowhere to flow on to
-                par.cooked.on_output = (stream) => {
-                    if (!par.cooked.output) {
-                        debugger
-                    }
-                    // now output via webaudio from the last (this) effect, not an <audio>
-                    might_hit_play_on_par_recorder(par)
-                }
 
-                setTimeout(() => {
-                    if (par.cooked.output) return
-                    // should have it by now
-                    debugger
-                },2500)
-
-                par.pc && measuring.add_par(par);
-                if (activate_recording && (!activate_recording_for_peerIds
-                        || activate_recording_for_peerIds.includes(par.peerId))) {
-                    // they record (.start()) when a track arrives
-                    par.recorder = new parRecorder({par:par,...stuff_we_tell_parRecorder()})
-                }
+                par_life.new_pc(par)
 
                 participants.push(par);
             } else {
-                // stream|par.pc changes, same par|peerId
-                //  peerId comes from socket.io, is per their websocket
-                console.log(`i_par: stream changes, same peer: ${par.name}`)
-                // hangup, change userName, Ring again causes this branch as you re-connect to each par
-                // bitratestats will notice this change itself
-                if (par.pc == pc) debugger;
-                // Stop existing recording if we're replacing the connection
-                //  it needs to be started again on a new MediaStream
-                // < will it?
-                if (par.recorder) {
-                    par.recorder.stop();
-                }
-                par.pc?.close && par.pc?.close();
-                par.pc = pc;
+                par_life.new_pc_again(par,pc)
             }
         }
 
@@ -279,24 +324,6 @@
         Object.assign(par, etc);
         
         return par;
-    }
-    // the one place to start recordings
-    // occurs two ways:
-    //  usually, streams arriving cause a par.cooked.on_output()
-    //  the local stream only "arrives" and causes that once though
-    //   so we also do this in i_myself_par(), as we reconnect (reRing)
-    // < we should be able to record audio without a connection! an offline webapp.
-    function might_hit_play_on_par_recorder(par) {
-        if (!par.recorder) return
-        if (!par.cooked.output) return
-        if (par.recorder.is_rolling()) return
-        // < take the recording just after par.gain and par.delay
-        //    but before par.reverb|echo and the messier|refinable effects
-        //    and apply|refine the later effects on listen...
-        //     ie in post ie post-production, which can mean any treatment not live
-        //    since it's better to record clear audio
-        //     and make it into a reverb cloud after decoded
-        par.recorder.start(par.cooked.output);
     }
     // this becomes our monitor
     function i_myself_par() {
@@ -312,7 +339,7 @@
         if (!par.fresh.stream) {
             par.fresh.input(localStream)
         }
-        might_hit_play_on_par_recorder(par)
+        par_life.may_record(par)
     }
 
     // mainly
@@ -337,10 +364,11 @@
             device.kind === 'audioinput' && device.label !== ''
         );
         if (!possible_audio_input_devices.length) {
-            if (navigator.userAgent.includes('Firefox/')) {
+            let ua = userAgent()
+            if (ua == 'Firefox') {
                 // Firefox doesn't let this info out before your actual request for a mic
             }
-            else if (userAgent.includes('Safari/') && !userAgent.includes('Chrome/')) {
+            else if (ua == 'Safari') {
                 errorMessage = "Please grant audio permissions (try the icons in the address bar, eg AA)."
             }
             else {
