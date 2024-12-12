@@ -227,7 +227,7 @@
                 par.fresh = new FreshStream({par})
                 // the microphone domesticator
                 par.gain = new Gainorator({par})
-                // par.delay = new Delaysagne({par})
+                par.delay = new Delaysagne({par})
                 // how much goes into the mix you hear
                 par.vol = new Gaintrol({par})
                 let hear = par.local ? 0 : default_volume
