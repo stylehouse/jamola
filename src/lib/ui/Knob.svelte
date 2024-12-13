@@ -1,5 +1,4 @@
 <script lang="ts">
-    import { userAgent } from "$lib/Y";
     import { onDestroy, tick } from "svelte";
 
 	// < gestures to step up|down scale...
@@ -70,7 +69,6 @@
 	//	  by eg KnobTime: let grabbed = $state()
 	//	  ie they "give" grabbed to, though it is just for receiving from, Knob
 	grabbed = false
-	// < include 
 	function be_grabbed() {
 		grabbed = true
 		ongrab && ongrab(value)
@@ -112,18 +110,30 @@
         return Math.round(val * multiplier) / multiplier;
     }
 
-    function calculateMovement(event: PointerEvent): number {
-        const key = `movement${axis}` as keyof PointerEvent;
-        let movement = event[key] as number;
-		// towards the top of the screen decreases Y, but not on firefox?
-		let ua = userAgent()
-		console.log(`axis=${axis} goes ${movement} on ${ua}`)
-        return axis === "Y" ? -movement : movement;
+	let tracking = {}
+	function track_aspect(ev,k) {
+		let v = ev[k]
+		let prev = tracking[k] ?? started[k]
+		let delta = v - prev
+		tracking[k] = v
+		return delta
+	}
+    function calculateMovement(ev: PointerEvent): number {
+		let moveX = track_aspect(ev,'clientX')
+		let moveY = -track_aspect(ev,'clientY')
+		// allow the user to assume either axis
+		let movement = moveX + moveY
+		return movement
     }
 
 
 	// < test whether this ever helps. is it for alt-tab and back?
-	let locksanity = () => document.pointerLockElement != elem && unlock()
+	let locksanity = () => {
+		return 1
+		if (document.pointerLockElement == elem) return
+		console.log("locksanity unlock due to !pointerLockElement")
+		unlock()
+	}
     function lock(ev: PointerEvent) {
 		preventDefault(ev)
 
@@ -132,19 +142,26 @@
 		// GOING?
 		// to not stick around after alt-tab (or other unknown interference)
 		// let lockchange = () => locksanity()
-		// document.addEventListener("pointerlockchange", lockchange)
+		// document.addEventListener("pointerlockchange", () => {
+		// 	console.log("pointerlockchange!")
+		// 	lockchange()
+		// })
 		// // console.log("Start pointer at ",started)
 		// unlock = () => {
-		// 	// console.log("unlock")
-		// 	document.removeEventListener("pointermove", knobMove)
+		// 	console.log("unlock")
+		// 	// document.removeEventListener("pointermove", knobMove)
 		// 	document.removeEventListener("pointerlockchange", lockchange)
 		// 	document.pointerLockElement == elem
 		// 		&& document.exitPointerLock()
 		// 	unlock = () => {}
 		// };
-		
+
+		elem.setPointerCapture(ev.pointerId);
 
 		moved = false
+		// Relative to browser viewport  Top-left of viewport
+		// < increase range at viewport's edge
+		//	 or maybe scroll the knob further in from the edge of the page?
         started = { clientX: ev.clientX, clientY: ev.clientY };
         rawValue = value;
 		outpute = false
@@ -154,7 +171,11 @@
         // Add global move and up listeners
         document.addEventListener("pointermove", knobMove, { passive: false });
         document.addEventListener("pointerup", release, { passive: false });
-        document.addEventListener("blur", release, { passive: false });
+        document.addEventListener("blur", () => {
+			if (document.pointerLockElement == elem) return
+			console.log("locksanity unlock due to !pointerLockElement")
+			release()
+		}, { passive: false });
 	};
 	onDestroy(unlock);
 
@@ -307,6 +328,7 @@
 		border: none;
 		outline: none;
 		pointer-events: none;
+		font-size: 1em;
 	}
 	input:focus {
 		pointer-events: auto;
