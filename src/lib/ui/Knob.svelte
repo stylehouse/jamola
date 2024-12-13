@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { userAgent } from "$lib/Y";
     import { onDestroy, tick } from "svelte";
 
 	// < gestures to step up|down scale...
@@ -24,11 +25,11 @@
 		// drag distance of range
 		//  300px seems good, can be done in either direction by a relaxed hand
 		space = 300,
-		// how much value changes over the given space
-		range = 20,
+		// how much value changes over the space
+		range,
 		// optional limits to value
-		// doesn't imply range (as was deprecated)
-		//  eg, if these were range*2 apart, you'd drag by space*2 to go between
+		// will imply range
+		//  eg, if these were 20 apart, you'd drag by space to go between
 		min,
 		max,
 
@@ -56,7 +57,10 @@
 
 	} = $props()
 
-
+	if (!range) {
+		range = (max||0) - (min||0)
+		range ||= 20
+	}
 
 	// < if above we say: grabbed=$bindable(false),
 	//    Svelte complains:
@@ -68,13 +72,13 @@
 	grabbed = false
 	// < include 
 	function be_grabbed() {
-		ongrab && ongrab(value)
 		grabbed = true
+		ongrab && ongrab(value)
 	}
 	function be_released() {
+		grabbed = false
 		onrelease && onrelease(value)
 		commit && commit(value)
-		grabbed = false
 	}
 
 
@@ -89,93 +93,128 @@
 	// once a new value has been output, each time
 	let outpute = false
 	// buffer value until it has changed a whole step
-	let rawValue = null;
-	// usually there's a pointerup event to release the lock
-	let release = () => {
-		// console.log("On release")
-		// knob settles into where it may be rounded to
-		rawValue = value
-		// workaround a kwin-wayland bug?
-		move_pointer_to_where_it_started()
-		// the essential unlock()
-		//  can also be called ad hoc when our claim to the interaction seems to be falling apart
-		unlock()
-		// just clicking on the value takes you to typing in a new one
-		if (!moved) elemVal.select()
-		// release indicates greater commitment to value
-		be_released()
-	}
+	let rawValue = $state(null);
+
+	
+    // Prevent default page scroll/drag behavior, maybe? on smartphones
+	function preventDefault(event: PointerEvent) {
+        event?.preventDefault();
+        event?.stopPropagation();
+    }
+    function constrainValue(val: number): number {
+        let constrainedVal = val;
+        if (min !== undefined) constrainedVal = Math.max(min, constrainedVal);
+        if (max !== undefined) constrainedVal = Math.min(max, constrainedVal);
+        return roundToStep(constrainedVal);
+    }
+    function roundToStep(val: number): number {
+        const multiplier = 1 / step;
+        return Math.round(val * multiplier) / multiplier;
+    }
+
+    function calculateMovement(event: PointerEvent): number {
+        const key = `movement${axis}` as keyof PointerEvent;
+        let movement = event[key] as number;
+		// towards the top of the screen decreases Y, but not on firefox?
+		let ua = userAgent()
+		console.log(`axis=${axis} goes ${movement} on ${ua}`)
+        return axis === "Y" ? -movement : movement;
+    }
+
+
+	// < test whether this ever helps. is it for alt-tab and back?
 	let locksanity = () => document.pointerLockElement != elem && unlock()
-	let lock = (ev) => {
-		ev.stopPropagation()
-		elem.requestPointerLock();
+    function lock(ev: PointerEvent) {
+		preventDefault(ev)
+
+		// GOING
+		// elem.requestPointerLock();
+		// GOING?
 		// to not stick around after alt-tab (or other unknown interference)
-		let lockchange = () => locksanity()
-		document.addEventListener("pointerlockchange", lockchange)
-		document.addEventListener("pointermove", knobMove)
+		// let lockchange = () => locksanity()
+		// document.addEventListener("pointerlockchange", lockchange)
+		// // console.log("Start pointer at ",started)
+		// unlock = () => {
+		// 	// console.log("unlock")
+		// 	document.removeEventListener("pointermove", knobMove)
+		// 	document.removeEventListener("pointerlockchange", lockchange)
+		// 	document.pointerLockElement == elem
+		// 		&& document.exitPointerLock()
+		// 	unlock = () => {}
+		// };
+		
 
 		moved = false
-		started = {clientX:ev.clientX,clientY:ev.clientY}
-		be_grabbed()
+        started = { clientX: ev.clientX, clientY: ev.clientY };
+        rawValue = value;
 		outpute = false
+		be_grabbed()
 
-		// console.log("Start pointer at ",started)
-		unlock = () => {
-			// console.log("unlock")
-			document.removeEventListener("pointermove", knobMove)
-			document.removeEventListener("pointerlockchange", lockchange)
-			document.pointerLockElement == elem
-				&& document.exitPointerLock()
-			unlock = () => {}
-		};
+
+        // Add global move and up listeners
+        document.addEventListener("pointermove", knobMove, { passive: false });
+        document.addEventListener("pointerup", release, { passive: false });
+        document.addEventListener("blur", release, { passive: false });
 	};
 	onDestroy(unlock);
 
 	let scaleFactor = space / range;
-	function scaleMovement(distance: number) {
-		return (distance /= scaleFactor);
-	}
-
-	// make v multiple of step
-	function roundToStep(v: number) {
-		let surplus = v % step;
-		v -= surplus
-		if (surplus*2 >= step) {
-			v -= -step
-		}
-		return dec(v,8);
-	}
 	function knobMove(event: PointerEvent): void {
-		let movement = get_movement(event)
-		if (movement) {
-			moved = true;
-			if (rawValue == null) rawValue = value;
-			if (outpute == false && scaleFactor >= 42) {
-				// if big steps, to the first step (either way) a bit easier
-				movement *= 1.618
-			}
-			// accumulate this change
-			rawValue = rawValue + scaleMovement(movement);
-			if (min != null) rawValue = Math.max(min,rawValue)
-			if (max != null) rawValue = Math.min(max,rawValue)
-			// output a multiple of step near that
-			let newValue = roundToStep(rawValue)
-			if (newValue != value) {
-				outpute = true
-				value = newValue
-			}
+		preventDefault(event)
+
+        let movement = calculateMovement(event);
+        if (!movement) return;
+        moved = true;
+
+		if (outpute == false && scaleFactor >= 42) {
+			// if big steps, to the first step (either way) a bit easier
+			movement *= 1.618
 		}
+
+        // < Adjust movement sensitivity for touch devices
+        const sensitivityFactor = 0.8;
+
+		// accumulate this change
+        rawValue = (rawValue ?? value) + (movement / scaleFactor) * sensitivityFactor;
+
+		// output a multiple of step near that
+        const newValue = constrainValue(rawValue);
+        
+        if (newValue !== value) {
+            value = newValue;
+            outpute = true;
+            feed?.(newValue);
+			value = newValue
+        }
 		locksanity()
 	}
 
-	function get_movement(event:PointerEvent) {
-		let key = "movement"+axis
-		if (event[key] == null) throw "no such axis: "+axis
-		let movement = event[key]
-		// towards the top of the screen decreases Y
-		if (axis == "Y") movement *= -1
-		return movement
+
+	// usually there's a pointerup event to release the lock
+    function release(event?: PointerEvent) {
+		preventDefault(event)
+        // Release pointer capture
+        elem.releasePointerCapture(event?.pointerId);
+        // Remove global listeners
+        document.removeEventListener("pointermove", knobMove);
+        document.removeEventListener("pointerup", release);
+        document.removeEventListener("blur", release);
+		// just clicking on the value takes you to typing in a new one
+		if (!moved) elemVal.select()
+
+
+		// console.log("On release")
+		// knob settles into where it may be rounded to
+		rawValue = value
+		// workaround a kwin-wayland bug?
+		// move_pointer_to_where_it_started()
+		// the essential unlock()
+		//  can also be called ad hoc when our claim to the interaction seems to be falling apart
+		// unlock()
+		// release indicates greater commitment to value
+		be_released()
 	}
+
 	// < this doesn't seem to work around this bug: https://bugs.kde.org/show_bug.cgi?id=478462
 	let move_pointer_to_where_it_started = async () => {
 		if (!started) return
@@ -196,14 +235,14 @@
         return (s * mul).toFixed() / mul
     }
 	// also, we can type stuff in
-	let onInputChange = (ev) => {
-		let v = ev.currentTarget.value
+    function handleInput(ev: Event) {
+		let v = (ev.target as HTMLInputElement).value
 		if (interpret_type) {
 			v = interpret_type(v)
 			if (isNaN(v)) throw "NaN"
 		}
 		if (v*1 != v) return console.error("Ungood knob input", v)
-		value = dec(v)
+		value = constrainValue(v);
 	}
 
 	// outputs
@@ -225,7 +264,7 @@
 	let height = "1.2em"
 </script>
 
-<zf bind:this={elem} onpointerdown={lock} onpointerup={release}>
+<zf bind:this={elem} onpointerdown={lock}>
 	{@render label?.()}
 	<span id="knobaura">
 		<span id="knobblob">
@@ -236,11 +275,12 @@
 		<input
 			type="text"
 			bind:this={elemVal}
-			onchange={onInputChange}
+			onchange={handleInput}
 			value={value}
 			/>
 	</span>
 	<!-- <span bind:this={elemVal} contenteditable="true">{value}</span> -->
+	 <span style="border:3px solid green"> raw:{dec(rawValue)}</span>
 </zf>
 
 <style>
@@ -275,9 +315,11 @@
 		display: inline-block;
 		min-width: 1.2em;
 		min-height: 1.2em;
-		overflow: hidden;
+		/* overflow: hidden; */
         border-radius: 0.5em;
 		vertical-align: middle;
+        touch-action: none;  /* Prevent browser's default touch scrolling */
+        user-select: none;   /* Prevent text selection during drag */
 	}
 	zf span {
 		pointer-events:none;
