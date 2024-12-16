@@ -42,6 +42,10 @@ services:
         EXPOSE 3000
     volumes:
       - .:/app:exec
+      # a more robust place for uploads/ perhaps?
+      # if you want to serve this without the /error/ directory
+      #  see https://github.com/sveltejs/kit/discussions/10162
+      - /media/s/be3654b3-8643-4a6e-9477-68327cc11ff5/www:/app/static/error:ro
       # Prevent the container's node_modules from being overwritten by the host
       #  this means any `npm i ...` you make in another environ (eg the host)
       #   will need pushing to the container via package.json, the above RUN npm ci
