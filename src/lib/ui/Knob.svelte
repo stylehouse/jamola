@@ -110,12 +110,12 @@
         return Math.round(val * multiplier) / multiplier;
     }
 
-	let tracking = {}
+	let tracking_movement = {}
 	function track_aspect(ev,k) {
 		let v = ev[k]
-		let prev = tracking[k] ?? started[k]
+		let prev = tracking_movement[k] ?? started[k]
 		let delta = v - prev
-		tracking[k] = v
+		tracking_movement[k] = v
 		return delta
 	}
     function calculateMovement(ev: PointerEvent): number {
@@ -227,11 +227,14 @@
 		// console.log("On release")
 		// knob settles into where it may be rounded to
 		rawValue = value
+		// next drag starts again
+		tracking_movement = {}
 		// workaround a kwin-wayland bug?
 		// move_pointer_to_where_it_started()
 		// the essential unlock()
 		//  can also be called ad hoc when our claim to the interaction seems to be falling apart
 		// unlock()
+		
 		// release indicates greater commitment to value
 		be_released()
 	}
@@ -301,7 +304,7 @@
 			/>
 	</span>
 	<!-- <span bind:this={elemVal} contenteditable="true">{value}</span> -->
-	 <span style="border:3px solid green"> raw:{dec(rawValue)}</span>
+	 <!-- <span style="border:3px solid green"> raw:{dec(rawValue)}</span> -->
 </zf>
 
 <style>
