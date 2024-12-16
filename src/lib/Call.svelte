@@ -363,6 +363,8 @@
         possible_audio_input_devices = devices.filter(device => 
             device.kind === 'audioinput' && device.label !== ''
         );
+        return
+        // < this will probably just confuse people unless we do it later?
         if (!possible_audio_input_devices.length) {
             let ua = userAgent()
             if (ua == 'Firefox') {

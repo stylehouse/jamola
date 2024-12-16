@@ -258,7 +258,7 @@ class AudioControl {
 
 // Stream buffering or slight time travels
 export class Delaysagne extends AudioEffectoid {
-    delay = 121 // ms
+    delay = 1 // ms
     constructor(opt) {
         super({order:666, ...opt})
         this.controls = [

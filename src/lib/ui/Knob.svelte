@@ -137,7 +137,7 @@
     function lock(ev: PointerEvent) {
 		preventDefault(ev)
 
-		// GOING
+		// < GOING, but still want on desktop?
 		// elem.requestPointerLock();
 		// GOING?
 		// to not stick around after alt-tab (or other unknown interference)
