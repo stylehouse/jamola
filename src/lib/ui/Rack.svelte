@@ -18,7 +18,7 @@
             <div class="meter-container">
                 <div 
                     class="meter-fill" 
-                    style="height: {volumeLevel * 100}%; 
+                    style="width: {volumeLevel * 100}%; 
                            background-color: {peakLevel > 0.9 ? 'red' : peakLevel > 0.8 ? 'orange' : 'green'};"
                 ></div>
             </div>
@@ -38,11 +38,14 @@
                     >{fec.name}</span>
 
                     {#each fec.controls as con (con.this_key)}
-                        <label>
-                            {con.name}
+                        <label class=acontrol>
+                            <!-- con.name will appear here, and interact as part of the knob -->
                             <Knob
                                 {...con.get_Knob_props()}
                             >
+                            {#snippet label()}
+                                {con.name}
+                            {/snippet}
                             </Knob>
                         </label>
                     {/each}
@@ -52,9 +55,20 @@
 
 <style>
     .effect {
-        border:2px solid black
+        border:2px solid black;
+        border-radius:1em;
+        border-left:none;
+        min-height:3em;
+        position:relative;
+        display:inline-block;
     }
-
+    .effect .theyname {
+        position: absolute;
+        bottom: 0px;
+        margin-right: -2em;
+        transform: rotate(-90deg) skew(25deg);
+        transform-origin: bottom left;
+    }
     .bitrate {
         width:2em;
     }
@@ -82,9 +96,9 @@
     .meter-fill {
         position: absolute;
         bottom: 0;
-        width: 100%;
+        height: 100%;
         background-color: green;
-        transition: height 0.1s;
+        transition: width 0.1s;
     }
 
     .clipping-warning {
