@@ -8,8 +8,8 @@
     import YourTitle from "./YourTitle.svelte";
     import { CookedStream, Delaysagne, FreshStream, Gainorator, Gaintrol } from "./audio.svelte";
     import { createDataChannel } from "./coms.svelte";
-    import Rack from "./ui/Rack.svelte";
     import { userAgent } from "./Y";
+    import Participants from "./ui/Participants.svelte";
     
     let Signaling: SignalingClient;
     let sock = () => Signaling?.socket && Signaling.socket.connected && Signaling.socket
@@ -744,20 +744,8 @@
     {/if}
     <div class="participants">
         <YourTitle {title} editable={status != "Disconnected"} onChange={we_titlechange}/>
-
-
-        {#each participants as par (par.peerId)}
-            <div class="participant {par.type == 'monitor' && 'monitor'}">
-                <span class="theyname">{par.name || par.peerId}</span>
-                {#if par.type}<span class="streamtype">{par.type}</span>{/if}
-                {#if par.offline}<span class="error">offline</span>{/if}
-                {#if par.constate}<span class="techwhat">{par.constate}</span
-                    >{/if}
-
-                <Rack {par} ></Rack>
-            </div>
-        {/each}
     </div>
+    <Participants {participants}></Participants>
 </main>
 
 <style>
@@ -797,18 +785,6 @@
     }
 
 
-    .participant {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-        margin: 0.5rem 0;
-        padding: 0.5rem;
-        background: #2b463b;
-        border-radius: 4px;
-    }
-    .monitor {
-        background-color: #25855d;
-    }
 
     input[type="range"] {
         width: 150px;
