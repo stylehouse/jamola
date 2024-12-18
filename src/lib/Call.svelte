@@ -46,7 +46,7 @@
 
     // these are good to switch off in DEV
     let activate_recording_reuploading = 0
-    let activate_recording = 0
+    let activate_recording = $state(false)
     // < perhaps via insertableStreams we can reuse
     //   the encoded opus that was transmit to us as the recorded copy
     //   user may internet too slow to upload 2x 240kbps (30kBps)
@@ -631,12 +631,31 @@
             if (status === "Disconnected") {
                 throw "we rely on this instantly changing"
             }
+            was_on = true
             say_negate = "leave";
         } else {
             stopConnection();
+            was_on = false
             say_negate = "Ring";
         }
     }
+    
+    let was_on = $state(false)
+    // load
+    $effect(() => {
+        if (localStorage.jamola_config_v1) {
+            // < why are enclosing () are required..?
+            ({was_on,activate_recording} = JSON.parse(localStorage.jamola_config_v1))
+        }
+    })
+    // save
+    $effect(() => {
+        console.log("Storing was_on="+was_on)
+        localStorage.jamola_config_v1 = JSON.stringify(
+            {was_on,activate_recording}
+        )
+    })
+
     // auto-resume - good for debugging when all clients refresh all the time
     let resumable_once = true;
     let resumable_storable = $state(false)
@@ -646,22 +665,12 @@
             resumable_once = false;
             // wait for navigator.mediaDevices.enumerateDevices
             setTimeout(() => {
-                if (localStorage.was_on && userName != "you" && !errorMessage) {
+                if (was_on && userName != "you" && !errorMessage) {
                     console.log("Resuming...");
                     negate()
                 }
                 resumable_storable = 1
             },240)
-        }
-    });
-    // after the above, or it will store the default was_on=false
-    $effect(() => {
-        if (resumable_storable) {
-            if (status === "Disconnected") {
-                delete localStorage.was_on;
-            } else {
-                localStorage.was_on = "call";
-            }
         }
     });
 
@@ -705,6 +714,14 @@
         <button onclick={lets_upload}>
             🍇
         </button>
+        <label>
+                <!-- onchange={() => activate_recording = activate_recording_checkbox} -->
+            <input 
+                type="checkbox" 
+                bind:checked={activate_recording}
+            />
+            rec
+        </label>
     </div>
     <div class="controls">
 

@@ -19,7 +19,7 @@
                 <div 
                     class="meter-fill" 
                     style="width: {volumeLevel * 100}%; 
-                           background-color: {peakLevel > 0.9 ? 'red' : peakLevel > 0.8 ? 'orange' : 'green'};"
+                           background-color: {peakLevel > 0.94 ? 'red' : peakLevel > 0.8 ? 'orange' : 'green'};"
                 ></div>
             </div>
             <div class="meter-labels">
