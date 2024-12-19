@@ -9,6 +9,7 @@
     import { CookedStream, Delaysagne, FreshStream, Gainorator, Gaintrol } from "./audio.svelte";
     import { createDataChannel } from "./coms.svelte";
     import { userAgent } from "./Y";
+    import { Party } from "./kolektiva/Participants.svelte";
     import Participants from "./ui/Participants.svelte";
     
     let Signaling: SignalingClient;
@@ -24,7 +25,11 @@
     $inspect('title',title)
 
     // that we i_par into
-    let participants = $state([]);
+    let participants = $state(new Party());
+    let party = participants
+    
+    let i_par = (c) => participants.i_par(c)
+
     // par can .msg()
     let par_msg_handler = {}
     // $inspect(participants)
@@ -39,14 +44,14 @@
     //   or delaying our monitor to occur as our peer experiences our stream arriving
     //    so our playing has to lead the beat but on tape will be on the beat.
     //     might be extra hard since less time to think? or extra fresh...
-    let measuring = new Measuring({i_par});
+    let measuring = party.measuring = new Measuring({party,i_par});
     // it never seems to use more than 266 if given more
     let target_bitrate = 270;
     let default_volume = 0.7;
 
     // these are good to switch off in DEV
     let activate_recording_reuploading = 0
-    let activate_recording = $state(false)
+    
     // < perhaps via insertableStreams we can reuse
     //   the encoded opus that was transmit to us as the recorded copy
     //   user may internet too slow to upload 2x 240kbps (30kBps)
@@ -145,7 +150,7 @@
             });
         }
     })
-    function stuff_we_tell_parRecorder() {
+    participants.stuff_we_tell_parRecorder = () => {
         return {
             title,
             title_ts,
@@ -154,7 +159,6 @@
             sock,
         }
     }
-
     function stuff_we_tell_parRecorder_via_title_changed() {
         // one of these will know what segment the group is up to
         let apar
@@ -200,134 +204,12 @@
         measuring.handle_latency_pong(par, timestamp);
     }
 
-    type Participant = {
-        peerId:string,
-        pc?:RTCPeerConnection,
-        name?:string,
-        fresh?:CookedStream,
-        gain?:Gainorator,
-        cooked?:CookedStream,
-        audio:HTMLAudioElement
-    }
-
     // life and times
-    let par_life = {
-        // a new par, a new pc
-        new_pc(par) {
-            // < the par.audio should probably become a feed to audioContext
-            // < does this mean each participant becomes an output stream from the browser?
-            par.audioContext = window.an_audioContext ||= new AudioContext()
-            
-            par_life.new_effects(par)
+    
 
-            measuring.add_par(par);
-
-            if (activate_recording && (!activate_recording_for_peerIds
-                    || activate_recording_for_peerIds.includes(par.peerId))) {
-                // they record (.start()) when a track arrives
-                par.recorder = new parRecorder({par:par,...stuff_we_tell_parRecorder()})
-            }
-        },
-        // old par, new pc!?
-        new_pc_again(par,pc) {
-            // stream|par.pc changes, same par|peerId
-            //  peerId comes from socket.io, is per their websocket
-            console.log(`i_par: stream changes, same peer: ${par.name}`)
-            // hangup, change userName, Ring again causes this branch as you re-connect to each par
-            // bitratestats will notice this change itself
-            if (par.pc == pc) debugger;
-            // Stop existing recording if we're replacing the connection
-            //  it needs to be started again on a new MediaStream
-            // < will it?
-            if (par.recorder) {
-                par.recorder.stop();
-            }
-            par.pc?.close && par.pc?.close();
-            par.pc = pc;
-        },
-        new_effects(par) {
-            // some stream will be given to:
-            par.fresh = new FreshStream({par})
-            // the microphone domesticator
-            par.gain = new Gainorator({par})
-            par.delay = new Delaysagne({par})
-            // how much goes into the mix you hear
-            par.vol = new Gaintrol({par})
-
-            let hear = par.local ? 0 : default_volume
-            par.vol.set_gain(hear)
-            
-            par.cooked = new CookedStream({par})
-            // the last effect has nowhere to flow on to
-            par.cooked.on_output = (stream) => {
-                par_life.have_output(par,stream)
-            }
-
-            setTimeout(() => {
-                if (par.cooked.output) return
-                // should have it by now
-                debugger
-            },2500)
-        },
-
-        have_output(par,stream) {
-            if (!par.cooked.output) {
-                debugger
-            }
-            // now output via webaudio from the last (this) effect, not an <audio>
-            par_life.may_record(par)
-        },
-
-        // the one place to start recordings
-        // occurs two ways:
-        //  usually, streams arriving cause a par.cooked.on_output()
-        //  the local stream only "arrives" and causes that once though
-        //   so we also do this in i_myself_par(), as we reconnect (reRing)
-        // < we should be able to record audio without a connection! an offline webapp.
-        may_record(par) {
-            if (!par.recorder) return
-            if (!par.cooked.output) return console.log("No cooked output")
-            if (par.recorder.is_rolling()) return
-            // < take the recording just after par.gain and par.delay
-            //    but before par.reverb|echo and the messier|refinable effects
-            //    and apply|refine the later effects on listen...
-            //     ie in post ie post-production, which can mean any treatment not live
-            //    since it's better to record clear audio
-            //     and make it into a reverb cloud after decoded
-            par.recorder.start(par.cooked.output);
-        },
-
-    }
-
-    // read or add new participant (par)
-    function i_par({ par, peerId, pc, ...etc }):Participant {
-        if (par && peerId == null) {
-            if (pc != null) throw 'pc'
-            // to relocate a par. see "it seems like a svelte5 object proxy problem"
-            peerId = par.peerId
-        }
-        par = participants.filter((par) => par.peerId == peerId)[0];
-        if (pc) {
-            if (!par) {
-                // new par
-                par = { peerId, pc, i_par };
-
-                par_life.new_pc(par)
-
-                participants.push(par);
-            } else {
-                par_life.new_pc_again(par,pc)
-            }
-        }
-
-        // you give them properties
-        Object.assign(par, etc);
-        
-        return par;
-    }
     // this becomes our monitor
     function i_myself_par() {
-        let par = i_par({
+        let par = party.i_par({
             peerId: "",
             pc: {},
             name: userName,
@@ -339,7 +221,19 @@
         if (!par.fresh.stream) {
             par.fresh.input(localStream)
         }
-        par_life.may_record(par)
+        par.may_record()
+    }
+
+
+    party.setup_par_effects = (par) => {
+        // the microphone domesticator
+        par.gain = new Gainorator({par})
+        par.delay = new Delaysagne({par})
+        // how much goes into the mix you hear
+        par.vol = new Gaintrol({par})
+
+        let hear = par.local ? 0 : default_volume
+        par.vol.set_gain(hear)
     }
 
     // mainly
@@ -437,7 +331,7 @@
                 on_peer: ({ peerId, pc }) => {
                     part = 'on_peer'
                     // a peer connection, soon to receive tracks, name etc
-                    let par = i_par({ peerId, pc });
+                    let par = party.i_par({ peerId, pc });
 
                     // watch it become 'connected' (or so)
                     wait_for_par_ready(par, () => {
@@ -645,14 +539,16 @@
     $effect(() => {
         if (localStorage.jamola_config_v1) {
             // < why are enclosing () are required..?
-            ({was_on,activate_recording} = JSON.parse(localStorage.jamola_config_v1))
+            let etc
+            ({was_on,...etc} = JSON.parse(localStorage.jamola_config_v1))
+            party.activate_recording = etc.activate_recording
         }
     })
     // save
     $effect(() => {
         console.log("Storing was_on="+was_on)
         localStorage.jamola_config_v1 = JSON.stringify(
-            {was_on,activate_recording}
+            {was_on,activate_recording:party.activate_recording}
         )
     })
 
@@ -718,7 +614,7 @@
                 <!-- onchange={() => activate_recording = activate_recording_checkbox} -->
             <input 
                 type="checkbox" 
-                bind:checked={activate_recording}
+                bind:checked={party.activate_recording}
             />
             rec
         </label>

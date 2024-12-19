@@ -1,6 +1,8 @@
+import type { Party } from "./kolektiva/Participants.svelte"
 
 export class Measuring {
     statsIntervals = new Map()
+    party:Party
     i_par
     constructor(opt) {
         Object.assign(this,opt)
@@ -16,6 +18,11 @@ export class Measuring {
         const interval = setInterval(async () => {
             // to relocate a par. see "it seems like a svelte5 object proxy problem"
             par = this.i_par({par})
+            if (!par) {
+                // < this class should do 1 interval
+                console.log("Not anymore!")
+                return
+            }
             // make all of these measurements depend on them being connected
             // < this may prevent us firing pings?
             if (!par.pc || par.pc.connectionState !== "connected") return;
