@@ -65,6 +65,7 @@ export class Party {
     }
 }
 export class Participant {
+    name = $state()
 
     // <
     // streams from them
