@@ -3,7 +3,6 @@ import type { Party } from "./kolektiva/Participants.svelte"
 export class Measuring {
     statsIntervals = new Map()
     party:Party
-    i_par
     constructor(opt) {
         Object.assign(this,opt)
         this.bitrates = new BitrateStats()
@@ -17,7 +16,7 @@ export class Measuring {
         }
         const interval = setInterval(async () => {
             // to relocate a par. see "it seems like a svelte5 object proxy problem"
-            par = this.i_par({par})
+            par = this.party.repar(par)
             if (!par) {
                 // < this class should do 1 interval
                 console.log("Not anymore!")

@@ -5,13 +5,17 @@ export class Party {
     participants = $state([])
     measuring:Measuring
 
-    // some settings that can come from the user's stored config:
+    // some settings can come from the user's stored config:
     activate_recording = $state(false)
+    activate_recording_for_peerIds = [""]
 
     constructor() {
     }
     map(y:Function) {
         return this.participants.map(y)
+    }
+    repar(par) {
+        return this.i_par({par})
     }
     // read or add new participant (par)
     i_par(c:Participant):aParticipant {

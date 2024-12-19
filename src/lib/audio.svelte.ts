@@ -36,7 +36,7 @@ export abstract class AudioEffectoid {
         this.get_wired_in()
     }
     input(stream) {
-        this.par = this.par.i_par({par:this.par})
+        this.par = this.par.party.repar(this.par)
         this.disconnect_all_nodes()
         this.stream = stream
         let clas = this.constructor.name

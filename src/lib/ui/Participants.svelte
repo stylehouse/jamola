@@ -1,12 +1,12 @@
 <script lang="ts">
     import Rack from "./Rack.svelte";
 
-    let {participants} = $props()
+    let {party} = $props()
 </script>
 <div class="participants">
 
 
-    {#each participants as par (par.peerId)}
+    {#each party.participants as par (par.peerId)}
         <div class="participant {par.type == 'monitor' && 'monitor'}">
             <span class="always_visible_horizontally">
                 <span class="theyname">{par.name || par.peerId}</span>

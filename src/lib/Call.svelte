@@ -28,7 +28,9 @@
     let participants = $state(new Party());
     let party = participants
     
-    let i_par = (c) => participants.i_par(c)
+    function i_par(c) {
+        return party.i_par(c)
+    }
 
     // par can .msg()
     let par_msg_handler = {}
@@ -44,7 +46,7 @@
     //   or delaying our monitor to occur as our peer experiences our stream arriving
     //    so our playing has to lead the beat but on tape will be on the beat.
     //     might be extra hard since less time to think? or extra fresh...
-    let measuring = party.measuring = new Measuring({party,i_par});
+    let measuring = party.measuring = new Measuring({party});
     // it never seems to use more than 266 if given more
     let target_bitrate = 270;
     let default_volume = 0.7;
@@ -62,7 +64,6 @@
     //    and non-local recordings wait and check the remote uploaded
     // so everyone simply records and uploads their own localStream
     //  then it's at least not transcoded
-    let activate_recording_for_peerIds = [""]
     // < YourShareOfMixing.svelte - hierarchy for large crowds
     //   for when it gets too big to send everyone to everyone direct
 
@@ -658,7 +659,7 @@
     <div class="participants">
         <YourTitle {title} editable={status != "Disconnected"} onChange={we_titlechange}/>
     </div>
-    <Participants {participants}></Participants>
+    <Participants {party}></Participants>
 </main>
 
 <style>

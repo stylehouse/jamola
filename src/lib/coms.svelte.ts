@@ -2,7 +2,7 @@
 
 // participants exchange names in a webrtc datachannel
 // one is attached to the par:
-export function createDataChannel({par,par_msg_handler,userName,i_par}) {
+export function createDataChannel({par,par_msg_handler,userName}) {
     let original = !par.channel
     par.channel ||= par.pc.createDataChannel("participants");
 
@@ -28,7 +28,7 @@ export function createDataChannel({par,par_msg_handler,userName,i_par}) {
             //   not doing this leads to this.par.name being undefined
             //    much later in parRecorder.uploadCurrentSegment
             //    see "it seems like a svelte5 object proxy problem"
-            par = i_par({ peerId: par.peerId });
+            par = par.party.repar(par)
 
             handler(par,data)
         };
