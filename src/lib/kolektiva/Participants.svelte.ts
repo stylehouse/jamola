@@ -12,11 +12,37 @@ export class Party {
     audioContext
 
     // some settings can come from the user's stored config:
+    // stored:
     activate_recording = $state(false)
     activate_recording_for_peerIds = [""]
+    // stored:
+    forever = $state({})
 
     constructor() {
     }
+    make_forever_key(key) {
+        return key.map(k => {
+            if (k.name?.length) return k.name
+            if (k.name != null) return k.name
+            if (typeof k == 'string') return k
+            debugger
+        }).join('/')
+    }
+    set_forever(key:Array,value) {
+        key = this.make_forever_key(key)
+        this.forever[key] = value
+        console.log("forever: set for "+key)
+    }
+    // < this could give out defaults
+    //   our loose function call to adjust gain to 0.7
+    //     seems not to be happening
+    get_forever(key:Array) {
+        key = this.make_forever_key(key)
+        let v = this.forever[key]
+        console.log("forever: "+(v != null ? "Had a "  : "blank ")+" for "+key)
+        return v
+    }
+
     map(y:Function) {
         return this.participants.map(y)
     }

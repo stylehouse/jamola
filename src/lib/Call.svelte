@@ -543,14 +543,17 @@
             let etc
             ({was_on,...etc} = JSON.parse(localStorage.jamola_config_v1))
             party.activate_recording = etc.activate_recording
+            party.forever = etc.forever
         }
     })
     // save
     $effect(() => {
         console.log("Storing was_on="+was_on)
-        localStorage.jamola_config_v1 = JSON.stringify(
-            {was_on,activate_recording:party.activate_recording}
-        )
+        localStorage.jamola_config_v1 = JSON.stringify({
+            was_on,
+            activate_recording: party.activate_recording,
+            forever: party.forever,
+        })
     })
 
     // auto-resume - good for debugging when all clients refresh all the time
@@ -595,33 +598,28 @@
 <main class="container" style="display:none;" bind:this={themain}>
     <h1>
         <span class="welcometo overhang">Welcome to</span>
-        <span class="jamola"><a href="https://github.com/stylehouse/jamola">jamola</a></span>,
+        <span class="jamola"
+            ><a href="https://github.com/stylehouse/jamola">jamola</a></span
+        >,
         <span style="display:inline-block">
-                <YourName bind:userName={userName} 
-                    editable={status == "Disconnected"}
-                    {negate}
-                ></YourName>
-            <span style="font-size:24%">!</span></span>
+            <YourName bind:userName editable={status == "Disconnected"} {negate}
+            ></YourName>
+            <span style="font-size:24%">!</span></span
+        >
     </h1>
 
     <div class="controls">
         <button onclick={negate}>
             {say_negate}
         </button>
-        <button onclick={lets_upload}>
-            🍇
-        </button>
+        <button onclick={lets_upload}> 🍇 </button>
         <label>
-                <!-- onchange={() => activate_recording = activate_recording_checkbox} -->
-            <input 
-                type="checkbox" 
-                bind:checked={party.activate_recording}
-            />
+            <!-- onchange={() => activate_recording = activate_recording_checkbox} -->
+            <input type="checkbox" bind:checked={party.activate_recording} />
             rec
         </label>
     </div>
     <div class="controls">
-
         <label>
             <span class="overhang">bitrate</span>
             <select
@@ -641,23 +639,25 @@
                 onpointerdown={() => enumerateDevices()}
             >
                 {#each possible_audio_input_devices as device}
-                    
-                    <option value="{device.deviceId}">{device.label}</option>
+                    <option value={device.deviceId}>{device.label}</option>
                 {/each}
             </select>
         </label>
-
     </div>
     <div class="controls">
         <p class="status">{status}</p>
     </div>
     {#if errorMessage}
-    <div class="controls">
-        <p class="error">{errorMessage}</p>
-    </div>
+        <div class="controls">
+            <p class="error">{errorMessage}</p>
+        </div>
     {/if}
     <div class="participants">
-        <YourTitle {title} editable={status != "Disconnected"} onChange={we_titlechange}/>
+        <YourTitle
+            {title}
+            editable={status != "Disconnected"}
+            onChange={we_titlechange}
+        />
     </div>
     <Participants {party}></Participants>
 </main>
@@ -671,7 +671,7 @@
         color: #2d0769;
     }
     .jamola a {
-        color:inherit;
+        color: inherit;
         /* text-decoration:inherit; */
     }
     .yourtitle {
@@ -684,21 +684,19 @@
         max-width: 600px;
         margin: 0 auto;
         padding: 2rem;
-        display:block;
+        display: block;
     }
 
     .setup {
         margin: 1rem 0;
     }
     select {
-        max-width:3em;
+        max-width: 3em;
     }
     select option {
         background-color: #111b17;
         color: #a89e89;
     }
-
-
 
     input[type="range"] {
         width: 150px;

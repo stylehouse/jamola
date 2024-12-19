@@ -15,6 +15,8 @@ export type streamables = MediaStream|AudioEffectoid
 
 export abstract class AudioEffectoid {
     par:ParticipantWithEffects
+    // the subclass name
+    name:string
     
     // the foremost input to a thing
     stream:MediaStream|AudioNode
@@ -31,6 +33,7 @@ export abstract class AudioEffectoid {
 
     constructor(opt:{par}) {
         Object.assign(this,opt)
+
         this.name ||= this.constructor.name
         // to par.effects=[]
         this.get_wired_in()
@@ -229,11 +232,16 @@ class AudioControl {
     fec_key:string
     fec:AudioEffectoid
     constructor(opt) {
-        // the fec is this, the effect we're for
-        this.fec = opt.this;
-        delete opt.this;
         Object.assign(this,opt)
         this.name ||= this.fec_key || "qua"
+
+        // may remember this setting
+        // < we need to not get here until par have names
+        return
+        let v = this.fec.par.party.get_forever([this.fec.par.name,this.fec,this])
+        if (v != null) {
+            this.set(v)
+        }
     }
     get_Knob_props() {
         let propos = {
@@ -247,12 +255,14 @@ class AudioControl {
                 this.set(value)
             }
         }
-        console.log(`made props for fec:${this.fec.name} con:${this.name}`,{this:this,propos})
+        // console.log(`made props for fec:${this.fec.name} con:${this.name}`,{this:this,propos})
         return propos
     }
     set(value) {
         this.fec[this.fec_key] = value
         this.on_set?.(value)
+
+        this.fec.par.party.set_forever([this.fec.par,this.fec,this],value)
     }
 }
 
@@ -317,7 +327,7 @@ export class AudioGainEffectoid extends AudioEffectoid {
 
     // Set gain level
     set_gain() {
-        console.log("Done gain twid "+this.gainValue)
+        console.log(`${this.par} ${this.name} gain twid ${this.gainValue}`)
         this.gainNode.gain.setValueAtTime(this.gainValue, this.AC.currentTime);
     }
 }

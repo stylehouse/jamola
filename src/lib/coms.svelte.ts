@@ -1,4 +1,11 @@
 
+// < front ws-client, do par coming-going
+// < or is it a base class
+export class Peering {
+    rooms = []
+    party
+}
+
 
 // participants exchange names in a webrtc datachannel
 // one is attached to the par:
