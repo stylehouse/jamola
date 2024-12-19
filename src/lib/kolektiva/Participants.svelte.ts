@@ -5,6 +5,12 @@ export class Party {
     participants = $state([])
     measuring:Measuring
 
+    // is not server-side so create this in new_pc when we need it
+    // < Party etc shouldn't happen server-side at all? lots of *.svelte to be done
+    //   subscribing to changes in Party.* or Participant.effect.*.*
+    //    to storage...
+    audioContext
+
     // some settings can come from the user's stored config:
     activate_recording = $state(false)
     activate_recording_for_peerIds = [""]
@@ -65,7 +71,18 @@ export class Party {
     }
 }
 export class Participant {
+    // coms
     name = $state()
+    //  about the datachannel closing
+    offline = $state()
+    // webrtc
+    constate = $state()
+    // Call
+    effects = $state()
+    // measuring
+    bitrate = $state()
+    latency = $state()
+    
 
     // <
     // streams from them
@@ -93,7 +110,7 @@ export class Participant {
     new_pc() {
         // < the par.audio should probably become a feed to audioContext
         // < does this mean each participant becomes an output stream from the browser?
-        this.audioContext = window.an_audioContext ||= new AudioContext()
+        this.audioContext = this.party.audioContext ||= new AudioContext()
         
         this.new_effects()
 
