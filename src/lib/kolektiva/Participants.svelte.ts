@@ -13,6 +13,8 @@ export class Participant {
     // the effects tend to make themselves par.gain etc
     //  this one triggers the Participant/Rack.svelte to appear
     gain = $state()
+    // incoming tracks from Peering while setting up
+    ontrack_queue
     // measuring
     bitrate = $state()
     latency = $state()

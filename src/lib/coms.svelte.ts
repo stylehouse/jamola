@@ -54,11 +54,8 @@ export class Peering {
 
         // take audio to effects
         par.pc.ontrack = (e) => {
-            setTimeout(() => {
-                // < multiple tracks
-                console.log(`${par} par.pc.ontrack`)
-                par.fresh.input(e.streams[0])
-            },par.fresh ? 0 : 500)
+            console.log(`${par} par.pc.ontrack into the queue`)
+            (par.ontrack_queue ||= []).push(e)
         };
         // the inverse of ontrack is addTrack, via:
     }
@@ -98,11 +95,30 @@ export class Peering {
             debugger
             par.on_ready()
             console.log(`${par} on_ready`)
-            this.lets_send_our_track(par)
-            console.log(`${par} lets_send_our_track`)
+
+            // we are now ready to receive tracks
+            this.open_ontrack(par)
         }
         console.log(`${par} no name...`)
     }
+    
+    // we wait to accept tracks
+    //  race between our par.effects building after par.name
+    //   and their track arriving here after they get our par.name
+    // < because crypto trust
+    open_ontrack(par) {
+        // < multiple tracks, one at a time?
+        par.pc.ontrack = (e) => {
+            console.log(`${par} par.pc.ontrack`)
+            par.fresh.input(e.streams[0])
+        };
+        (par.ontrack_queue||[]).map(e => {
+            console.log(`${par} par.pc.ontrack from queue:`)
+            par.pc.ontrack(e)
+        })
+        delete par.ontrack_queue
+    }
+    
 
     // the newbie phase of a new par.pc
     //  before the rest of the Participant lifetime
