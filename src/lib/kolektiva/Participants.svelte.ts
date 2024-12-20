@@ -1,101 +1,6 @@
 import { CookedStream, FreshStream } from "$lib/audio.svelte"
 import { parRecorder } from "$lib/recording"
 
-export class Party {
-    participants = $state([])
-    measuring:Measuring
-
-    // is not server-side so create this in new_pc when we need it
-    // < Party etc shouldn't happen server-side at all? lots of *.svelte to be done
-    //   subscribing to changes in Party.* or Participant.effect.*.*
-    //    to storage...
-    audioContext
-
-    // some settings can come from the user's stored config:
-    // stored:
-    activate_recording = $state(false)
-    activate_recording_for_peerIds = [""]
-    // stored:
-    forever = $state({})
-
-    constructor() {
-    }
-    make_forever_key(key) {
-        return key.map(k => {
-            if (k.name?.length) return k.name
-            if (k.name != null) return k.name
-            if (typeof k == 'string') return k
-            debugger
-        }).join('/')
-    }
-    set_forever(key:Array,value) {
-        key = this.make_forever_key(key)
-        this.forever[key] = value
-        console.log("forever: set for "+key)
-    }
-    // < this could give out defaults
-    //   our loose function call to adjust gain to 0.7
-    //     seems not to be happening
-    get_forever(key:Array) {
-        key = this.make_forever_key(key)
-        let v = this.forever[key]
-        console.log("forever: "+(v != null ? "Had a "  : "blank ")+" for "+key)
-        return v
-    }
-
-    map(y:Function) {
-        return this.participants.map(y)
-    }
-    repar(par) {
-        return this.i_par({par})
-    }
-    // read or add new participant (par)
-    i_par(c:Participant):aParticipant {
-        let { par, peerId, pc, ...etc } = c
-        
-        if (par && peerId == null) {
-            if (pc != null) throw 'pc'
-            // to relocate a par. see "it seems like a svelte5 object proxy problem"
-            peerId = par.peerId
-        }
-        par = this.participants.filter((par) => par.peerId == peerId)[0];
-        // they know the room
-        if (par && par.party && par.party != this) throw "teleported party"
-        // bring a piece of it
-        // < is there only one of these? when another?
-        if (pc) {
-            if (!par) {
-                // new par
-                par = new Participant({
-                    party: this,
-                    peerId,
-                    pc,
-                    i_par: this.i_par,
-                })
-
-                par.new_pc()
-
-                this.participants.push(par);
-            } else {
-                par.new_pc_again(pc)
-            }
-        }
-        else {
-            if (!par) {
-                // not found, and no peerconnection to create one around
-                return
-            } else {
-                // found
-            }
-
-        }
-
-        // you give them properties
-        Object.assign(par, etc);
-
-        return par;
-    }
-}
 export class Participant {
     // coms
     name = $state()
@@ -131,15 +36,11 @@ export class Participant {
         }
     }
 
+    // i_par calls one of these when a new pc arrives
+    // < what to do with the old one..?
 
     // a new par, a new pc
     new_pc() {
-        // < the par.audio should probably become a feed to audioContext
-        // < does this mean each participant becomes an output stream from the browser?
-        this.audioContext = this.party.audioContext ||= new AudioContext()
-        
-        this.new_effects()
-
         this.party.measuring.add_par(this);
         if (this.wants_recording()) {
             // they record (.start()) when a track arrives
@@ -163,6 +64,15 @@ export class Participant {
         this.pc?.close && this.pc?.close();
         this.pc = pc;
     }
+
+    // pc, datachannel and name are ready!
+    // or it is par.local, which is ready immediately
+    on_ready() {
+        this.new_effects()
+    }
+
+
+
     new_effects() {
         let par = this
         // some stream will be given to:
@@ -183,7 +93,6 @@ export class Participant {
             throw `should have ${this} stream by now`
         },2500)
     }
-
     have_output(stream) {
         if (!this.cooked.output) {
             debugger

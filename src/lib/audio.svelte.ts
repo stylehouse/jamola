@@ -140,7 +140,7 @@ export abstract class AudioEffectoid {
     check_wiring(just_did_input) {
         // < in such a way that completes par.effects, once
         let {fore,aft} = this.get_wired_in()
-        console.log(`------ ${fore?.constructor?.name} -> ${this.constructor?.name} -> ${aft?.constructor?.name}`)
+        console.log(`------ ${this.par} ${fore?.constructor?.name} -> ${this.constructor?.name} -> ${aft?.constructor?.name}`)
         
         // we only have our abstract notion of par.effects, that we must sync to:
         if (fore && fore.output) {
@@ -184,7 +184,7 @@ export abstract class AudioEffectoid {
         return {fore,aft}
     }
     get AC() {
-        let AC = this.par.audioContext
+        let AC = this.par.party.audioContext ||= new AudioContext()
         if (!AC) throw "!AC"
         return AC
     }

@@ -9,7 +9,7 @@
     import { CookedStream, Delaysagne, FreshStream, Gainorator, Gaintrol } from "./audio.svelte";
     import { createDataChannel } from "./coms.svelte";
     import { userAgent } from "./Y";
-    import { Party } from "./kolektiva/Participants.svelte";
+    import { Party } from "./kolektiva/Party.svelte";
     import Participants from "./ui/Participants.svelte";
     
     let Signaling: SignalingClient;
@@ -27,13 +27,19 @@
     // that we i_par into
     let participants = $state(new Party());
     let party = participants
+    // < refactor this into party.forever.*
+    $effect(() => {
+        if (userName) {
+            party.userName = userName
+        }
+    })
     
     function i_par(c) {
         return party.i_par(c)
     }
 
     // par can .msg()
-    let par_msg_handler = {}
+    let par_msg_handler = party.par_msg_handler = {}
     // $inspect(participants)
 
     // par.bitrate kbps going through par.pc
@@ -191,6 +197,8 @@
     par_msg_handler['participant'] = (par,{name}) => {
         par.name = name;
         console.log(`Received name from ${par.peerId}: ${par.name}`)
+
+        party.peering.couldbeready(par)
         
         // give some time 
         setTimeout(() => {
@@ -219,7 +227,12 @@
             local: true,
         });
         delete par.pc;
+        // is ready immediately. create effects!
+        par.on_ready()
         if (!par.fresh.stream) {
+            if (!localStream) {
+                debugger
+            }
             par.fresh.input(localStream)
         }
         par.may_record()
@@ -327,31 +340,11 @@
                 //  will find Signaling waiting for uploads to finish
                 Signaling.close();
             }
-            part = 'Signaling'
-            Signaling = new SignalingClient({
-                on_peer: ({ peerId, pc }) => {
-                    part = 'on_peer'
-                    // a peer connection, soon to receive tracks, name etc
-                    let par = party.i_par({ peerId, pc });
-
-                    // watch it become 'connected' (or so)
-                    wait_for_par_ready(par, () => {
-                        console.log("Par ready! " + par.peerId);
-
-                        part = 'give_localStream'
-                        // input our stream to it
-                        give_localStream(par);
-
-                        part = 'take_remoteStream'
-                        // take audio from it
-                        take_remoteStream(par);
-
-                        // Set up data channel to send names
-                        part = 'createDataChannel'
-                        createDataChannel({par,par_msg_handler,userName,i_par});
-                    });
-                },
-            });
+            part = 'Peering'
+            
+            party.start()
+            // < audio-upload via party
+            Signaling = party.Signaling
         } catch (error) {
             errorMessage = `Error in ${part}: ${error.message}`;
             status = "Error occurred";
@@ -359,51 +352,8 @@
         }
     }
 
-    // wait for par.pc to get in a good state
-    //  and forever copy whatever it changes to to par.constate
-    function wait_for_par_ready(par, resolve) {
-        let done = 0;
-        let ready = 0;
-        let observe = () => {
-            let says = par.pc.connectionState + "/" + par.pc.signalingState;
-            par.constate = says;
 
-            // https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/connectionState
-            if (
-                [
-                    // if we don't accept 'new' initially they never get there...
-                    "new",
-                    "connected",
-                    // ,'connecting'
-                ].includes(par.pc.connectionState) &&
-                [
-                    "stable",
-                    // 'have-local-offer'
-                ].includes(par.pc.signalingState)
-            ) {
-                ready = 1;
-            } else {
-                ready = 0;
-            }
-            0 &&
-                console.log(
-                    "Waiting " +
-                        ((ready && "ready") || "") +
-                        "for par" +
-                        ((done && "done") || "") +
-                        ": " +
-                        says,
-                    par,
-                );
-            if (ready && !done) {
-                done = 1;
-                resolve();
-            }
-        };
-        observe();
-        par.pc.onconnectionstatechange = observe;
-        par.pc.onsignalingstatechange = observe;
-    }
+    
 
     // take audio from a peer
     function take_remoteStream(par) {
@@ -537,13 +487,17 @@
     
     let was_on = $state(false)
     // load
+    let party_storables = ['activate_recording','forever']
     $effect(() => {
         if (localStorage.jamola_config_v1) {
             // < why are enclosing () are required..?
             let etc
             ({was_on,...etc} = JSON.parse(localStorage.jamola_config_v1))
-            party.activate_recording = etc.activate_recording
-            party.forever = etc.forever
+            party_storables.map(k => {
+                if (etc[k] != null) {
+                    party[k] = etc[k]
+                }
+            })
         }
     })
     // save

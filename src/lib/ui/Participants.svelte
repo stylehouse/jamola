@@ -16,7 +16,11 @@
                     >{/if}
             </span>
 
-            <Rack {par} ></Rack>
+            {#if par.gain}
+                <span class="rack">
+                    <Rack {par} ></Rack>
+                </span>
+            {/if}
         </div>
     {/each}
 </div>
