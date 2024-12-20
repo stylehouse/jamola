@@ -10,6 +10,9 @@ export class Participant {
     constate = $state()
     // Call
     effects = $state()
+    // the effects tend to make themselves par.gain etc
+    //  this one triggers the Participant/Rack.svelte to appear
+    gain = $state()
     // measuring
     bitrate = $state()
     latency = $state()
@@ -51,7 +54,7 @@ export class Participant {
     new_pc_again(pc) {
         // stream|par.pc changes, same par|peerId
         //  peerId comes from socket.io, is per their websocket
-        console.log(`i_par: stream changes, same peer: ${this.name}`)
+        console.log(`i_par: stream changes, same peer: ${this}`)
         // hangup, change userName, Ring again causes this branch as you re-connect to each par
         // bitratestats will notice this change itself
         if (this.pc == pc) debugger;
@@ -68,6 +71,7 @@ export class Participant {
     // pc, datachannel and name are ready!
     // or it is par.local, which is ready immediately
     on_ready() {
+        console.log(`par.on_ready: ${this}`)
         this.new_effects()
     }
 

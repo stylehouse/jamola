@@ -33,6 +33,10 @@
             party.userName = userName
         }
     })
+    $effect(() => {
+        // parties keep going in the background on HMR unless we:
+        party.singularise()
+    })
     
     function i_par(c) {
         return party.i_par(c)
@@ -227,15 +231,19 @@
             local: true,
         });
         delete par.pc;
-        // is ready immediately. create effects!
-        par.on_ready()
-        if (!par.fresh.stream) {
-            if (!localStream) {
-                debugger
+        // is ready immediately?
+        // doesn't seem to be...
+        setTimeout(() => {
+            //  create effects!
+            par.on_ready()
+            if (!par.fresh.stream) {
+                if (!localStream) {
+                    debugger
+                }
+                par.fresh.input(localStream)
             }
-            par.fresh.input(localStream)
-        }
-        par.may_record()
+            par.may_record()
+        },1500)
     }
 
 
@@ -353,7 +361,7 @@
     }
 
 
-    
+
 
     // take audio from a peer
     function take_remoteStream(par) {
@@ -369,32 +377,33 @@
         };
     }
 
-    // Modify your give_localStream function to include bitrate control
-    function give_localStream(par) {
+    // was give_localStream
+    party.to_send_our_track = (par) => {
+        if (!['new','connected'].includes(par.pc.connectionState)) {
+            debugger
+            return
+        }
         localStream.getTracks().forEach((track) => {
             try {
                 const sender = par.pc.addTrack(track, localStream);
 
                 // For audio tracks, set the desired bitrate
                 if (track.kind === "audio") {
-                    // Wait for the connection to be established
-                    par.pc.addEventListener("connectionstatechange", () => {
-                        if (par.pc.connectionState === "connected") {
-                            setAudioBitrate(sender, target_bitrate).catch(
-                                (error) =>
-                                    console.error(
-                                        "Failed to set bitrate:",
-                                        error,
-                                    ),
-                            );
-                        }
-                    });
+                    setAudioBitrate(sender, target_bitrate).catch(
+                        (error) =>
+                            console.error(
+                                "Failed to set bitrate:",
+                                error,
+                            ),
+                    );
                 }
+            console.log(`${par} give_localStream...`,{track,localStream,sender})
             } catch (error) {
                 console.error("Failed to add track:", error);
             }
         });
     }
+    
     function setAudioBitrate(sender, bitrate) {
         const params = sender.getParameters();
         // Check if we have encoding parameters
@@ -503,11 +512,18 @@
     // save
     $effect(() => {
         console.log("Storing was_on="+was_on)
+        let etc = {}
+        party_storables.map(k => {
+            if (etc[k] != null) {
+                party[k] = etc[k]
+            }
+        })
         localStorage.jamola_config_v1 = JSON.stringify({
             was_on,
             activate_recording: party.activate_recording,
             forever: party.forever,
         })
+
     })
 
     // auto-resume - good for debugging when all clients refresh all the time

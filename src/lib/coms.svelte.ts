@@ -34,7 +34,7 @@ export class Peering {
         }
     }
     stop() {
-
+        this.Signaling.close()
     }
 
     pc_handlers(par) {
@@ -48,8 +48,23 @@ export class Peering {
         //  so get the receiver ready now:
         // and this should be ready very soon after that so:
         par.pc.ondatachannel = ({channel}) => {
+            debugger
             this.incomingDataChannel(par,channel)
         };
+
+        // take audio to effects
+        par.pc.ontrack = (e) => {
+            setTimeout(() => {
+                // < multiple tracks
+                console.log(`${par} par.pc.ontrack`)
+                par.fresh.input(e.streams[0])
+            },par.fresh ? 0 : 500)
+        };
+        // the inverse of ontrack is addTrack, via:
+    }
+    lets_send_our_track(par) {
+        console.log(`${par} lets_send_our_track!`)
+        this.party.to_send_our_track(par)
     }
 
     // these are a low-level preamble to the lifetime of a par
@@ -63,20 +78,30 @@ export class Peering {
             // wait for par.pc to get in a good state
             return
         }
+        console.log(`${par} couldbeready...`)
         // < resolve a promise to advance the $part of start() we are up to
         //   but none of this other action (from on*change handlers)
         //    is via that try+catch, so...
         if (!par.channel) {
+            setTimeout(() => {
             // trigger channel creation
             this.createDataChannel(par)
+            console.log(`${par} createDataChannel`)
+            },500)
             return
         }
         if (par.name != null) {
             // their channel delivers to us their name!
             // this is ready!
             // and our par.effects will be created with fully name
+            console.log(`${this} par.on_ready!`)
+            debugger
             par.on_ready()
+            console.log(`${par} on_ready`)
+            this.lets_send_our_track(par)
+            console.log(`${par} lets_send_our_track`)
         }
+        console.log(`${par} no name...`)
     }
 
     // the newbie phase of a new par.pc
@@ -126,10 +151,11 @@ export class Peering {
 
             handler(par,data)
         };
+        console.log(`got ${par} channel`)
     }
     createDataChannel(par) {
-        let original = !par.channel
-        par.channel ||= par.pc.createDataChannel("participants");
+        let original = par.channel
+        par.channel = par.pc.createDataChannel("participants");
     
         // you (eg Measuring) can send messages.
         // like socket.io
@@ -153,12 +179,12 @@ export class Peering {
         par.channel.onopen = () => {
             delete par.offline;
             announce_self();
-            console.log(`Data open: ${par.peerId}`);
+            console.log(`Data open: ${par}`);
         };
         par.channel.onclose = () => {
             par.offline = 1;
             delete par.bitrate;
-            console.log(`Leaves: ${par.name}`);
+            console.log(`Leaves: ${par}`);
         };
     }
 

@@ -21,6 +21,13 @@ export class Party {
 
     constructor() {
     }
+
+    singularise() {
+        let was = window.party_singleton 
+        if (was) was.stop()
+        window.party_singleton = this
+    }
+
     make_forever_key(key) {
         if (typeof key == 'string') return key
         return key.map(k => {
@@ -113,7 +120,5 @@ export class Party {
     replace_peering() {
         let was = this.peering
         was.stop()
-        // < what to do with this socketio connection?
-        debugger
     }
 }
