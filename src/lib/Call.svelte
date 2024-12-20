@@ -444,11 +444,11 @@
     function stopConnection() {
         measuring.close();
         let let_go = () => {
-            Signaling && Signaling.close();
-            Signaling = null;
+            party.stop()
         }
         participants.map(par => {
             par.pc?.close && par.pc?.close();
+            par.local || par.stop_effects()
             if (par.recorder) {
                 par.recorder.stop(let_go)
                 let_go = () => {}

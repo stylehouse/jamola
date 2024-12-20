@@ -28,6 +28,8 @@ export class Party {
         window.party_singleton = this
     }
 
+
+    // culture clings to party.forever.*
     make_forever_key(key) {
         if (typeof key == 'string') return key
         return key.map(k => {
@@ -52,6 +54,8 @@ export class Party {
         return v
     }
 
+    
+    // 
     map(y:Function) {
         return this.participants.map(y)
     }
@@ -108,17 +112,13 @@ export class Party {
 
 
     start() {
-        this.peering && this.replace_peering()
+        this.peering && this.stop()
         this.peering = new Peering({party:this})
         this.peering.start()
     }
 
     stop() {
-        this.peering.stop()
+        this.peering?.stop()
     }
 
-    replace_peering() {
-        let was = this.peering
-        was.stop()
-    }
 }

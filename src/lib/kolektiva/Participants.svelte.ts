@@ -72,13 +72,24 @@ export class Participant {
 
     // pc, datachannel and name are ready!
     // or it is par.local, which is ready immediately
+    // after this something will par.fresh.input()
+    //  for local it's i_myself_par(), otherwise open_ontrack()
     on_ready() {
         console.log(`par.on_ready: ${this}`)
         this.new_effects()
     }
+    // disarm anything thaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaat makes sound
+    //  the above typo was ubbbbbbbbbbbbbbbbbbbuntu laggin, missing my g's
+    //   
+    stop_effects() {
+        this.effects?.map(fec => fec.destroy())
+        delete this.effects
+    }
 
 
 
+    // < how to reiterate this function, esp the very inner...
+    //   transact par.effects?
     new_effects() {
         let par = this
         // some stream will be given to:
