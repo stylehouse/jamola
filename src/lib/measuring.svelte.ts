@@ -79,6 +79,7 @@ export class LatencyStats {
         else {
             // will become a ping timeout (that we didn't send)
             // if it misses two more chances before:
+            console.log(`PING NOT SENDABLE: readyState=${par.channel.readyState}`)
         }
 
         // Set a timeout to detect potential packet loss

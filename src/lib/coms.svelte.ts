@@ -80,11 +80,14 @@ export class Peering {
         //   but none of this other action (from on*change handlers)
         //    is via that try+catch, so...
         if (!par.channel) {
-            setTimeout(() => {
+
             // trigger channel creation
             this.createDataChannel(par)
-            console.log(`${par} createDataChannel`)
+
+            setTimeout(() => {
+                this.lets_send_our_track(par)
             },500)
+
             return
         }
         if (par.name != null) {
@@ -153,8 +156,10 @@ export class Peering {
     // put handlers of replies in par_msg_handler.$type
     incomingDataChannel(par,channel) {
         par.their_channel = channel
+        console.log(`theirData arrives: ${par}`);
         par.their_channel.onmessage = (event) => {
             const data = JSON.parse(event.data);
+            console.log(`theirData message: ${par}`,data);
             let handler = par.party.par_msg_handler[data.type]
             if (!handler) {
                 return console.warn(`No handler for par=${par.name} message: `,data)
@@ -167,7 +172,20 @@ export class Peering {
 
             handler(par,data)
         };
-        console.log(`got ${par} channel`)
+
+        par.their_channel.onerror = (e) => {
+            console.log(`theirData error: ${par}`,e);
+        };
+        par.their_channel.onopen = () => {
+            delete par.offline;
+            announce_self();
+            console.log(`theirData open: ${par}`);
+        };
+        par.their_channel.onclose = () => {
+            par.offline = 1;
+            delete par.bitrate;
+            console.log(`theirData Leaves: ${par}`);
+        };
     }
     createDataChannel(par) {
         let original = par.channel
@@ -182,6 +200,8 @@ export class Peering {
             par.channel.send(JSON.stringify({type,...data}))
         }
         let announce_self = () => {
+            console.log(`${par} announce_self`)
+
             par.emit("participant",{name:par.party.userName})
             // once
             announce_self = () => {};
@@ -190,8 +210,15 @@ export class Peering {
             debugger;
             announce_self();
         }
+        console.log(`${par} createDataChannel`,par.channel)
 
 
+        par.channel.onerror = (e) => {
+            console.log(`Data error: ${par}`,e);
+        };
+        par.channel.onmessage = (e) => {
+            console.log(`Data message (on the out channel): ${par}`,e);
+        };
         par.channel.onopen = () => {
             delete par.offline;
             announce_self();
@@ -200,7 +227,7 @@ export class Peering {
         par.channel.onclose = () => {
             par.offline = 1;
             delete par.bitrate;
-            console.log(`Leaves: ${par}`);
+            console.log(`Data Leaves: ${par}`);
         };
     }
 
