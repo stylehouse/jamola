@@ -21,12 +21,12 @@ export class Peering {
             this.Signaling = new SignalingClient({
                 on_peer: ({ peerId, pc }) => {
                     part = 'on_peer'
-                    peerId += "_hoot"
                     // a peer connection
                     //  soon to receive tracks, name etc
                     let par = this.party.i_par({ peerId, pc });
                     // but first:
                     this.pc_handlers(par)
+                    // which leads to couldbeready(par) to graduate to tracksable.
                 },
             });
         } catch (error) {
@@ -34,6 +34,7 @@ export class Peering {
         }
     }
     stop() {
+        console.log("Peering stop()")
         this.Signaling.close()
     }
 

@@ -202,6 +202,7 @@
         par.name = name;
         console.log(`Received name from ${par.peerId}: ${par.name}`)
 
+        // this is a dependency of:
         party.peering.couldbeready(par)
         
         // give some time 
@@ -443,19 +444,7 @@
     // switch everything off
     function stopConnection() {
         measuring.close();
-        let let_go = () => {
-            party.stop()
-        }
-        participants.map(par => {
-            par.pc?.close && par.pc?.close();
-            par.local || par.stop_effects()
-            if (par.recorder) {
-                par.recorder.stop(let_go)
-                let_go = () => {}
-            }
-        });
-
-        let_go()
+        party.stop()
         status = "Disconnected";
         errorMessage = "";
     }

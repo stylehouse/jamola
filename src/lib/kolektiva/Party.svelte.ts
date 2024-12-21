@@ -6,6 +6,8 @@ export class Party {
     participants = $state([])
     measuring:Measuring
 
+    userName
+
     // is not server-side so create this in new_pc when we need it
     // < Party etc shouldn't happen server-side at all? lots of *.svelte to be done
     //   subscribing to changes in Party.* or Participant.effect.*.*
@@ -26,6 +28,31 @@ export class Party {
         let was = window.party_singleton 
         if (was) was.stop()
         window.party_singleton = this
+    }
+    start() {
+        this.peering && this.stop()
+        this.peering = new Peering({party:this})
+        this.peering.start()
+    }
+
+    stop() {
+        // waylay closing the socket for any final audio-upload
+        let let_go = () => {
+            this.peering?.stop()
+        }
+
+        this.participants.map(par => {
+            par.pc?.close && par.pc?.close();
+
+            par.local || par.drop_effects()
+
+            if (par.recorder) {
+                par.recorder.stop(let_go)
+                let_go = () => {}
+            }
+        });
+
+        let_go()
     }
 
 
@@ -111,14 +138,5 @@ export class Party {
 
 
 
-    start() {
-        this.peering && this.stop()
-        this.peering = new Peering({party:this})
-        this.peering.start()
-    }
-
-    stop() {
-        this.peering?.stop()
-    }
 
 }
