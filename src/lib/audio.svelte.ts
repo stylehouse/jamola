@@ -395,9 +395,11 @@ export class Gainorator extends AudioGainEffectoid {
     }
 
     // Start continuous volume metering
+    // < centralise all timery things
     private startMetering() {
         cancelAnimationFrame(this.meterUpdateId);
         const meterUpdate = () => {
+            if (!this.analyserNode) return
             cancelAnimationFrame(this.meterUpdateId);
             // Get volume data
             this.analyserNode.getByteTimeDomainData(this.dataArray);

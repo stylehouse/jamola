@@ -81,12 +81,16 @@ export class Peering {
         //   but none of this other action (from on*change handlers)
         //    is via that try+catch, so...
         if (!par.channel) {
-
             // trigger channel creation
+            setTimeout(() => {
             this.createDataChannel(par)
+        },100)
 
             setTimeout(() => {
                 this.lets_send_our_track(par)
+
+                this.channel_emit_noise(par)
+
             },500)
 
             return
@@ -104,6 +108,10 @@ export class Peering {
             this.open_ontrack(par)
         }
         console.log(`${par} no name...`)
+    }
+    channel_emit_noise(par) {
+        console.log(`Data noise to ${par}`)
+        par.emit("gabora","swim")
     }
     
     // we wait to accept tracks
@@ -196,7 +204,7 @@ export class Peering {
         // like socket.io
         par.emit = (type,data) => {
             if (!par.channel || par.channel.readyState != "open") {
-                return
+                return console.error(`channel ${par} not open yet`)
             }
             par.channel.send(JSON.stringify({type,...data}))
         }

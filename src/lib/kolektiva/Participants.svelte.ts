@@ -76,14 +76,17 @@ export class Participant {
     //  for local it's i_myself_par(), otherwise open_ontrack()
     on_ready() {
         console.log(`par.on_ready: ${this}`)
+        this.effects && this.drop_effects()
         this.new_effects()
     }
     // disarm anything thaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaat makes sound
-    //  the above typo was ubbbbbbbbbbbbbbbbbbbuntu laggin, missing my g's
-    //   
-    stop_effects() {
+    //  the above typo was ubbbbbbbbbbbbbbbbbbbuntu laggin
+    drop_effects() {
         this.effects?.map(fec => fec.destroy())
-        delete this.effects
+        console.log(`par.drop_effects: ${this}`)
+        // < this seems to not do the trick?
+        //delete this.effects
+        this.effects = undefined
     }
 
 
@@ -107,7 +110,7 @@ export class Participant {
         setTimeout(() => {
             if (par.cooked.output) return
             // should have it by now
-            throw `should have ${this} stream by now`
+            console.error(`should have ${this} stream by now`)
         },2500)
     }
     have_output(stream) {
