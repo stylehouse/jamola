@@ -28,7 +28,13 @@ export class Peering {
                     this.pc_handlers(par)
                     // which leads to couldbeready(par) to graduate to tracksable.
                     // throw datachannel out there now, so it can be part of the first negotiation
-                    // this.couldbeready(par)
+                    this.couldbeready(par)
+                },
+                on_reneg: ({ peerId, pc }) => {
+                    // hack for the renegotiation as a new pc, but same par
+                    let par = this.party.i_par({ peerId })
+                    debugger
+                    delete par.channel
                 },
             });
         } catch (error) {

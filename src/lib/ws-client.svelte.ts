@@ -14,6 +14,7 @@ export class SignalingClient {
         this.peerConnections = new Map();
         this.on_peer = options.on_peer || (() => {});
         this.on_close = options.on_close;
+        this.on_reneg = options.on_reneg;
 
         // Join a room
         this.socket.emit('join-room', 'room-1');
@@ -40,7 +41,7 @@ export class SignalingClient {
         // When we receive an offer
         this.socket.on('offer', async ({ offer, offererId }) => {
             console.log("Got offer: ", offer);
-            const pc = this.createPeerConnection(offererId);
+            const pc = await this.createPeerConnection(offererId);
             await pc.setRemoteDescription(offer);
 
             const answer = await pc.createAnswer();
@@ -71,7 +72,7 @@ export class SignalingClient {
     // create a connection and send an offer of it
     // on room join, the newbie sends offers to everyone
     async offerPeerConnection(peerId) {
-        const pc = this.createPeerConnection(peerId);
+        const pc = await this.createPeerConnection(peerId);
         const offer = await pc.createOffer();
 
         await pc.setLocalDescription(offer);
@@ -81,7 +82,14 @@ export class SignalingClient {
         });
     }
 
-    createPeerConnection(peerId) {
+    async createPeerConnection(peerId) {
+        // we replace these rather than deal with negotiation
+        let was = this.peerConnections.get(peerId);
+        if (was) {
+            console.warn(`already had a pc to ${peerId}, closing...`)
+            await was.close()
+        }
+
         const pc = new RTCPeerConnection({
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' }
@@ -104,7 +112,7 @@ export class SignalingClient {
         // Add negotiation handling
         pc.onnegotiationneeded = async () => {
             console.warn(`onnegotiationneeded ${peerId}`)
-            if (pc.signalingState === "stable") {
+            this.on_reneg?.({peerId,pc})
                 this.renegotiate(pc,peerId)
             }
             else {
