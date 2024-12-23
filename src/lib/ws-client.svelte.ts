@@ -113,13 +113,18 @@ export class SignalingClient {
         pc.onnegotiationneeded = async () => {
             console.warn(`onnegotiationneeded ${peerId}`)
             this.on_reneg?.({peerId,pc})
-                this.renegotiate(pc,peerId)
+
+            this.renegotiate(pc,peerId)
+            if (1) {
+                // ?
             }
             else {
                 setTimeout(() => {
                     this.renegotiate(pc,peerId)
                 }, 230)
             }
+
+            
         };
 
         // Let them store it in their SvelteMap,
@@ -129,6 +134,16 @@ export class SignalingClient {
         return pc;
     }
 
+    // < possible easy-way-out?
+    // just replace the whole pc when any settings change
+    async fatal_renegotiate(pc,peerId) {
+        // < takes tons of code apparently
+        //   would we avoid interrupting their tracks while somethinging around?
+        await pc.close()
+        setTimeout(() => {
+            this.offerPeerConnection(peerId);
+        },200)
+    }
     async renegotiate(pc,peerId) {
         try {
             if (pc.signalingState === "stable") {

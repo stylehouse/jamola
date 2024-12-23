@@ -33,7 +33,8 @@ export class Peering {
                 on_reneg: ({ peerId, pc }) => {
                     // hack for the renegotiation as a new pc, but same par
                     let par = this.party.i_par({ peerId })
-                    debugger
+                    console.warn(`~~~~~~~~~~~~~ reneg ${par} - ${par.constate}`)
+
                     delete par.channel
                 },
             });

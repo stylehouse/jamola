@@ -47,6 +47,7 @@ export class Participant {
     // a new par, a new pc
     new_pc() {
         this.party.measuring.add_par(this);
+        
         if (this.wants_recording()) {
             // they record (.start()) when a track arrives
             this.recorder = new parRecorder({par:this,...this.party.stuff_we_tell_parRecorder()})
