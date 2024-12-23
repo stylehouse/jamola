@@ -27,6 +27,8 @@ export class Peering {
                     // but first:
                     this.pc_handlers(par)
                     // which leads to couldbeready(par) to graduate to tracksable.
+                    // throw datachannel out there now, so it can be part of the first negotiation
+                    // this.couldbeready(par)
                 },
             });
         } catch (error) {
@@ -49,7 +51,6 @@ export class Peering {
         //  so get the receiver ready now:
         // and this should be ready very soon after that so:
         par.pc.ondatachannel = ({channel}) => {
-            debugger
             this.incomingDataChannel(par,channel)
         };
 
@@ -82,36 +83,18 @@ export class Peering {
         //    is via that try+catch, so...
         if (!par.channel) {
             // trigger channel creation
-            // setTimeout(() => {
-                this.createDataChannel(par)
-            // },100)
-
-            setTimeout(() => {
-                // this.lets_send_our_track(par)
-
-                this.channel_emit_noise(par)
-
-            },500)
-
+            this.createDataChannel(par)
             return
         }
         if (par.name != null) {
             // their channel delivers to us their name!
             // this is ready!
             // and our par.effects will be created with fully name
-            console.log(`${this} par.on_ready!`)
-            debugger
             par.on_ready()
-            console.log(`${par} on_ready`)
 
             // we are now ready to receive tracks
             this.open_ontrack(par)
         }
-        console.log(`${par} no name...`)
-    }
-    channel_emit_noise(par) {
-        console.log(`Data noise to ${par}`)
-        par.emit("gabora","swim")
     }
     
     // we wait to accept tracks
@@ -148,7 +131,7 @@ export class Peering {
                 // if we don't accept 'new' initially they never get there...
                 "new",
                 "connected",
-                // ,'connecting'
+                "connecting"
             ].includes(par.pc.connectionState)
             &&
             [
@@ -156,19 +139,20 @@ export class Peering {
                 // 'have-local-offer'
             ].includes(par.pc.signalingState)
         
+        console.log(`-o- ${par}.pc is ${par.constate}`)
+        
         // call this any time we could breakthrough
-        par.pc_ready
-            && this.couldbeready(par)
+        this.couldbeready(par)
     }
 
     // the receiver is this other channel they sent us
     // put handlers of replies in par_msg_handler.$type
     incomingDataChannel(par,channel) {
         par.their_channel = channel
-        console.log(`theirData arrives: ${par}`);
+        // console.log(`theirData arrives: ${par}`);
         par.their_channel.onmessage = (event) => {
             const data = JSON.parse(event.data);
-            console.log(`theirData message: ${par}`,data);
+            // console.log(`theirData message: ${par}`,data);
             let handler = par.party.par_msg_handler[data.type]
             if (!handler) {
                 return console.warn(`No handler for par=${par.name} message: `,data)
@@ -186,13 +170,9 @@ export class Peering {
             console.log(`theirData error: ${par}`,e);
         };
         par.their_channel.onopen = () => {
-            delete par.offline;
-            announce_self();
-            console.log(`theirData open: ${par}`);
+            // console.log(`theirData open: ${par}`);
         };
         par.their_channel.onclose = () => {
-            par.offline = 1;
-            delete par.bitrate;
             console.log(`theirData Leaves: ${par}`);
         };
     }
@@ -257,59 +237,3 @@ export class Peering {
 
 
 
-
-
-// participants exchange names in a webrtc datachannel
-// one is attached to the par:
-export function createDataChannel({par,par_msg_handler,userName}) {
-    let original = !par.channel
-    par.channel ||= par.pc.createDataChannel("participants");
-
-    // you (eg Measuring) can send messages.
-    // like socket.io
-    par.emit = (type,data) => {
-        if (!par.channel || par.channel.readyState != "open") {
-            return
-        }
-        par.channel.send(JSON.stringify({type,...data}))
-    }
-    // the receiver is this other channel they sent us
-    // put handlers of replies in par_msg_handler.$type
-    par.pc.ondatachannel = ({channel}) => {
-        par.their_channel = channel
-        par.their_channel.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            let handler = par_msg_handler[data.type]
-            if (!handler) {
-                return console.warn(`No handler for par=${par.name} message: `,data)
-            }
-            // < for some reason we have to seek out the par again at this point
-            //   not doing this leads to this.par.name being undefined
-            //    much later in parRecorder.uploadCurrentSegment
-            //    see "it seems like a svelte5 object proxy problem"
-            par = par.party.repar(par)
-
-            handler(par,data)
-        };
-    };
-    let announce_self = () => {
-        par.emit("participant",{name:userName})
-        // once
-        announce_self = () => {};
-    };
-    if (par.channel.readyState === "open") {
-        debugger;
-        announce_self();
-    }
-
-    par.channel.onopen = () => {
-        delete par.offline;
-        announce_self();
-        // console.log(`Data open: ${par.peerId}`);
-    };
-    par.channel.onclose = () => {
-        par.offline = 1;
-        delete par.bitrate;
-        console.log(`Leaves: ${par.name}`);
-    };
-}

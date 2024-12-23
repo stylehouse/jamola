@@ -83,7 +83,6 @@ export class Participant {
     //  the above typo was ubbbbbbbbbbbbbbbbbbbuntu laggin
     drop_effects() {
         this.effects?.map(fec => fec.destroy())
-        console.log(`par.drop_effects: ${this}`)
         // < this seems to not do the trick?
         //delete this.effects
         this.effects = undefined

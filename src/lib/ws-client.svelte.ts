@@ -96,11 +96,45 @@ export class SignalingClient {
             }
         };
 
+        // Add negotiation handling
+        pc.onnegotiationneeded = async () => {
+            console.warn(`onnegotiationneeded ${peerId}`)
+            if (pc.signalingState === "stable") {
+                this.renegotiate(pc,peerId)
+            }
+            else {
+                setTimeout(() => {
+                    this.renegotiate(pc,peerId)
+                }, 230)
+            }
+        };
+
         // Let them store it in their SvelteMap,
         //  and attach whatever else (eg .ontrack)
         this.on_peer({ peerId, pc });
 
         return pc;
+    }
+
+    async renegotiate(pc,peerId) {
+        try {
+            if (pc.signalingState === "stable") {
+                // Clear remote description
+                await pc.setRemoteDescription(new RTCSessionDescription({ type: 'rollback' }));
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                
+                this.socket.emit('offer', {
+                    targetId: peerId,
+                    offer
+                });
+            }
+            else {
+                console.warn("Avoiding re-offer because pc.signalingState="+pc.signalingState)
+            }
+        } catch (err) {
+            console.error("Negotiation error for peer", peerId, err);
+        }
     }
 
     close() {

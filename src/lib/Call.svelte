@@ -7,7 +7,6 @@
     import YourName from "./YourName.svelte";
     import YourTitle from "./YourTitle.svelte";
     import { CookedStream, Delaysagne, FreshStream, Gainorator, Gaintrol } from "./audio.svelte";
-    import { createDataChannel } from "./coms.svelte";
     import { userAgent } from "./Y";
     import { Party } from "./kolektiva/Party.svelte";
     import Participants from "./ui/Participants.svelte";
