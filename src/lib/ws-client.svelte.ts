@@ -27,23 +27,14 @@ export class SignalingClient {
         this.socket.on('peers-in-room', async ({ peers }) => {
             // Create an offer for each existing peer
             for (const peerId of peers) {
-                const pc = this.createPeerConnection(peerId);
-                const offer = await pc.createOffer();
-
-                // meddle with bitrates
-
-                await pc.setLocalDescription(offer);
-                this.socket.emit('offer', {
-                    targetId: peerId,  // This is who we want to connect to
-                    offer
-                });
+                this.offerPeerConnection(peerId);
             }
         });
 
         // When a new peer joins
         this.socket.on('peer-joined', async ({ peerId }) => {
             console.log('New peer:', peerId);
-            // they are about to get peers-in-room and emit offer
+            // peerId are about to get our peerId via peers-in-room and emit offer
         });
 
         // When we receive an offer
@@ -73,6 +64,20 @@ export class SignalingClient {
             const pc = this.peerConnections.get(from);
             if (!pc) return
             await pc.addIceCandidate(candidate);
+        });
+    }
+
+    // the high-level action
+    // create a connection and send an offer of it
+    // on room join, the newbie sends offers to everyone
+    async offerPeerConnection(peerId) {
+        const pc = this.createPeerConnection(peerId);
+        const offer = await pc.createOffer();
+
+        await pc.setLocalDescription(offer);
+        this.socket.emit('offer', {
+            targetId: peerId,  // This is who we want to connect to
+            offer
         });
     }
 
