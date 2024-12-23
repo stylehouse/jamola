@@ -82,12 +82,12 @@ export class Peering {
         //    is via that try+catch, so...
         if (!par.channel) {
             // trigger channel creation
-            setTimeout(() => {
-            this.createDataChannel(par)
-        },100)
+            // setTimeout(() => {
+                this.createDataChannel(par)
+            // },100)
 
             setTimeout(() => {
-                this.lets_send_our_track(par)
+                // this.lets_send_our_track(par)
 
                 this.channel_emit_noise(par)
 
