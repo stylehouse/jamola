@@ -49,6 +49,7 @@ export class Peering {
 
     pc_handlers(par) {
         // until this stabilises:
+        par.pc.oniceconnectionstatechange =
         par.pc.onconnectionstatechange =
         par.pc.onsignalingstatechange = () => {
             this.stabilise_par_pc(par)
@@ -128,7 +129,12 @@ export class Peering {
     //  and forever copy it to par.constate
     stabilise_par_pc(par) {
         // this falls down with the network?
-        let says = par.pc.connectionState + "/" + par.pc.signalingState;
+        let says = [
+            par.pc.connectionState,
+            par.pc.signalingState,
+            // PeerJS does pc.close() if this is failed|closed ...
+            par.pc.iceConnectionState,
+        ].join('/')
         par.constate = says;
 
         // https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/connectionState
