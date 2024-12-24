@@ -109,7 +109,8 @@ export class SignalingClient {
             }
         };
 
-        // Add negotiation handling
+        // negotiation handling
+        // PeerJS doesn't do this (and it turns out neither do we)
         pc.onnegotiationneeded = async () => {
             console.warn(`onnegotiationneeded ${peerId}`)
             this.on_reneg?.({peerId,pc})

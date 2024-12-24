@@ -28,14 +28,12 @@ export class Peering {
                     this.pc_handlers(par)
                     // which leads to couldbeready(par) to graduate to tracksable.
                     // throw datachannel out there now, so it can be part of the first negotiation
-                    this.couldbeready(par)
+                    this.createDataChannel(par)
                 },
                 on_reneg: ({ peerId, pc }) => {
                     // hack for the renegotiation as a new pc, but same par
                     let par = this.party.i_par({ peerId })
                     console.warn(`~~~~~~~~~~~~~ reneg ${par} - ${par.constate}`)
-
-                    delete par.channel
                 },
             });
         } catch (error) {
@@ -86,14 +84,6 @@ export class Peering {
             return
         }
         console.log(`${par} couldbeready...`)
-        // < resolve a promise to advance the $part of start() we are up to
-        //   but none of this other action (from on*change handlers)
-        //    is via that try+catch, so...
-        if (!par.channel) {
-            // trigger channel creation
-            this.createDataChannel(par)
-            return
-        }
         if (par.name != null) {
             // their channel delivers to us their name!
             // this is ready!
