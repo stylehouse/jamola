@@ -6,11 +6,19 @@ const config = {
     routerUrl: process.env.ROUTER_URL || 'http://192.168.1.1',
     username: process.env.ROUTER_USERNAME,
     password: process.env.ROUTER_PASSWORD,
+    portMapping: {
+      name: 's',
+      externalPort: '443',
+      internalPort: '9443',
+      protocol: 'TCP'
+    },
     checkInterval: parseInt(process.env.CHECK_INTERVAL, 10) || 600000, // 10 minutes
     headless: process.env.PUPPETEER_HEADLESS !== 'false'
 };
 
-let texts = (els) => els.forEach(div => div.textContent.trim())
+function texts(els) {
+    return els.forEach(div => div.textContent.trim())
+}
 // on adding a mapping to a host, we must find the identifier of our application
 // will be something like:
 //  'InternetGatewayDevice.Services.X_Application.32.'
@@ -58,7 +66,18 @@ async function select_internal_host() {
         return go.toUpperCase()
     })
 }
-
+async function trySelector(fn,message = "...this is probably fine: ") {
+    try {
+        await fn();
+    } catch (error) {
+        if (error.name === 'TimeoutError') {
+            console.log(message, error.message);
+            return false;
+        }
+        throw error;
+    }
+    return true;
+}
 
 
 async function checkRouterConfig() {
@@ -87,178 +106,75 @@ async function checkRouterConfig() {
             width: 898,
             height: 843
         })
-    }
-    {
-        const targetPage = page;
-        await targetPage.goto('http://192.168.1.1/');
+        console.log('Navigating to router...');
+        await page.goto('http://192.168.1.1/');
+
+        // comes filled in
+        // await page.type('#index_username', '!!Huawei');
+        await page.type('#password', '@HuaweiHgw');
+        await page.click('#loginbtn');
+    
+
 
         await page.screenshot({ path: '/app/logs/step1.png' });
-    }
-    {
-        await page.type('#index_username', '!!Huawei');
+
+        
+        // Handle popup if it appears
+        console.log('Logging in...');
+        await trySelector(async () => {
+            await page.waitForSelector('#confirm_window', { timeout: 5000 });
+            await page.click('#confirm_window');
+        }, 'No confirmation popup found')
+
+
+
+
+        // Navigate to forwarding settings
+        console.log('Navigating to port forwarding...');
+        await page.waitForSelector('#internet_settings_menu > div');
         await page.screenshot({ path: '/app/logs/step2.png' });
-    }
-    {
-        const targetPage = page;
-        await puppeteer.Locator.race([
-            targetPage.locator('#password'),
-            targetPage.locator('::-p-xpath(//*[@id=\\"password\\"])'),
-            targetPage.locator(':scope >>> #password')
-        ])
-            .setTimeout(timeout)
-            .fill('@HuaweiHgw');
-    }
-    {
-        const targetPage = page;
-        await puppeteer.Locator.race([
-            targetPage.locator('::-p-aria(Log in)'),
-            targetPage.locator('#loginbtn'),
-            targetPage.locator('::-p-xpath(//*[@id=\\"loginbtn\\"])'),
-            targetPage.locator(':scope >>> #loginbtn'),
-            targetPage.locator('::-p-text(Log in)')
-        ])
-            .setTimeout(timeout)
-            .click({
-              offset: {
-                x: 53,
-                y: 21,
-              },
-            });
-    }
-    {
-        const targetPage = page;
-        const promises = [];
-        const startWaitingForEvents = () => {
-            promises.push(targetPage.waitForNavigation());
-        }
-        await puppeteer.Locator.race([
-            targetPage.locator('::-p-aria(X)'),
-            targetPage.locator('#confirm_window'),
-            targetPage.locator('::-p-xpath(//*[@id=\\"confirm_window\\"])'),
-            targetPage.locator(':scope >>> #confirm_window'),
-            targetPage.locator('::-p-text(X)')
-        ])
-            .setTimeout(timeout)
-            .on('action', () => startWaitingForEvents())
-            .click({
-              offset: {
-                x: 5.34375,
-                y: 13.96875,
-              },
-            });
-        await Promise.all(promises);
-    }
-    {
-        const targetPage = page;
-        const promises = [];
-        const startWaitingForEvents = () => {
-            promises.push(targetPage.waitForNavigation());
-        }
-        await puppeteer.Locator.race([
-            targetPage.locator('#internet_settings_menu > div'),
-            targetPage.locator('::-p-xpath(//*[@id=\\"internet_settings_menu\\"]/div)'),
-            targetPage.locator(':scope >>> #internet_settings_menu > div')
-        ])
-            .setTimeout(timeout)
-            .on('action', () => startWaitingForEvents())
-            .click({
-              offset: {
-                x: 96,
-                y: 21,
-              },
-            });
-        await Promise.all(promises);
-    }
-    {
-        const targetPage = page;
-        await puppeteer.Locator.race([
-            targetPage.locator('::-p-aria(Forwarding) >>>> ::-p-aria([role=\\"generic\\"])'),
-            targetPage.locator('li:nth-of-type(9) font'),
-            targetPage.locator('::-p-xpath(//*[@id=\\"nat_menuId\\"]/font)'),
-            targetPage.locator(':scope >>> li:nth-of-type(9) font'),
-            targetPage.locator('::-p-text(Forwarding)')
-        ])
-            .setTimeout(timeout)
-            .click({
-              offset: {
-                x: 65,
-                y: 5,
-              },
-            });
+        await page.click('#internet_settings_menu > div');
+
+        // Forwarding
+        await page.waitForSelector('li:nth-of-type(9) font');
+        await page.screenshot({ path: '/app/logs/step3.png' });
+        await page.click('li:nth-of-type(9) font');
     }
     // < here we should look at the port mappings and abort if exists?
     // 
     {
-        let is_fine = false
-        await page.evaluate(() => {
-            let els = document.querySelectorAll('div#nat_pm_view_data_list > div[id^=nat_pm_view_data_list_InternetGatewayDevice_Services_X_Portmapping]  div[id$="_data"] div div')
-        
-            // since els is an array, "s" == one member
-            if (texts(els).includes("s")) {
-                is_fine = true
-            }
+        // Check if mapping exists
+        console.log('Checking existing mappings...');
+        let big = 'div#nat_pm_view_data_list > '
+            +'div[id^=nat_pm_view_data_list_InternetGatewayDevice_Services_X_Portmapping] '
+            +'div[id$="_data"] div div'
+        let some = await trySelector(async () => {
+            await page.waitForSelector(big);
         })
-        if (is_fine) {
-            // < abort now, happily
-            return console.log("already port forwarded")
+        await page.screenshot({ path: '/app/logs/step4.png' });
+        // if there are some portmappings on the page, look at em
+        if (some) {
+            const existingMappings = await page.$$eval(
+                big,
+                els => els.map(el => el.textContent.trim())
+            );
+        
+            if (existingMappings.includes('s')) {
+              console.log('Port forward already exists');
+              return;
+            }
         }
     
     }
 
 
+    // Add new mapping
+    console.log('Adding new port mapping...');
+    await page.click('#nat_pm_view_data_add_link'); // New port mapping button
+    await page.waitForSelector('#nat_pm_view_data_list_multiedit_portmapping_Name_ctrl');
+    await page.type('#nat_pm_view_data_list_multiedit_portmapping_Name_ctrl', 's');
 
-
-
-
-
-
-
-
-
-
-
-    // New port mapping
-    {
-        const targetPage = page;
-        await puppeteer.Locator.race([
-            targetPage.locator('#i18n-28'),
-            targetPage.locator('::-p-xpath(//*[@id=\\"i18n-28\\"])'),
-            targetPage.locator(':scope >>> #i18n-28'),
-            targetPage.locator('::-p-text(New port mapping)')
-        ])
-            .setTimeout(timeout)
-            .click({
-              offset: {
-                x: 36,
-                y: 9,
-              },
-            });
-    }
-    {
-        const targetPage = page;
-        await puppeteer.Locator.race([
-            targetPage.locator('#nat_pm_view_data_list_multiedit_portmapping_Name_ctrl'),
-            targetPage.locator('::-p-xpath(//*[@id=\\"nat_pm_view_data_list_multiedit_portmapping_Name_ctrl\\"])'),
-            targetPage.locator(':scope >>> #nat_pm_view_data_list_multiedit_portmapping_Name_ctrl')
-        ])
-            .setTimeout(timeout)
-            .click({
-              offset: {
-                x: 59.03125,
-                y: 11,
-              },
-            });
-    }
-    {
-        const targetPage = page;
-        await puppeteer.Locator.race([
-            targetPage.locator('#nat_pm_view_data_list_multiedit_portmapping_Name_ctrl'),
-            targetPage.locator('::-p-xpath(//*[@id=\\"nat_pm_view_data_list_multiedit_portmapping_Name_ctrl\\"])'),
-            targetPage.locator(':scope >>> #nat_pm_view_data_list_multiedit_portmapping_Name_ctrl')
-        ])
-            .setTimeout(timeout)
-            .fill('s');
-    }
+    await page.screenshot({ path: '/app/logs/step5.png' });
 
     
     {
@@ -266,176 +182,31 @@ async function checkRouterConfig() {
         //  even if the last one didn't
         
         
-        let appid = await select_portforwarding_app()
+        let appid = await select_portforwarding_app(page)
         if (appid != null) {
             console.log("found our portforwarding app")
         }
         else {
-            // add application
-            {
-                const targetPage = page;
-                await puppeteer.Locator.race([
-                    targetPage.locator('#i18n-58'),
-                    targetPage.locator('::-p-xpath(//*[@id=\\"i18n-58\\"])'),
-                    targetPage.locator(':scope >>> #i18n-58'),
-                    targetPage.locator('::-p-text(Add port mapping)')
-                ])
-                    .setTimeout(timeout)
-                    .click({
-                    offset: {
-                        x: 124.03125,
-                        y: 8,
-                    },
-                    });
-            }
-            {
-                const targetPage = page;
-                await puppeteer.Locator.race([
-                    targetPage.locator('#portmapping_application_id_add_add > div'),
-                    targetPage.locator('::-p-xpath(//*[@id=\\"portmapping_application_id_add_add\\"]/div)'),
-                    targetPage.locator(':scope >>> #portmapping_application_id_add_add > div')
-                ])
-                    .setTimeout(timeout)
-                    .click({
-                    offset: {
-                        x: 12.953125,
-                        y: 12.40625,
-                    },
-                    });
-            }
-            // fill in name
-            {
-                const targetPage = page;
-                await puppeteer.Locator.race([
-                    targetPage.locator('#portmapping_application_id_add_edit_application_Name_ctrl'),
-                    targetPage.locator('::-p-xpath(//*[@id=\\"portmapping_application_id_add_edit_application_Name_ctrl\\"])'),
-                    targetPage.locator(':scope >>> #portmapping_application_id_add_edit_application_Name_ctrl')
-                ])
-                    .setTimeout(timeout)
-                    .click({
-                    offset: {
-                        x: 65.25,
-                        y: 18.40625,
-                    },
-                    });
-            }
-            {
-                const targetPage = page;
-                await puppeteer.Locator.race([
-                    targetPage.locator('#portmapping_application_id_add_edit_application_Name_ctrl'),
-                    targetPage.locator('::-p-xpath(//*[@id=\\"portmapping_application_id_add_edit_application_Name_ctrl\\"])'),
-                    targetPage.locator(':scope >>> #portmapping_application_id_add_edit_application_Name_ctrl')
-                ])
-                    .setTimeout(timeout)
-                    .fill('s');
-            }
-            {
-                const targetPage = page;
-                await puppeteer.Locator.race([
-                    targetPage.locator('#ember5544 > div:nth-of-type(1)'),
-                    targetPage.locator('::-p-xpath(//*[@id=\\"application_externalPort\\"])'),
-                    targetPage.locator(':scope >>> #ember5544 > div:nth-of-type(1)')
-                ])
-                    .setTimeout(timeout)
-                    .click({
-                    offset: {
-                        x: 117.859375,
-                        y: 6.40625,
-                    },
-                    });
-            }
-            {
-                const targetPage = page;
-                await puppeteer.Locator.race([
-                    targetPage.locator('#ember5544 > div:nth-of-type(1) input:nth-of-type(1)'),
-                    targetPage.locator('::-p-xpath(//*[@id=\\"ember5560\\"]/input[1])'),
-                    targetPage.locator(':scope >>> #ember5544 > div:nth-of-type(1) input:nth-of-type(1)')
-                ])
-                    .setTimeout(timeout)
-                    .fill('443');
-            }
-            {
-                const targetPage = page;
-                await puppeteer.Locator.race([
-                    targetPage.locator('#ember5560'),
-                    targetPage.locator('::-p-xpath(//*[@id=\\"ember5560\\"])'),
-                    targetPage.locator(':scope >>> #ember5560'),
-                    targetPage.locator('::-p-text(443         )')
-                ])
-                    .setTimeout(timeout)
-                    .click({
-                    offset: {
-                        x: 54.265625,
-                        y: 15.40625,
-                    },
-                    });
-            }
-            {
-                const targetPage = page;
-                await puppeteer.Locator.race([
-                    targetPage.locator('#ember5544 > div:nth-of-type(1) input:nth-of-type(2)'),
-                    targetPage.locator('::-p-xpath(//*[@id=\\"ember5560\\"]/input[2])'),
-                    targetPage.locator(':scope >>> #ember5544 > div:nth-of-type(1) input:nth-of-type(2)')
-                ])
-                    .setTimeout(timeout)
-                    .fill('443');
-            }
-            {
-                const targetPage = page;
-                await puppeteer.Locator.race([
-                    targetPage.locator('#ember5544 > div:nth-of-type(2)'),
-                    targetPage.locator('::-p-xpath(//*[@id=\\"application_internalPort\\"])'),
-                    targetPage.locator(':scope >>> #ember5544 > div:nth-of-type(2)')
-                ])
-                    .setTimeout(timeout)
-                    .click({
-                    offset: {
-                        x: 181.859375,
-                        y: 12.40625,
-                    },
-                    });
-            }
-            {
-                const targetPage = page;
-                await puppeteer.Locator.race([
-                    targetPage.locator('#ember5544 > div:nth-of-type(2) input:nth-of-type(1)'),
-                    targetPage.locator('::-p-xpath(//*[@id=\\"ember5582\\"]/input[1])'),
-                    targetPage.locator(':scope >>> #ember5544 > div:nth-of-type(2) input:nth-of-type(1)')
-                ])
-                    .setTimeout(timeout)
-                    .fill('9443');
-            }
-            {
-                const targetPage = page;
-                await puppeteer.Locator.race([
-                    targetPage.locator('#i18n-114'),
-                    targetPage.locator('::-p-xpath(//*[@id=\\"i18n-114\\"])'),
-                    targetPage.locator(':scope >>> #i18n-114')
-                ])
-                    .setTimeout(timeout)
-                    .click({
-                    offset: {
-                        x: 16.40625,
-                        y: 6.40625,
-                    },
-                    });
-            }
-            {
-                const targetPage = page;
-                await puppeteer.Locator.race([
-                    targetPage.locator('#portmapping_application_idclose_link_id'),
-                    targetPage.locator('::-p-xpath(//*[@id=\\"portmapping_application_idclose_link_id\\"])'),
-                    targetPage.locator(':scope >>> #portmapping_application_idclose_link_id')
-                ])
-                    .setTimeout(timeout)
-                    .click({
-                    offset: {
-                        x: 4.296875,
-                        y: 7.40625,
-                    },
-                    });
-            }
-            let appid = await select_portforwarding_app()
+            // Add new application
+            await page.click('#i18n-58'); // Add port mapping button
+            await page.click('#portmapping_application_id_add_add > div');
+            await page.type('#portmapping_application_id_add_edit_application_Name_ctrl', config.portMapping.name);
+            await page.screenshot({ path: '/app/logs/step51.png' });
+            
+            // Configure ports
+            await page.type('#ember5544 > div:nth-of-type(1) input:nth-of-type(1)', config.portMapping.externalPort);
+            await page.type('#ember5544 > div:nth-of-type(1) input:nth-of-type(2)', config.portMapping.externalPort);
+            await page.type('#ember5544 > div:nth-of-type(2) input:nth-of-type(1)', config.portMapping.internalPort);
+            await page.screenshot({ path: '/app/logs/step52.png' });
+            
+            await page.click('#i18n-114'); // Save application
+            await page.screenshot({ path: '/app/logs/step53.png' });
+            await page.click('#portmapping_application_idclose_link_id'); // Close dialog
+            
+
+
+            let appid = await select_portforwarding_app(page)
+            await page.screenshot({ path: '/app/logs/step54.png' });
             if (appid != null) {
                 throw "!found our portforwarding app after create"
             }
@@ -470,6 +241,7 @@ async function checkRouterConfig() {
         ])
             .setTimeout(timeout)
             .fill(portmapapp_name);
+        await page.screenshot({ path: '/app/logs/step6.png' });
     }
     // and a host!
     {
@@ -482,6 +254,7 @@ async function checkRouterConfig() {
         ])
             .setTimeout(timeout)
             .fill(mac);
+        await page.screenshot({ path: '/app/logs/step7.png' });
     }
     {
         const targetPage = page;
