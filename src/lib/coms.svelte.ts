@@ -27,8 +27,15 @@ export class Peering {
                     // but first:
                     this.pc_handlers(par)
                     // which leads to couldbeready(par) to graduate to tracksable.
-                    // throw datachannel out there now, so it can be part of the first negotiation
-                    this.createDataChannel(par)
+
+                    if ('want broken') {
+                        // doesn't createDataChannel() fast enough, causes renegotiation
+                        this.couldbeready(par)
+                    }
+                    else {
+                        // throw datachannel out there now, so it can be part of the first negotiation
+                        this.createDataChannel(par)
+                    }
                 },
                 on_reneg: ({ peerId, pc }) => {
                     // hack for the renegotiation as a new pc, but same par
@@ -83,6 +90,11 @@ export class Peering {
             // wait for par.pc to get in a good state
             return
         }
+        if (!par.channel) {
+            // see 'want broken'
+            this.createDataChannel(par)
+            return
+        }
         console.log(`${par} couldbeready...`)
         if (par.name != null) {
             // their channel delivers to us their name!
@@ -124,6 +136,7 @@ export class Peering {
             par.pc.signalingState,
             // PeerJS does pc.close() if this is failed|closed ...
             par.pc.iceConnectionState,
+            par.channel?.readyState ?? "?",
         ].join('/')
         par.constate = says;
 
@@ -131,6 +144,7 @@ export class Peering {
         
         par.pc_ready =
             [
+                // < this may not be true any more:
                 // if we don't accept 'new' initially they never get there...
                 "new",
                 "connected",
@@ -148,6 +162,10 @@ export class Peering {
         this.couldbeready(par)
     }
 
+    // there are two data channels
+    //  because there's no singularity deciding who gets to create one
+    //   < track who originated the offer? it kind of gets lost in the mail
+    //  both pc just arrive in the right state to be able to
     // the receiver is this other channel they sent us
     // put handlers of replies in par_msg_handler.$type
     incomingDataChannel(par,channel) {
@@ -220,6 +238,9 @@ export class Peering {
             par.offline = 1;
             delete par.bitrate;
             console.log(`Data Leaves: ${par}`);
+            // rebuild it!
+            delete par.channel
+            this.couldbeready(par)
         };
     }
 

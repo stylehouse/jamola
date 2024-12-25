@@ -40,7 +40,7 @@ export class SignalingClient {
 
         // When we receive an offer
         this.socket.on('offer', async ({ offer, offererId }) => {
-            console.log("Got offer: ", offer);
+            console.log("offer from "+offererId, offer);
             const pc = await this.createPeerConnection(offererId);
             await pc.setRemoteDescription(offer);
 
@@ -69,10 +69,10 @@ export class SignalingClient {
     }
 
     // the high-level action
-    // create a connection and send an offer of it
+    // create a connection (usually) and send an offer of it
     // on room join, the newbie sends offers to everyone
-    async offerPeerConnection(peerId) {
-        const pc = await this.createPeerConnection(peerId);
+    async offerPeerConnection(peerId,pc?) {
+        pc ||= await this.createPeerConnection(peerId);
         const offer = await pc.createOffer();
 
         await pc.setLocalDescription(offer);
@@ -135,6 +135,19 @@ export class SignalingClient {
         return pc;
     }
 
+    async renegotiate(pc,peerId) {
+        try {
+            if (pc.signalingState === "stable") {
+                // try to!
+                await this.offerPeerConnection(peerId,pc)
+            }
+            else {
+                console.warn("Avoiding re-offer because pc.signalingState="+pc.signalingState)
+            }
+        } catch (err) {
+            console.error("Negotiation error for peer", peerId, err);
+        }
+    }
     // < possible easy-way-out?
     // just replace the whole pc when any settings change
     async fatal_renegotiate(pc,peerId) {
@@ -144,26 +157,6 @@ export class SignalingClient {
         setTimeout(() => {
             this.offerPeerConnection(peerId);
         },200)
-    }
-    async renegotiate(pc,peerId) {
-        try {
-            if (pc.signalingState === "stable") {
-                // Clear remote description
-                await pc.setRemoteDescription(new RTCSessionDescription({ type: 'rollback' }));
-                const offer = await pc.createOffer();
-                await pc.setLocalDescription(offer);
-                
-                this.socket.emit('offer', {
-                    targetId: peerId,
-                    offer
-                });
-            }
-            else {
-                console.warn("Avoiding re-offer because pc.signalingState="+pc.signalingState)
-            }
-        } catch (err) {
-            console.error("Negotiation error for peer", peerId, err);
-        }
     }
 
     close() {
