@@ -2,6 +2,54 @@ x-defaults: &defaults
   restart: always
 
 services:
+  router-config:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM node:20-slim
+        
+        # Install Chrome dependencies
+        RUN apt-get update && apt-get install -y \
+            chromium \
+            chromium-driver \
+            --no-install-recommends \
+        && rm -rf /var/lib/apt/lists/*
+        
+        WORKDIR /app
+
+        # Create non-root user for running Chrome
+        RUN groupadd -r pptruser && useradd -r -g pptruser -G audio,video pptruser \
+            && mkdir -p /home/pptruser/Downloads \
+            && chown -R pptruser:pptruser /home/pptruser \
+            && chown -R pptruser:pptruser /app
+        
+        # Create directory for screenshots and logs
+        RUN mkdir -p logs && chown -R pptruser:pptruser logs
+        
+        COPY package*.json ./
+        RUN npm ci
+        COPY . .
+        
+        ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+            PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+        
+        CMD ["node", "scripts/router-config.js"]
+    volumes:
+      - ./scripts:/app/scripts
+      - ./logs:/app/logs
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    environment:
+      - ROUTER_URL=${ROUTER_URL}
+      - ROUTER_USERNAME=${ROUTER_USERNAME}
+      - ROUTER_PASSWORD=${ROUTER_PASSWORD}
+      - CHECK_INTERVAL=${CHECK_INTERVAL:-600000}
+      - PUPPETEER_HEADLESS=true
+    networks:
+      - web
+    <<: *defaults
+    
   caddy:
     build:
       context: .
