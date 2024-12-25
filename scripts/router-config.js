@@ -1,9 +1,16 @@
 import puppeteer from 'puppeteer';
 import { writeFile } from 'fs/promises';
 import { join } from 'path';
+
+const config = {
+    routerUrl: process.env.ROUTER_URL || 'http://192.168.1.1',
+    username: process.env.ROUTER_USERNAME,
+    password: process.env.ROUTER_PASSWORD,
+    checkInterval: parseInt(process.env.CHECK_INTERVAL, 10) || 600000, // 10 minutes
+    headless: process.env.PUPPETEER_HEADLESS !== 'false'
+};
+
 let texts = (els) => els.forEach(div => div.textContent.trim())
-
-
 // on adding a mapping to a host, we must find the identifier of our application
 // will be something like:
 //  'InternetGatewayDevice.Services.X_Application.32.'
@@ -54,7 +61,7 @@ async function select_internal_host() {
 
 
 
-(async () => {
+async function checkRouterConfig() {
     const browser = await puppeteer.launch({
         headless: "new",
         executablePath: '/usr/bin/chromium',
@@ -72,6 +79,7 @@ async function select_internal_host() {
     const page = await browser.newPage();
     const timeout = 5000;
     page.setDefaultTimeout(timeout);
+    
 
     {
         const targetPage = page;
@@ -83,16 +91,12 @@ async function select_internal_host() {
     {
         const targetPage = page;
         await targetPage.goto('http://192.168.1.1/');
+
+        await page.screenshot({ path: '/app/logs/step1.png' });
     }
     {
-        const targetPage = page;
-        await puppeteer.Locator.race([
-            targetPage.locator('#index_username'),
-            targetPage.locator('::-p-xpath(//*[@id=\\"index_username\\"])'),
-            targetPage.locator(':scope >>> #index_username')
-        ])
-            .setTimeout(timeout)
-            .fill('!!Huawei');
+        await page.type('#index_username', '!!Huawei');
+        await page.screenshot({ path: '/app/logs/step2.png' });
     }
     {
         const targetPage = page;
@@ -838,7 +842,17 @@ async function select_internal_host() {
 
     await browser.close();
 
-})().catch(err => {
-    console.error(err);
-    process.exit(1);
-});
+}
+function main() {
+    try {
+        checkRouterConfig()
+    } catch (err) {
+        // < it would do this anyway right?
+        console.error(err);
+        process.exit(1);
+    }
+}
+
+main()
+
+setInterval(checkRouterConfig, config.checkInterval);

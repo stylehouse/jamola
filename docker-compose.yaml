@@ -28,7 +28,6 @@ services:
         
         COPY package*.json ./
         RUN npm ci
-        COPY . .
         
         ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
             PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
@@ -86,7 +85,6 @@ services:
         WORKDIR /app
         COPY package*.json ./
         RUN npm ci
-        COPY . .
         EXPOSE 3000
     volumes:
       - .:/app:exec
