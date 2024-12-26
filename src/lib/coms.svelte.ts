@@ -1,5 +1,6 @@
 
 import { SignalingClient } from "$lib/ws-client.svelte";
+import { tick } from "svelte";
 import type { Party } from "./kolektiva/Party.svelte";
 
 // front ws-client, do par coming-going
@@ -101,8 +102,9 @@ export class Peering {
             // this is ready!
             // and our par.effects will be created with fully name
             par.on_ready()
-
-            // we are now ready to receive tracks
+            // we can send tracks
+            this.lets_send_our_track(par)
+            // we can receive tracks
             this.open_ontrack(par)
         }
     }
@@ -234,12 +236,13 @@ export class Peering {
             announce_self();
             console.log(`Data open: ${par}`);
         };
-        par.channel.onclose = () => {
+        par.channel.onclose = async () => {
             par.offline = 1;
             delete par.bitrate;
             console.log(`Data Leaves: ${par}`);
-            // rebuild it!
             delete par.channel
+            // wait for possible par.pc_ready=false when par.pc.close()ing
+            await tick()
             this.couldbeready(par)
         };
     }
