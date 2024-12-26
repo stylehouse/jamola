@@ -2,6 +2,9 @@ import puppeteer from 'puppeteer';
 import { writeFile } from 'fs/promises';
 import { join } from 'path';
 
+// CAVEATS:
+// - these env are not connected
+let debug_mode = 0
 const config = {
     routerUrl: process.env.ROUTER_URL || 'http://192.168.1.1',
     username: process.env.ROUTER_USERNAME,
@@ -51,7 +54,7 @@ async function select_portforwarding_app(page) {
             appid = value
         }
     })
-    console.log("Found apps:",appid_to_name)
+    debug_mode && console.log("Found apps:",appid_to_name)
     portmapapp_name = appid
     return appid
 }
@@ -72,7 +75,7 @@ async function select_internal_host(page) {
         })
         return {mac_to_hostname}
     })
-    console.log("Found internal hosts:",mac_to_hostname)
+    debug_mode && console.log("Found internal hosts:",mac_to_hostname)
 
     // select the top priority one
     let mac = config.internalHosts
@@ -160,8 +163,12 @@ async function checkRouterConfig() {
         await page.screenshot({ path: '/app/logs/step3.png' });
         await page.click('li:nth-of-type(9) font');
     }
-    // < here we should look at the port mappings and abort if exists?
-    // 
+    let casually = async () => {
+        await Promise.all([
+            page.waitForNetworkIdle({ idleTime: 50 }),
+            new Promise(resolve => setTimeout(resolve,900))
+        ]);
+    }
 
     let mapping_exists = async () => {
         // Check if mapping exists
@@ -226,10 +233,7 @@ async function checkRouterConfig() {
             await page.click('a#add_portmapping_app'); // Add port mapping application
             await page.screenshot({ path: '/app/logs/step5120-opening_applist.png' });
             // this just pulls up a list of them, click again to add one:
-            await Promise.all([
-                page.waitForNetworkIdle({ idleTime: 50 }),
-                new Promise(resolve => setTimeout(resolve,900))
-            ]);
+            await casually()
             await page.screenshot({ path: '/app/logs/step5121-populated_applist.png' });
             await page.waitForSelector('div#portmapping_application_id div.modal-body');
             await page.screenshot({ path: '/app/logs/step5122-same.png' });
@@ -241,19 +245,13 @@ async function checkRouterConfig() {
             await page.screenshot({ path: '/app/logs/step5131-scrolled-down.png' });
             
             // that takes ages
-            await Promise.all([
-                page.waitForNetworkIdle({ idleTime: 50 }),
-                new Promise(resolve => setTimeout(resolve,900))
-            ]);
+            await casually()
             await page.screenshot({ path: '/app/logs/step5132-same.png' });
             await page.click('a#portmapping_application_id_add_add_link'); // Add port application
 
 
             // that takes ages
-            await Promise.all([
-                page.waitForNetworkIdle({ idleTime: 50 }),
-                new Promise(resolve => setTimeout(resolve,900))
-            ]);
+            await casually()
             scroll_down()
             await page.screenshot({ path: '/app/logs/step5133-form-created.png' });
             // fields to fill in appear slowly:
@@ -267,45 +265,54 @@ async function checkRouterConfig() {
             // Configure ports
             // these start with goddamn zeroes that stay there
             let prej = 'div#portmapping_application_id_add_edit div#application_'
-            let junk = [
+            let portMappings = [
                 [prej+'externalPort div input[data-bind="start"]', config.portMapping.externalPort],
                 [prej+'externalPort div input[data-bind="end"]', config.portMapping.externalPort],
                 [prej+'internalPort div input[data-bind="start"]', config.portMapping.internalPort],
                 // [prej+'internalPort div input[data-bind="end"]', config.portMapping.internalPort],
             ]
+
+            // remove mystery thingies? don't seem to advantage us.
             await page.evaluate(() => {
                 document.querySelectorAll('div#portmapping_application_id_add_edit > script')
                     .forEach((el) => {
-                        el.remove()
+                        // el.remove()
                     })
             });
-            junk.map(async (N) => {
-                await page.evaluate((selector, value) => {
-                  // there seems to be multiple of these..?
-                  document.querySelectorAll('div#portmapping_application_id_add_edit '+selector)
-                    .forEach((el) => {
+                        
+            // Clear and fill each input
+            for (const [selector, value] of portMappings) {
+                await page.evaluate((sel) => {
+                    document.querySelectorAll(sel).forEach(el => {
                         el.value = '';
-                    })
-                }, ...N);
-            })
-            // there's some js validation to appease:
-            junk.map(async ([selector, value]) => {
-                await page.click(selector)
-                await page.type(selector, value);
-            })
+                        // Trigger any validation events
+                        el.dispatchEvent(new Event('input', { bubbles: true }));
+                        el.dispatchEvent(new Event('change', { bubbles: true }));
+                    });
+                }, selector);
+                
+                // Click and type with a small delay between each character
+                await page.click(selector);
+                await page.keyboard.type(value, { delay: 50 });
+            }
+
+            // Final validation events
+            await page.evaluate((mappings) => {
+                mappings.forEach(([selector]) => {
+                    document.querySelectorAll(selector).forEach(el => {
+                        el.dispatchEvent(new Event('blur', { bubbles: true }));
+                        el.dispatchEvent(new Event('change', { bubbles: true }));
+                    });
+                });
+            }, portMappings);
+            
             await page.screenshot({ path: '/app/logs/step5200-ports-filled.png' });
-            await Promise.all([
-                page.waitForNetworkIdle({ idleTime: 50 }),
-                new Promise(resolve => setTimeout(resolve,900))
-            ]);
+            await casually()
             await page.screenshot({ path: '/app/logs/step5202-same.png' });
             
             // Save application
             await page.click('button#portmapping_application_id_add_edit_submitctrl');
-            await Promise.all([
-                page.waitForNetworkIdle({ idleTime: 50 }),
-                new Promise(resolve => setTimeout(resolve,900))
-            ]);
+            await casually()
             
             scroll_down()
             await page.screenshot({ path: '/app/logs/step5300-validation-or-not.png' });
@@ -315,13 +322,11 @@ async function checkRouterConfig() {
 
             console.log("Added portforwarding app")
             // now refresh, see it in the <select> menu
+            // < we'd need to click "New port mapping" etc if so...
+            // await page.reload();
+            // hopefully this wait will get us the new <select>:
 
-            await page.reload();
-
-            await Promise.all([
-                page.waitForNetworkIdle({ idleTime: 50 }),
-                new Promise(resolve => setTimeout(resolve,900))
-            ]);
+            await casually()
             await page.screenshot({ path: '/app/logs/step5307.png' });
 
             let appid = await select_portforwarding_app(page)
@@ -352,361 +357,31 @@ async function checkRouterConfig() {
     
     // select that application + host
     await page.select('select#portmapping_app_id_ctrl',portmapapp_name)
-    await page.screenshot({ path: '/app/logs/step6.png' });
+    await page.screenshot({ path: '/app/logs/step6000-app.png' });
 
     let mac = await select_internal_host(page);
 
     await page.select('select#nat_pm_view_data_list_multiedit_nat_portmaping_internalHost_ctrl',mac)
-    await page.screenshot({ path: '/app/logs/step7.png' });
+    await page.screenshot({ path: '/app/logs/step7000-host.png' });
     await page.click('button#nat_pm_view_data_list_multiedit_submitctrl');
 
     // Wait for network idle and a small timeout
-    await Promise.all([
-        page.waitForNetworkIdle({ idleTime: 50 }),
-        new Promise(resolve => setTimeout(resolve,250))
-    ]);
+    await casually()
 
-    await page.screenshot({ path: '/app/logs/step8.png' });
+    await page.screenshot({ path: '/app/logs/step8000-submit.png' });
 
-    await page.reload()
+    await casually()
 
-    await page.screenshot({ path: '/app/logs/step9.png' });
+    await page.screenshot({ path: '/app/logs/step9000.png' });
     // Wait for network idle and a small timeout
-    await Promise.all([
-        page.waitForNetworkIdle({ idleTime: 50 }),
-        new Promise(resolve => setTimeout(resolve,250))
-    ]);
-    await page.screenshot({ path: '/app/logs/step91.png' });
+    await casually()
+    await page.screenshot({ path: '/app/logs/step9100.png' });
     if (!await mapping_exists()) {
         throw "failed? dont see the mapping"
     }
-    await page.screenshot({ path: '/app/logs/step92.png' });
 
 
     console.log("Done.")
-    if (0) {
-    {
-        const target = await browser.waitForTarget(t => t.url() === 'http://192.168.1.1/html/advance.html', { timeout });
-        const targetPage = await target.page();
-        targetPage.setDefaultTimeout(timeout);
-        await targetPage.keyboard.down('Control');
-    }
-    {
-        const target = await browser.waitForTarget(t => t.url() === 'http://192.168.1.1/html/advance.html', { timeout });
-        const targetPage = await target.page();
-        targetPage.setDefaultTimeout(timeout);
-        await targetPage.keyboard.down('a');
-    }
-    {
-        const target = await browser.waitForTarget(t => t.url() === 'http://192.168.1.1/html/advance.html', { timeout });
-        const targetPage = await target.page();
-        targetPage.setDefaultTimeout(timeout);
-        await targetPage.keyboard.up('a');
-    }
-    {
-        const target = await browser.waitForTarget(t => t.url() === 'http://192.168.1.1/html/advance.html', { timeout });
-        const targetPage = await target.page();
-        targetPage.setDefaultTimeout(timeout);
-        await targetPage.keyboard.up('Control');
-    }
-    {
-        const target = await browser.waitForTarget(t => t.url() === 'http://192.168.1.1/html/advance.html', { timeout });
-        const targetPage = await target.page();
-        targetPage.setDefaultTimeout(timeout);
-        await puppeteer.Locator.race([
-            targetPage.locator('::-p-aria( </a>)'),
-            targetPage.locator('tr:nth-of-type(37) > td.line-content'),
-            targetPage.locator('::-p-xpath(/html/body/table/tbody/tr[37]/td[2])'),
-            targetPage.locator(':scope >>> tr:nth-of-type(37) > td.line-content')
-        ])
-            .setTimeout(timeout)
-            .click({
-              offset: {
-                x: 910,
-                y: 6,
-              },
-            });
-    }
-    {
-        const target = await browser.waitForTarget(t => t.url() === 'http://192.168.1.1/html/advance.html', { timeout });
-        const targetPage = await target.page();
-        targetPage.setDefaultTimeout(timeout);
-        await targetPage.keyboard.down('Control');
-    }
-    {
-        const target = await browser.waitForTarget(t => t.url() === 'http://192.168.1.1/html/advance.html', { timeout });
-        const targetPage = await target.page();
-        targetPage.setDefaultTimeout(timeout);
-        await targetPage.keyboard.down('f');
-    }
-    {
-        const targetPage = page;
-        await targetPage.keyboard.up('Tab');
-    }
-    {
-        const targetPage = page;
-        await targetPage.keyboard.up('Shift');
-    }
-    {
-        const targetPage = page;
-        await targetPage.keyboard.up('Control');
-    }
-    {
-        const targetPage = page;
-        await targetPage.keyboard.down('Control');
-    }
-    {
-        const target = await browser.waitForTarget(t => t.url() === 'http://192.168.1.1/html/advance.html', { timeout });
-        const targetPage = await target.page();
-        targetPage.setDefaultTimeout(timeout);
-        await puppeteer.Locator.race([
-            targetPage.locator('tr:nth-of-type(114) > td.line-content'),
-            targetPage.locator('::-p-xpath(/html/body/table/tbody/tr[114]/td[2])'),
-            targetPage.locator(':scope >>> tr:nth-of-type(114) > td.line-content')
-        ])
-            .setTimeout(timeout)
-            .click({
-              offset: {
-                x: 1690,
-                y: 2,
-              },
-            });
-    }
-    {
-        const target = await browser.waitForTarget(t => t.url() === 'http://192.168.1.1/html/advance.html', { timeout });
-        const targetPage = await target.page();
-        targetPage.setDefaultTimeout(timeout);
-        await targetPage.keyboard.down('Control');
-    }
-    {
-        const target = await browser.waitForTarget(t => t.url() === 'http://192.168.1.1/html/advance.html', { timeout });
-        const targetPage = await target.page();
-        targetPage.setDefaultTimeout(timeout);
-        await targetPage.keyboard.down('f');
-    }
-    {
-        const target = await browser.waitForTarget(t => t.url() === 'http://192.168.1.1/html/advance.html', { timeout });
-        const targetPage = await target.page();
-        targetPage.setDefaultTimeout(timeout);
-        await targetPage.keyboard.up('f');
-    }
-    {
-        const target = await browser.waitForTarget(t => t.url() === 'http://192.168.1.1/html/advance.html', { timeout });
-        const targetPage = await target.page();
-        targetPage.setDefaultTimeout(timeout);
-        await targetPage.keyboard.up('Control');
-    }
-    {
-        const target = await browser.waitForTarget(t => t.url() === 'http://192.168.1.1/html/advance.html', { timeout });
-        const targetPage = await target.page();
-        targetPage.setDefaultTimeout(timeout);
-        await targetPage.keyboard.down('f');
-    }
-    {
-        const target = await browser.waitForTarget(t => t.url() === 'http://192.168.1.1/html/advance.html', { timeout });
-        const targetPage = await target.page();
-        targetPage.setDefaultTimeout(timeout);
-        await targetPage.keyboard.up('f');
-    }
-    {
-        const target = await browser.waitForTarget(t => t.url() === 'http://192.168.1.1/html/advance.html', { timeout });
-        const targetPage = await target.page();
-        targetPage.setDefaultTimeout(timeout);
-        await targetPage.keyboard.down('r');
-    }
-    {
-        const target = await browser.waitForTarget(t => t.url() === 'http://192.168.1.1/html/advance.html', { timeout });
-        const targetPage = await target.page();
-        targetPage.setDefaultTimeout(timeout);
-        await targetPage.keyboard.down('a');
-    }
-    {
-        const target = await browser.waitForTarget(t => t.url() === 'http://192.168.1.1/html/advance.html', { timeout });
-        const targetPage = await target.page();
-        targetPage.setDefaultTimeout(timeout);
-        await targetPage.keyboard.up('r');
-    }
-    {
-        const target = await browser.waitForTarget(t => t.url() === 'http://192.168.1.1/html/advance.html', { timeout });
-        const targetPage = await target.page();
-        targetPage.setDefaultTimeout(timeout);
-        await targetPage.keyboard.up('a');
-    }
-    {
-        const target = await browser.waitForTarget(t => t.url() === 'http://192.168.1.1/html/advance.html', { timeout });
-        const targetPage = await target.page();
-        targetPage.setDefaultTimeout(timeout);
-        await puppeteer.Locator.race([
-            targetPage.locator('::-p-aria( <li class=\\"pull-left text_center paddingleft_10\\">)'),
-            targetPage.locator('tr:nth-of-type(93) > td.line-content'),
-            targetPage.locator('::-p-xpath(/html/body/table/tbody/tr[93]/td[2])'),
-            targetPage.locator(':scope >>> tr:nth-of-type(93) > td.line-content'),
-            targetPage.locator('::-p-text(<li class=\\"pull-left text_center paddingleft_10\\">)')
-        ])
-            .setTimeout(timeout)
-            .click({
-              offset: {
-                x: 665,
-                y: 6,
-              },
-            });
-    }
-    {
-        const target = await browser.waitForTarget(t => t.url() === 'http://192.168.1.1/html/advance.html', { timeout });
-        const targetPage = await target.page();
-        targetPage.setDefaultTimeout(timeout);
-        await puppeteer.Locator.race([
-            targetPage.locator('::-p-aria( <li class=\\"marginright_5 text_center paddingleft_10\\">&nbsp;</li>)'),
-            targetPage.locator('tr:nth-of-type(97) > td.line-content'),
-            targetPage.locator('::-p-xpath(/html/body/table/tbody/tr[97]/td[2])'),
-            targetPage.locator(':scope >>> tr:nth-of-type(97) > td.line-content'),
-            targetPage.locator('::-p-text(<li class=\\"marginright_5)')
-        ])
-            .setTimeout(timeout)
-            .click({
-              offset: {
-                x: 714,
-                y: 0,
-              },
-            });
-    }
-    {
-        const target = await browser.waitForTarget(t => t.url() === 'http://192.168.1.1/html/advance.html', { timeout });
-        const targetPage = await target.page();
-        targetPage.setDefaultTimeout(timeout);
-        await targetPage.keyboard.up('Escape');
-    }
-    {
-        const targetPage = page;
-        await puppeteer.Locator.race([
-            targetPage.locator('::-p-aria(Save) >>>> ::-p-aria([role=\\"generic\\"])'),
-            targetPage.locator('#i18n-61'),
-            targetPage.locator('::-p-xpath(//*[@id=\\"i18n-61\\"])'),
-            targetPage.locator(':scope >>> #i18n-61'),
-            targetPage.locator('::-p-text(Save)')
-        ])
-            .setTimeout(timeout)
-            .click({
-              offset: {
-                x: 19.40625,
-                y: 15,
-              },
-            });
-    }
-    {
-        const targetPage = page;
-        await targetPage.keyboard.down('Shift');
-    }
-    {
-        const target = await browser.waitForTarget(t => t.url() === 'http://192.168.1.1/html/advance.html', { timeout });
-        const targetPage = await target.page();
-        targetPage.setDefaultTimeout(timeout);
-        await puppeteer.Locator.race([
-            targetPage.locator('::-p-aria(var g_userLang = \\"en\\";)'),
-            targetPage.locator('tr:nth-of-type(85) > td.line-content'),
-            targetPage.locator('::-p-xpath(/html/body/table/tbody/tr[85]/td[2])'),
-            targetPage.locator(':scope >>> tr:nth-of-type(85) > td.line-content'),
-            targetPage.locator('::-p-text(var g_userLang)')
-        ])
-            .setTimeout(timeout)
-            .click({
-              offset: {
-                x: 1164,
-                y: 14,
-              },
-            });
-    }
-    {
-        const targetPage = page;
-        await targetPage.keyboard.up('Shift');
-    }
-    {
-        const targetPage = page;
-        await puppeteer.Locator.race([
-            targetPage.locator('#i18n-168'),
-            targetPage.locator('::-p-xpath(//*[@id=\\"i18n-168\\"])'),
-            targetPage.locator(':scope >>> #i18n-168')
-        ])
-            .setTimeout(timeout)
-            .click({
-              offset: {
-                x: 12.4375,
-                y: 11,
-              },
-            });
-    }
-    {
-        const target = await browser.waitForTarget(t => t.url() === 'http://192.168.1.1/html/advance.html', { timeout });
-        const targetPage = await target.page();
-        targetPage.setDefaultTimeout(timeout);
-        await puppeteer.Locator.race([
-            targetPage.locator('::-p-aria(\x3Cscript type=\\"text/x-handlebars\\" data-template-name=\\"lang\\">)'),
-            targetPage.locator('tr:nth-of-type(88) > td.line-content'),
-            targetPage.locator('::-p-xpath(/html/body/table/tbody/tr[88]/td[2])'),
-            targetPage.locator(':scope >>> tr:nth-of-type(88) > td.line-content')
-        ])
-            .setTimeout(timeout)
-            .click({
-              offset: {
-                x: 570,
-                y: 8,
-              },
-            });
-    }
-    {
-        const target = await browser.waitForTarget(t => t.url() === 'http://192.168.1.1/html/advance.html', { timeout });
-        const targetPage = await target.page();
-        targetPage.setDefaultTimeout(timeout);
-        await targetPage.keyboard.down('Control');
-    }
-    {
-        const target = await browser.waitForTarget(t => t.url() === 'http://192.168.1.1/html/advance.html', { timeout });
-        const targetPage = await target.page();
-        targetPage.setDefaultTimeout(timeout);
-        await targetPage.keyboard.up('Control');
-    }
-    {
-        const target = await browser.waitForTarget(t => t.url() === 'http://192.168.1.1/html/advance.html', { timeout });
-        const targetPage = await target.page();
-        targetPage.setDefaultTimeout(timeout);
-        await targetPage.keyboard.down('Control');
-    }
-    {
-        const target = await browser.waitForTarget(t => t.url() === 'http://192.168.1.1/html/advance.html', { timeout });
-        const targetPage = await target.page();
-        targetPage.setDefaultTimeout(timeout);
-        await targetPage.keyboard.down('Shift');
-    }
-    {
-        const target = await browser.waitForTarget(t => t.url() === 'http://192.168.1.1/html/advance.html', { timeout });
-        const targetPage = await target.page();
-        targetPage.setDefaultTimeout(timeout);
-        await targetPage.keyboard.down('Control');
-    }
-    {
-        const target = await browser.waitForTarget(t => t.url() === 'http://192.168.1.1/html/advance.html', { timeout });
-        const targetPage = await target.page();
-        targetPage.setDefaultTimeout(timeout);
-        await targetPage.keyboard.down('Shift');
-    }
-    {
-        const targetPage = page;
-        await puppeteer.Locator.race([
-            targetPage.locator('::-p-aria(Save)'),
-            targetPage.locator('#nat_pm_view_data_list_multiedit_submitctrl'),
-            targetPage.locator('::-p-xpath(//*[@id=\\"nat_pm_view_data_list_multiedit_submitctrl\\"])'),
-            targetPage.locator(':scope >>> #nat_pm_view_data_list_multiedit_submitctrl')
-        ])
-            .setTimeout(timeout)
-            .click({
-              offset: {
-                x: 59.546875,
-                y: 20,
-              },
-            });
-    }
-    }
-
     await browser.close();
 
 }
