@@ -271,14 +271,6 @@ async function checkRouterConfig() {
                 [prej+'internalPort div input[data-bind="start"]', config.portMapping.internalPort],
                 // [prej+'internalPort div input[data-bind="end"]', config.portMapping.internalPort],
             ]
-
-            // remove mystery thingies? don't seem to advantage us.
-            await page.evaluate(() => {
-                document.querySelectorAll('div#portmapping_application_id_add_edit > script')
-                    .forEach((el) => {
-                        // el.remove()
-                    })
-            });
                         
             // Clear and fill each input
             for (const [selector, value] of portMappings) {
@@ -296,16 +288,6 @@ async function checkRouterConfig() {
                 await page.keyboard.type(value, { delay: 50 });
             }
 
-            // Final validation events
-            await page.evaluate((mappings) => {
-                mappings.forEach(([selector]) => {
-                    document.querySelectorAll(selector).forEach(el => {
-                        el.dispatchEvent(new Event('blur', { bubbles: true }));
-                        el.dispatchEvent(new Event('change', { bubbles: true }));
-                    });
-                });
-            }, portMappings);
-            
             await page.screenshot({ path: '/app/logs/step5200-ports-filled.png' });
             await casually()
             await page.screenshot({ path: '/app/logs/step5202-same.png' });
