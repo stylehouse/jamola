@@ -36,17 +36,14 @@ services:
     volumes:
       - ./scripts:/app/scripts
       - ./logs:/app/logs
-    configs:
-      - source: caddy_config
-        target: /etc/caddy/Caddyfile
     environment:
+      # < mostly not plugged in. develop if needed.
       - ROUTER_URL=${ROUTER_URL}
       - ROUTER_USERNAME=${ROUTER_USERNAME}
       - ROUTER_PASSWORD=${ROUTER_PASSWORD}
-      - CHECK_INTERVAL=${CHECK_INTERVAL:-600000}
+      # the :- operator is like || but not for 0 I believe
+      - CHECK_INTERVAL_SECONDS=${CHECK_INTERVAL_SECONDS:-3600}
       - PUPPETEER_HEADLESS=true
-    networks:
-      - web
     <<: *defaults
     
   caddy:

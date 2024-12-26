@@ -16,7 +16,7 @@ const config = {
       protocol: 'TCP'
     },
 
-    checkInterval: parseInt(process.env.CHECK_INTERVAL, 10) || 600000, // 10 minutes
+    checkIntervalSeconds: parseInt(process.env.CHECK_INTERVAL_SECONDS, 10) || 3600, // 1 hour
 
     headless: process.env.PUPPETEER_HEADLESS !== 'false',
 
@@ -379,4 +379,4 @@ function main() {
 
 main()
 
-setInterval(checkRouterConfig, config.checkInterval);
+setInterval(checkRouterConfig, config.checkIntervalSeconds*1000);
