@@ -12,8 +12,15 @@ const config = {
       internalPort: '9443',
       protocol: 'TCP'
     },
+
     checkInterval: parseInt(process.env.CHECK_INTERVAL, 10) || 600000, // 10 minutes
-    headless: process.env.PUPPETEER_HEADLESS !== 'false'
+
+    headless: process.env.PUPPETEER_HEADLESS !== 'false',
+
+    internalHosts: [
+        'd0:50:99:0b:9d:30', // wired, usually works
+        'c4:73:1e:c7:aa:65', 
+    ],
 };
 
 function texts(els) {
@@ -25,46 +32,59 @@ function texts(els) {
 let portmapapp_name = null
 // we will add it if not found here
 async function select_portforwarding_app(page) {
-    return await page.evaluate(() => {
-        let els = document.querySelectorAll('select#portmapping_app_id_ctrl option[value^="InternetGatewayDevice.Services.X_Application."]')
-        els.forEach(sel => {
-            let name = sel.textContent.trim()
-            if (name == 's') {
-                portmapapp_name = sel.value
-            }
+    let {appid_to_name} = await page.evaluate(() => {
+        const select = document.querySelector(
+            'select#portmapping_app_id_ctrl'
+        );
+        const options = Array.from(select.options);
+        let appid_to_name = {}
+        options.map(opt => {
+            let name = opt.textContent.trim()
+            appid_to_name[opt.value] = name
         })
-        return portmapapp_name
+        return {appid_to_name}
     })
+    let appid = null
+    // look for the one we want
+    Object.entries(appid_to_name).forEach(([value, name]) => {
+        if (name === config.portMapping.name) {
+            appid = value
+        }
+    })
+    // console.log("Found apps:",appid_to_name)
+    portmapapp_name = appid
+    return appid
 }
 
 // which one!?
-let pref = [
-    'd0:50:99:0b:9d:30', // wired, usually works
-    'c4:73:1e:c7:aa:65', 
-]
-async function select_internal_host() {
-    return await page.evaluate(() => {
-        let els = document.querySelectorAll('select#nat_pm_view_data_list_multiedit_nat_portmaping_internalHost_ctrl option[text^="s_"]')
+async function select_internal_host(page) {
+    // get all the macs
+    let {mac_to_hostname} = await page.evaluate(() => {
+        const select = document.querySelector(
+            'select#nat_pm_view_data_list_multiedit_nat_portmaping_internalHost_ctrl'
+        );
+        const options = Array.from(select.options);
         let mac_to_hostname = {}
-        els.forEach(sel => {
-            let mac = sel.value.toLowerCase()
-            let name = sel.textContent.trim()
+        options.forEach(opt => {
+            let mac = opt.value.toLowerCase()
+            let name = opt.textContent.trim()
             mac_to_hostname[mac] = name
         })
-        let got = null
-        pref.map(mac => {
-            let name = mac_to_hostname[mac]
-            if (name) {
-                console.log(`found ${mac} = ${name}`)
-                got ||= mac
-            }
-        })
-        if (!got) {
-            console.error("only hosts:",mac_to_hostname)
-            throw "can't find internal host"
-        }
-        return go.toUpperCase()
+        return {mac_to_hostname}
     })
+    // console.log("Found internal hosts:",mac_to_hostname)
+
+    // select the top priority one
+    let mac = config.internalHosts
+        .filter(mac => mac_to_hostname[mac]) [0]
+    if (!mac) {
+        console.error("only hosts:",mac_to_hostname)
+        throw "can't find internal host"
+    }
+    else {
+        console.log(`found internal host ${mac} = ${mac_to_hostname[mac]}`)
+    }
+    return mac.toUpperCase()
 }
 async function trySelector(fn,message = "...this is probably fine: ") {
     try {
@@ -142,9 +162,9 @@ async function checkRouterConfig() {
     }
     // < here we should look at the port mappings and abort if exists?
     // 
-    {
+
+    let mapping_exists = async () => {
         // Check if mapping exists
-        console.log('Checking existing mappings...');
         let big = 'div#nat_pm_view_data_list > '
             +'div[id^=nat_pm_view_data_list_InternetGatewayDevice_Services_X_Portmapping] '
             +'div[id$="_data"] div div'
@@ -160,17 +180,20 @@ async function checkRouterConfig() {
             );
         
             if (existingMappings.includes('s')) {
-              console.log('Port forward already exists');
-              return;
+              return true
             }
         }
-    
+    }
+    console.log('Checking existing mappings...');
+    if (await mapping_exists()) {
+        console.log('Port forward already exists');
+        return
     }
 
 
     // Add new mapping
     console.log('Adding new port mapping...');
-    await page.click('#nat_pm_view_data_add_link'); // New port mapping button
+    await page.click('a#nat_pm_view_data_add_link'); // New port mapping
     await page.waitForSelector('#nat_pm_view_data_list_multiedit_portmapping_Name_ctrl');
     await page.type('#nat_pm_view_data_list_multiedit_portmapping_Name_ctrl', 's');
 
@@ -181,33 +204,82 @@ async function checkRouterConfig() {
         // another list that sometimes already has what we want in it
         //  even if the last one didn't
         
+        console.log("Yeppers")
+        await page.waitForSelector('select#portmapping_app_id_ctrl');
         
         let appid = await select_portforwarding_app(page)
+        console.log("select_portforwarding_app() = "+appid)
         if (appid != null) {
-            console.log("found our portforwarding app")
+            console.log("found our portforwarding app: "+portmapapp_name)
         }
         else {
             // Add new application
-            await page.click('#i18n-58'); // Add port mapping button
-            await page.click('#portmapping_application_id_add_add > div');
-            await page.type('#portmapping_application_id_add_edit_application_Name_ctrl', config.portMapping.name);
+            console.log("Adding portforwarding app")
             await page.screenshot({ path: '/app/logs/step51.png' });
+            await page.click('a#add_portmapping_app'); // Add port mapping application
+            await page.screenshot({ path: '/app/logs/step512-opening_applist.png' });
+            // this just pulls up a list of them, click again to add one:
+            await Promise.all([
+                page.waitForNetworkIdle({ idleTime: 50 }),
+                new Promise(resolve => setTimeout(resolve,900))
+            ]);
+            await page.waitForSelector('div#portmapping_application_id div.modal-body');
+            await page.screenshot({ path: '/app/logs/step5121-populated_applist.png' });
+
+            // scroll this all the way down
+            //  the frontend seems to be lazy loading this list and the add button at the bottom of it!?
+            await page.evaluate(() => {
+                const element = document.querySelector('div#portmapping_application_id div.modal-body');
+                element.scrollTop = element.scrollHeight; 
+            });
+            await page.screenshot({ path: '/app/logs/step5131-scrolled-down.png' });
+            
+            // that takes ages
+            await Promise.all([
+                page.waitForNetworkIdle({ idleTime: 50 }),
+                new Promise(resolve => setTimeout(resolve,900))
+            ]);
+            await page.screenshot({ path: '/app/logs/step5132-same.png' });
+            await page.click('a#portmapping_application_id_add_add_link'); // Add port application
+
+
+            // that takes ages
+            await Promise.all([
+                page.waitForNetworkIdle({ idleTime: 50 }),
+                new Promise(resolve => setTimeout(resolve,900))
+            ]);
+            await page.screenshot({ path: '/app/logs/step513-form-created.png' });
+            // fields to fill in appear slowly:
+            let some = await trySelector(async () => {
+                await page.waitForSelector('input#portmapping_application_id_add_edit_application_Name_ctrl');
+            }, "Waiting for the add app form...")
+            await page.screenshot({ path: '/app/logs/step514-same.png' });
+
+            await page.type('#portmapping_application_id_add_edit_application_Name_ctrl', config.portMapping.name);
             
             // Configure ports
-            await page.type('#ember5544 > div:nth-of-type(1) input:nth-of-type(1)', config.portMapping.externalPort);
-            await page.type('#ember5544 > div:nth-of-type(1) input:nth-of-type(2)', config.portMapping.externalPort);
-            await page.type('#ember5544 > div:nth-of-type(2) input:nth-of-type(1)', config.portMapping.internalPort);
+            await page.type('div#application_externalPort div input[data-bind="start"]', config.portMapping.externalPort);
+            await page.type('div#application_externalPort div input[data-bind="end"]', config.portMapping.externalPort);
+            await page.type('div#application_internalPort div input[data-bind="start"]', config.portMapping.internalPort);
+            // < these all had 0 for defaults so are now 4430...
             await page.screenshot({ path: '/app/logs/step52.png' });
             
-            await page.click('#i18n-114'); // Save application
+            // Save application
+            await page.click('button#portmapping_application_id_add_edit_submitctrl');
+            await Promise.all([
+                page.waitForNetworkIdle({ idleTime: 50 }),
+                new Promise(resolve => setTimeout(resolve,900))
+            ]);
+            
             await page.screenshot({ path: '/app/logs/step53.png' });
             await page.click('#portmapping_application_idclose_link_id'); // Close dialog
             
 
+            console.log("Added portforwarding app")
 
             let appid = await select_portforwarding_app(page)
             await page.screenshot({ path: '/app/logs/step54.png' });
-            if (appid != null) {
+            if (appid == null) {
                 throw "!found our portforwarding app after create"
             }
         }
@@ -231,65 +303,40 @@ async function checkRouterConfig() {
 
 
     
-    // select that application
-    {
-        const targetPage = page;
-        await puppeteer.Locator.race([
-            targetPage.locator('#portmapping_app_id_ctrl'),
-            targetPage.locator('::-p-xpath(//*[@id=\\"portmapping_app_id_ctrl\\"])'),
-            targetPage.locator(':scope >>> #portmapping_app_id_ctrl'),
-        ])
-            .setTimeout(timeout)
-            .fill(portmapapp_name);
-        await page.screenshot({ path: '/app/logs/step6.png' });
-    }
-    // and a host!
-    {
-        let mac = await select_internal_host(page);
-        const targetPage = page;
-        await puppeteer.Locator.race([
-            targetPage.locator('#nat_pm_view_data_list_multiedit_nat_portmaping_internalHost_ctrl'),
-            targetPage.locator('::-p-xpath(//*[@id=\\"nat_pm_view_data_list_multiedit_nat_portmaping_internalHost_ctrl\\"])'),
-            targetPage.locator(':scope >>> #nat_pm_view_data_list_multiedit_nat_portmaping_internalHost_ctrl'),
-        ])
-            .setTimeout(timeout)
-            .fill(mac);
-        await page.screenshot({ path: '/app/logs/step7.png' });
-    }
-    {
-        const targetPage = page;
-        await targetPage.keyboard.down('Control');
-    }
-    {
-        const targetPage = page;
-        await targetPage.keyboard.down('u');
-    }
-    {
-        const targetPage = page;
-        await targetPage.goto('http://192.168.1.1/html/advance.html#nat');
-    }
-    {
-        const target = await browser.waitForTarget(t => t.url() === 'http://192.168.1.1/html/advance.html', { timeout });
-        const targetPage = await target.page();
-        targetPage.setDefaultTimeout(timeout);
-        await targetPage.keyboard.up('Control');
-    }
-    {
-        const target = await browser.waitForTarget(t => t.url() === 'http://192.168.1.1/html/advance.html', { timeout });
-        const targetPage = await target.page();
-        targetPage.setDefaultTimeout(timeout);
-        await puppeteer.Locator.race([
-            targetPage.locator('button#nat_pm_view_data_list_multiedit_submitctrl'),
-        ])
-            .setTimeout(timeout)
-            .click({
-              offset: {
-                x: 1143,
-                y: 1,
-              },
-            });
-    }
+    // select that application + host
+    await page.select('select#portmapping_app_id_ctrl',portmapapp_name)
+    await page.screenshot({ path: '/app/logs/step6.png' });
 
+    let mac = await select_internal_host(page);
+
+    await page.select('select#nat_pm_view_data_list_multiedit_nat_portmaping_internalHost_ctrl',mac)
+    await page.screenshot({ path: '/app/logs/step7.png' });
+    await page.click('button#nat_pm_view_data_list_multiedit_submitctrl');
+
+    // Wait for network idle and a small timeout
+    await Promise.all([
+        page.waitForNetworkIdle({ idleTime: 50 }),
+        new Promise(resolve => setTimeout(resolve,250))
+    ]);
+
+    await page.screenshot({ path: '/app/logs/step8.png' });
+
+    await page.reload()
+
+    await page.screenshot({ path: '/app/logs/step9.png' });
+    // Wait for network idle and a small timeout
+    await Promise.all([
+        page.waitForNetworkIdle({ idleTime: 50 }),
+        new Promise(resolve => setTimeout(resolve,250))
+    ]);
+    await page.screenshot({ path: '/app/logs/step91.png' });
+    if (!await mapping_exists()) {
+        throw "failed? dont see the mapping"
+    }
+    await page.screenshot({ path: '/app/logs/step92.png' });
+
+
+    console.log("Done.")
     if (0) {
     {
         const target = await browser.waitForTarget(t => t.url() === 'http://192.168.1.1/html/advance.html', { timeout });
