@@ -51,7 +51,7 @@ async function select_portforwarding_app(page) {
             appid = value
         }
     })
-    // console.log("Found apps:",appid_to_name)
+    console.log("Found apps:",appid_to_name)
     portmapapp_name = appid
     return appid
 }
@@ -72,7 +72,7 @@ async function select_internal_host(page) {
         })
         return {mac_to_hostname}
     })
-    // console.log("Found internal hosts:",mac_to_hostname)
+    console.log("Found internal hosts:",mac_to_hostname)
 
     // select the top priority one
     let mac = config.internalHosts
@@ -197,7 +197,7 @@ async function checkRouterConfig() {
     await page.waitForSelector('#nat_pm_view_data_list_multiedit_portmapping_Name_ctrl');
     await page.type('#nat_pm_view_data_list_multiedit_portmapping_Name_ctrl', 's');
 
-    await page.screenshot({ path: '/app/logs/step5.png' });
+    await page.screenshot({ path: '/app/logs/step5000.png' });
 
     
     {
@@ -207,6 +207,13 @@ async function checkRouterConfig() {
         console.log("Yeppers")
         await page.waitForSelector('select#portmapping_app_id_ctrl');
         
+        let scroll_down = async () => {
+            await page.evaluate(() => {
+                const element = document.querySelector('div#portmapping_application_id div.modal-body');
+                element.scrollTop = element.scrollHeight; 
+            });
+        }
+        
         let appid = await select_portforwarding_app(page)
         console.log("select_portforwarding_app() = "+appid)
         if (appid != null) {
@@ -215,23 +222,22 @@ async function checkRouterConfig() {
         else {
             // Add new application
             console.log("Adding portforwarding app")
-            await page.screenshot({ path: '/app/logs/step51.png' });
+            await page.screenshot({ path: '/app/logs/step5100.png' });
             await page.click('a#add_portmapping_app'); // Add port mapping application
-            await page.screenshot({ path: '/app/logs/step512-opening_applist.png' });
+            await page.screenshot({ path: '/app/logs/step5120-opening_applist.png' });
             // this just pulls up a list of them, click again to add one:
             await Promise.all([
                 page.waitForNetworkIdle({ idleTime: 50 }),
                 new Promise(resolve => setTimeout(resolve,900))
             ]);
-            await page.waitForSelector('div#portmapping_application_id div.modal-body');
             await page.screenshot({ path: '/app/logs/step5121-populated_applist.png' });
+            await page.waitForSelector('div#portmapping_application_id div.modal-body');
+            await page.screenshot({ path: '/app/logs/step5122-same.png' });
 
             // scroll this all the way down
+
             //  the frontend seems to be lazy loading this list and the add button at the bottom of it!?
-            await page.evaluate(() => {
-                const element = document.querySelector('div#portmapping_application_id div.modal-body');
-                element.scrollTop = element.scrollHeight; 
-            });
+            scroll_down()
             await page.screenshot({ path: '/app/logs/step5131-scrolled-down.png' });
             
             // that takes ages
@@ -248,21 +254,51 @@ async function checkRouterConfig() {
                 page.waitForNetworkIdle({ idleTime: 50 }),
                 new Promise(resolve => setTimeout(resolve,900))
             ]);
-            await page.screenshot({ path: '/app/logs/step513-form-created.png' });
+            scroll_down()
+            await page.screenshot({ path: '/app/logs/step5133-form-created.png' });
             // fields to fill in appear slowly:
             let some = await trySelector(async () => {
                 await page.waitForSelector('input#portmapping_application_id_add_edit_application_Name_ctrl');
             }, "Waiting for the add app form...")
-            await page.screenshot({ path: '/app/logs/step514-same.png' });
+            await page.screenshot({ path: '/app/logs/step5134-same.png' });
 
             await page.type('#portmapping_application_id_add_edit_application_Name_ctrl', config.portMapping.name);
             
             // Configure ports
-            await page.type('div#application_externalPort div input[data-bind="start"]', config.portMapping.externalPort);
-            await page.type('div#application_externalPort div input[data-bind="end"]', config.portMapping.externalPort);
-            await page.type('div#application_internalPort div input[data-bind="start"]', config.portMapping.internalPort);
-            // < these all had 0 for defaults so are now 4430...
-            await page.screenshot({ path: '/app/logs/step52.png' });
+            // these start with goddamn zeroes that stay there
+            let prej = 'div#portmapping_application_id_add_edit div#application_'
+            let junk = [
+                [prej+'externalPort div input[data-bind="start"]', config.portMapping.externalPort],
+                [prej+'externalPort div input[data-bind="end"]', config.portMapping.externalPort],
+                [prej+'internalPort div input[data-bind="start"]', config.portMapping.internalPort],
+                // [prej+'internalPort div input[data-bind="end"]', config.portMapping.internalPort],
+            ]
+            await page.evaluate(() => {
+                document.querySelectorAll('div#portmapping_application_id_add_edit > script')
+                    .forEach((el) => {
+                        el.remove()
+                    })
+            });
+            junk.map(async (N) => {
+                await page.evaluate((selector, value) => {
+                  // there seems to be multiple of these..?
+                  document.querySelectorAll('div#portmapping_application_id_add_edit '+selector)
+                    .forEach((el) => {
+                        el.value = '';
+                    })
+                }, ...N);
+            })
+            // there's some js validation to appease:
+            junk.map(async ([selector, value]) => {
+                await page.click(selector)
+                await page.type(selector, value);
+            })
+            await page.screenshot({ path: '/app/logs/step5200-ports-filled.png' });
+            await Promise.all([
+                page.waitForNetworkIdle({ idleTime: 50 }),
+                new Promise(resolve => setTimeout(resolve,900))
+            ]);
+            await page.screenshot({ path: '/app/logs/step5202-same.png' });
             
             // Save application
             await page.click('button#portmapping_application_id_add_edit_submitctrl');
@@ -271,14 +307,25 @@ async function checkRouterConfig() {
                 new Promise(resolve => setTimeout(resolve,900))
             ]);
             
-            await page.screenshot({ path: '/app/logs/step53.png' });
+            scroll_down()
+            await page.screenshot({ path: '/app/logs/step5300-validation-or-not.png' });
             await page.click('#portmapping_application_idclose_link_id'); // Close dialog
+            await page.screenshot({ path: '/app/logs/step5301.png' });
             
 
             console.log("Added portforwarding app")
+            // now refresh, see it in the <select> menu
+
+            await page.reload();
+
+            await Promise.all([
+                page.waitForNetworkIdle({ idleTime: 50 }),
+                new Promise(resolve => setTimeout(resolve,900))
+            ]);
+            await page.screenshot({ path: '/app/logs/step5307.png' });
 
             let appid = await select_portforwarding_app(page)
-            await page.screenshot({ path: '/app/logs/step54.png' });
+            await page.screenshot({ path: '/app/logs/step5400.png' });
             if (appid == null) {
                 throw "!found our portforwarding app after create"
             }
