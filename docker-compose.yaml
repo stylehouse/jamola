@@ -12,6 +12,8 @@ services:
         RUN apt-get update && apt-get install -y \
             chromium \
             chromium-driver \
+            # the fallback strategy, use a upnp-allowed port
+            miniupnpc \
             --no-install-recommends \
         && rm -rf /var/lib/apt/lists/*
         
@@ -32,6 +34,7 @@ services:
         ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
             PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
         
+
         CMD ["node", "scripts/router-config.js"]
     volumes:
       - ./scripts:/app/scripts
@@ -44,6 +47,14 @@ services:
       # the :- operator is like || but not for 0 I believe
       - CHECK_INTERVAL_SECONDS=${CHECK_INTERVAL_SECONDS:-3600}
       - PUPPETEER_HEADLESS=true
+
+    # allow upnp
+    ports:
+      - "1900:1900/udp"  # SSDP/UPnP discovery
+      - "5351:5351/tcp"  # UPnP control port
+    cap_add:
+      - NET_ADMIN      # For network configuration
+      - NET_RAW        # For raw socket access
     <<: *defaults
     
   caddy:
@@ -117,7 +128,7 @@ networks:
 configs:
   caddy_config:
     content: |
-      voulais.duckdns.org {
+      isthatyou.duckdns.org {
           # Enable automatic HTTPS
           tls {
               dns duckdns {$DUCKDNS_API_TOKEN}

@@ -1,6 +1,8 @@
 import puppeteer from 'puppeteer';
 import { writeFile } from 'fs/promises';
 import { join } from 'path';
+import {exec} from 'child_process';
+
 
 // CAVEATS:
 // - these env are not connected
@@ -25,6 +27,8 @@ const config = {
         'c4:73:1e:c7:aa:65', 
     ],
 };
+
+
 
 function texts(els) {
     return els.forEach(div => div.textContent.trim())
@@ -367,9 +371,27 @@ async function checkRouterConfig() {
     await browser.close();
 
 }
+
+function merely_upnp() {
+    exec('upnpc -r 9443 tcp', (error, stdout, stderr) => {
+        if (error) {
+            console.error(`exec error: ${error}`);
+            return;
+        }
+        console.log(`stdout: ${stdout}`);
+        console.error(`stderr: ${stderr}`);
+    });
+    console.log("upnp done")
+}
 function main() {
     try {
-        checkRouterConfig()
+        if ('flatmate is conservative freaking about me having access to the router') {
+            // the fallback strategy, use a upnp-allowed port
+            merely_upnp()
+        }
+        else {
+            checkRouterConfig()
+        }
     } catch (err) {
         // < it would do this anyway right?
         console.error(err);
@@ -379,4 +401,4 @@ function main() {
 
 main()
 
-setInterval(checkRouterConfig, config.checkIntervalSeconds*1000);
+setInterval(main, config.checkIntervalSeconds*1000);
