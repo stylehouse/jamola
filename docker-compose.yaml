@@ -105,7 +105,9 @@ services:
         FROM node:20-slim
         WORKDIR /app
         COPY package*.json ./
-        RUN npm ci
+        RUN npm ci;
+        COPY . .
+        RUN npm run build
         EXPOSE 3000
     volumes:
       # z lets SELinux share this mount (on Fedora, Debians have AppArmor which isn't fussy here)
@@ -119,6 +121,9 @@ services:
       #   will need pushing to the container via package.json, the above RUN npm ci
       #    as part of a $ docker compose up --build
       - /app/node_modules
+      # as above
+      - /app/.svelte-kit
+    user: "1000:1000"
     ports:
       - "127.0.0.1:9090:3000"
     command: npm run dev -- --port 3000 --host 0.0.0.0

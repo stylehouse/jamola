@@ -54,11 +54,6 @@ EOF
 echo -e "\n${GREEN}Starting services...${NC}"
 docker compose up -d
 
-# Setup port forwarding
-echo -e "\n${GREEN}Setting up port forwarding...${NC}"
-upnpc -r 443 tcp
-upnpc -r 9443 tcp
-
 echo -e "\n${GREEN}Installation complete!${NC}"
 echo -e "Your Jamola instance is now running at: https://${DUCKDNS_DOMAIN}"
 echo -e "\nTo view logs: docker compose logs -f"
