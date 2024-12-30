@@ -2,61 +2,74 @@ x-defaults: &defaults
   restart: always
 
 services:
-  router-config:
-    build:
-      context: .
-      dockerfile_inline: |
-        FROM node:20-slim
+  # router-config:
+  #   build:
+  #     context: .
+  #     dockerfile_inline: |
+  #       FROM node:20-slim
         
-        # Install Chrome dependencies
-        RUN apt-get update && apt-get install -y \
-            chromium \
-            chromium-driver \
-            # the fallback strategy, use a upnp-allowed port
-            miniupnpc \
-            --no-install-recommends \
-        && rm -rf /var/lib/apt/lists/*
+  #       # Install Chrome dependencies
+  #       RUN apt-get update && apt-get install -y \
+  #           chromium \
+  #           chromium-driver \
+  #           # the fallback strategy, use a upnp-allowed port
+  #           miniupnpc \
+  #           --no-install-recommends \
+  #       && rm -rf /var/lib/apt/lists/*
         
-        WORKDIR /app
+  #       WORKDIR /app
 
-        # Create non-root user for running Chrome
-        RUN groupadd -r pptruser && useradd -r -g pptruser -G audio,video pptruser \
-            && mkdir -p /home/pptruser/Downloads \
-            && chown -R pptruser:pptruser /home/pptruser \
-            && chown -R pptruser:pptruser /app
+  #       # Create non-root user for running Chrome
+  #       RUN groupadd -r pptruser && useradd -r -g pptruser -G audio,video pptruser \
+  #           && mkdir -p /home/pptruser/Downloads \
+  #           && chown -R pptruser:pptruser /home/pptruser \
+  #           && chown -R pptruser:pptruser /app
         
-        # Create directory for screenshots and logs
-        RUN mkdir -p logs && chown -R pptruser:pptruser logs
+  #       # Create directory for screenshots and logs
+  #       RUN mkdir -p logs && chown -R pptruser:pptruser logs
         
-        COPY package*.json ./
-        RUN npm ci
+  #       COPY package*.json ./
+  #       RUN npm ci
         
-        ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-            PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+  #       ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+  #           PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
         
 
-        CMD ["node", "scripts/router-config.js"]
-    volumes:
-      - ./scripts:/app/scripts
-      - ./logs:/app/logs
-    environment:
-      # < mostly not plugged in. develop if needed.
-      - ROUTER_URL=${ROUTER_URL}
-      - ROUTER_USERNAME=${ROUTER_USERNAME}
-      - ROUTER_PASSWORD=${ROUTER_PASSWORD}
-      # the :- operator is like || but not for 0 I believe
-      - CHECK_INTERVAL_SECONDS=${CHECK_INTERVAL_SECONDS:-3600}
-      - PUPPETEER_HEADLESS=true
+  #       CMD ["node", "scripts/router-config.js"]
+  #   volumes:
+  #     - ./scripts:/app/scripts
+  #     - ./logs:/app/logs
+  #   environment:
+  #     # < mostly not plugged in. develop if needed.
+  #     - ROUTER_URL=${ROUTER_URL}
+  #     - ROUTER_USERNAME=${ROUTER_USERNAME}
+  #     - ROUTER_PASSWORD=${ROUTER_PASSWORD}
+  #     # the :- operator is like || but not for 0 I believe
+  #     - CHECK_INTERVAL_SECONDS=${CHECK_INTERVAL_SECONDS:-3600}
+  #     - PUPPETEER_HEADLESS=true
 
-    # allow upnp
-    ports:
-      - "1900:1900/udp"  # SSDP/UPnP discovery
-      - "5351:5351/tcp"  # UPnP control port
-    cap_add:
-      - NET_ADMIN      # For network configuration
-      - NET_RAW        # For raw socket access
-    <<: *defaults
-    
+  #   # allow upnp
+  #   ports:
+  #     - "1900:1900/udp"  # SSDP/UPnP discovery
+  #     - "5351:5351/tcp"  # UPnP control port
+  #   cap_add:
+  #     - NET_ADMIN      # For network configuration
+  #     - NET_RAW        # For raw socket access
+  #   <<: *defaults
+  
+  # dns-config:
+  #   build:
+  #     context: .
+  #     dockerfile_inline: |
+  #       FROM debian:stable-slim
+  #       RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+  #   environment:
+  #     - DUCKDNS_API_TOKEN=${DUCKDNS_API_TOKEN}
+  #   command: curl -v "https://www.duckdns.org/update?domains=isthatyou.duckdns.org&token=${DUCKDNS_API_TOKEN}&txt=test123&verbose=true"
+  #   networks:
+  #     - web
+  #   <<: *defaults
+
   caddy:
     build:
       context: .
@@ -95,7 +108,8 @@ services:
         RUN npm ci
         EXPOSE 3000
     volumes:
-      - .:/app:exec
+      # z lets SELinux share this mount (on Fedora, Debians have AppArmor which isn't fussy here)
+      - .:/app:exec,z
       # a more robust place for uploads/ perhaps?
       # if you want to serve this without the /error/ directory
       #  see https://github.com/sveltejs/kit/discussions/10162
@@ -128,7 +142,7 @@ networks:
 configs:
   caddy_config:
     content: |
-      isthatyou.duckdns.org {
+      voulais.duckdns.org {
           # Enable automatic HTTPS
           tls {
               dns duckdns {$DUCKDNS_API_TOKEN}
