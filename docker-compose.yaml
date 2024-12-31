@@ -80,7 +80,6 @@ services:
         FROM caddy:2
         COPY --from=builder /usr/bin/caddy /usr/bin/caddy
     ports:
-      - "9080:80"
       - "9443:443"
     volumes:
       - caddy_data:/data
@@ -102,31 +101,30 @@ services:
     build:
       context: .
       dockerfile_inline: |
-        FROM node:20-slim
+        FROM oven/bun:1
         WORKDIR /app
+        RUN echo "OK"
         COPY package*.json ./
-        RUN npm ci;
-        COPY . .
-        RUN npm run build
-        EXPOSE 3000
+        RUN bun install
+        RUN mkdir .svelte-kit && chown bun:bun .svelte-kit
     volumes:
       # z lets SELinux share this mount (on Fedora, Debians have AppArmor which isn't fussy here)
       - .:/app:exec,z
       # a more robust place for uploads/ perhaps?
       # if you want to serve this without the /error/ directory
       #  see https://github.com/sveltejs/kit/discussions/10162
-      - /media/s/be3654b3-8643-4a6e-9477-68327cc11ff5/www:/app/static/error:ro
+      - /media/s/www:/app/static/error:ro
       # Prevent the container's node_modules from being overwritten by the host
       #  this means any `npm i ...` you make in another environ (eg the host)
       #   will need pushing to the container via package.json, the above RUN npm ci
-      #    as part of a $ docker compose up --build
+        #  as part of a $ docker compose up --build
       - /app/node_modules
       # as above
       - /app/.svelte-kit
     user: "1000:1000"
     ports:
       - "127.0.0.1:9090:3000"
-    command: npm run dev -- --port 3000 --host 0.0.0.0
+    command: bun run dev -- --port 3000 --host 0.0.0.0
     # healthcheck:
     #   test: ["CMD", "wget", "--spider", "http://127.0.0.1:9090"]
     #   interval: 2s

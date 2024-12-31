@@ -1,4 +1,5 @@
 node_modules
+/not*
 
 # Output
 .output
