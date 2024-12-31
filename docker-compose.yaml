@@ -70,42 +70,38 @@ services:
   #     - web
   #   <<: *defaults
 
-  # caddy:
-  #   build:
-  #     context: .
-  #     dockerfile_inline: |
-  #       FROM caddy:2-builder AS builder
-  #       RUN xcaddy build --with github.com/caddy-dns/duckdns
+  caddy:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM caddy:2-builder AS builder
+        RUN xcaddy build --with github.com/caddy-dns/duckdns
 
-  #       FROM caddy:2
-  #       COPY --from=builder /usr/bin/caddy /usr/bin/caddy
-  #   ports:
-  #     - "9443:443"
-  #   volumes:
-  #     - caddy_data:/data
-  #     - caddy_config:/config
-  #     - ./logs:/var/log/caddy
-  #   configs:
-  #     - source: caddy_config
-  #       target: /etc/caddy/Caddyfile
-  #   environment:
-  #     - DUCKDNS_API_TOKEN=${DUCKDNS_API_TOKEN}
-  #   # depends_on:
-  #   #   cos-jamo:
-  #   #     condition: service_healthy
-  #   networks:
-  #     - web
-  #   <<: *defaults
+        FROM caddy:2
+        COPY --from=builder /usr/bin/caddy /usr/bin/caddy
+    ports:
+      - "9443:443"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+      - ./logs:/var/log/caddy
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    environment:
+      - DUCKDNS_API_TOKEN=${DUCKDNS_API_TOKEN}
+    # depends_on:
+    #   cos-jamo:
+    #     condition: service_healthy
+    networks:
+      - web
+    <<: *defaults
     
   # the app itself!
   cos-jamo:
     build:
       context: .
-      dockerfile_inline: |
-        FROM oven/bun:1
-        WORKDIR /app
-        COPY package*.json ./
-        RUN bun install
+      dockerfile: Dockerfile.cos-jamo
     volumes:
       # z lets SELinux share this mount (on Fedora, Debians have AppArmor which isn't fussy here)
       - .:/app:exec,z
@@ -118,9 +114,6 @@ services:
       #   will need pushing to the container via package.json, the above RUN npm ci
         #  as part of a $ docker compose up --build
       - /app/node_modules
-      # as above
-      - /app/.svelte-kit
-    user: "1000:1000"
     ports:
       - "127.0.0.1:9090:3000"
     command: bun run dev -- --port 3000 --host 0.0.0.0
@@ -147,7 +140,7 @@ configs:
       voulais.duckdns.org {
           # Enable automatic HTTPS
           tls {
-              dns duckdns {$DUCKDNS_API_TOKEN}
+              dns duckdns $DUCKDNS_API_TOKEN
           }
           
           # Enable compression
