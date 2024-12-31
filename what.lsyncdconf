@@ -1,0 +1,13 @@
+settings {
+   nodaemon   = true,
+}
+sync{
+    default.rsyncssh,
+    source=".",
+    host="v",
+    targetdir="src/jamola",
+    delay=0,
+    -- verbose=true,
+    delete=false,
+    exclude={ ".*", "*.tmp", "node*", "not*", "logs" },
+}
