@@ -1,7 +1,12 @@
-import { CookedStream, FreshStream } from "$lib/audio.svelte"
+import { CookedStream, FreshStream, Gainorator, Gaintrol } from "$lib/audio.svelte"
 import { parRecorder } from "$lib/recording"
 
+
 export class Participant {
+    // peering gives us:
+    peerId:string
+    pc?:RTCPeerConnection
+
     // coms
     name = $state()
     //  about the datachannel closing
@@ -10,6 +15,13 @@ export class Participant {
     constate = $state()
     // Call
     effects = $state()
+    // < tis messy just throwing these on here, but we want them by name sometimes
+    // sometimes want to access effects by name
+    fresh?:CookedStream
+    gain?:Gainorator
+    cooked?:CookedStream
+    vol?:Gaintrol
+
     // the effects tend to make themselves par.gain etc
     //  this one triggers the Participant/Rack.svelte to appear
     gain = $state()
@@ -139,14 +151,4 @@ export class Participant {
         //     and make it into a reverb cloud after decoded
         this.recorder.start(this.cooked.output);
     }
-}
-
-export type aParticipant = {
-    peerId:string,
-    pc?:RTCPeerConnection,
-    name?:string,
-    fresh?:CookedStream,
-    gain?:Gainorator,
-    cooked?:CookedStream,
-    audio:HTMLAudioElement
 }

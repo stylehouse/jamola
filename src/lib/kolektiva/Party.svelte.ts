@@ -90,7 +90,7 @@ export class Party {
         return this.i_par({par})
     }
     // read or add new participant (par)
-    i_par(c:Participant):aParticipant {
+    i_par(c:{peerId?,pc?,par?}):Participant {
         let { par, peerId, pc, ...etc } = c
         
         if (par && peerId == null) {

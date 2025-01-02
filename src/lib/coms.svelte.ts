@@ -77,6 +77,10 @@ export class Peering {
     }
     lets_send_our_track(par) {
         console.log(`${par} lets_send_our_track!`)
+        if (!this.is_par_pc_ready(par)) {
+            debugger
+            return
+        }
         this.party.to_send_our_track(par)
     }
 
@@ -126,7 +130,20 @@ export class Peering {
         delete par.ontrack_queue
     }
     
-
+    is_par_pc_ready(par) {
+        return [
+            // < this may not be true any more:
+            // if we don't accept 'new' initially they never get there...
+            "new",
+            "connected",
+            "connecting"
+        ].includes(par.pc.connectionState)
+        &&
+        [
+            "stable",
+            // 'have-local-offer'
+        ].includes(par.pc.signalingState)
+}
     // the newbie phase of a new par.pc
     //  before the rest of the Participant lifetime
     // wait for par.pc to get in a good state
@@ -144,19 +161,7 @@ export class Peering {
 
         // https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/connectionState
         
-        par.pc_ready =
-            [
-                // < this may not be true any more:
-                // if we don't accept 'new' initially they never get there...
-                "new",
-                "connected",
-                "connecting"
-            ].includes(par.pc.connectionState)
-            &&
-            [
-                "stable",
-                // 'have-local-offer'
-            ].includes(par.pc.signalingState)
+        par.pc_ready = this.is_par_pc_ready(par)
         
         console.log(`-o- ${par}.pc is ${par.constate}`)
         

@@ -90,7 +90,7 @@ services:
       dockerfile: Dockerfile.cos-jamo
     volumes:
       # z lets SELinux share this mount (on Fedora, Debians have AppArmor which isn't fussy here)
-      - .:/app:exec,z
+      - .:/app:z
       # a more robust place for uploads/ perhaps?
       # if you want to serve this without the /error/ directory
       #  see https://github.com/sveltejs/kit/discussions/10162

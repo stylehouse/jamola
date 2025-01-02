@@ -379,10 +379,6 @@
 
     // was give_localStream
     party.to_send_our_track = (par) => {
-        if (!['new','connected'].includes(par.pc.connectionState)) {
-            debugger
-            return
-        }
         localStream.getTracks().forEach((track) => {
             try {
                 const sender = par.pc.addTrack(track, localStream);
@@ -410,7 +406,9 @@
         if (!params.encodings) {
             params.encodings = [{}];
         }
-
+        if (!params.encodings.length) {
+            throw "setAudioBitrate: sender has no encodings"
+        }
         // Set the maximum bitrate (in bps)
         params.encodings[0].maxBitrate = bitrate * 1000; // Convert kbps to bps
 
