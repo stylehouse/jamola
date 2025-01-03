@@ -184,7 +184,20 @@ export abstract class AudioEffectoid {
         return {fore,aft}
     }
     get AC() {
-        let AC = this.par.party.audioContext ||= new AudioContext()
+        let party = this.par.party
+        let AC = party.audioContext ||= new AudioContext()
+        // will resume playback once unsuspended
+        // < test this
+        // < what does "no audio data is lost" mean and how should we approach catch up on being behind the ideal 20ms or so latency
+        if (AC.state === 'suspended') {
+            party.wants_audio_permission = async () => {
+                await AC.resume()
+                if (AC.state === 'suspended') {
+                    throw "still suspended after wants_audio_permission"
+                }
+                delete party.wants_audio_permission
+            }
+        }
         if (!AC) throw "!AC"
         return AC
     }

@@ -18,13 +18,10 @@ export class Participant {
     // < tis messy just throwing these on here, but we want them by name sometimes
     // sometimes want to access effects by name
     fresh?:CookedStream
-    gain?:Gainorator
+    // this one triggers the Participant/Rack.svelte to appear
+    gain:Gainorator = $state()
     cooked?:CookedStream
     vol?:Gaintrol
-
-    // the effects tend to make themselves par.gain etc
-    //  this one triggers the Participant/Rack.svelte to appear
-    gain = $state()
     // incoming tracks from Peering while setting up
     ontrack_queue
     // measuring

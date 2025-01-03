@@ -60,20 +60,33 @@ export class Peering {
         par.pc.onsignalingstatechange = () => {
             this.stabilise_par_pc(par)
         }
-
         // which leads us (both ends) to createDataChannel(par)
-        //  so get the receiver ready now:
-        // and this should be ready very soon after that so:
+        //  so get our receiver ready now:
         par.pc.ondatachannel = ({channel}) => {
             this.incomingDataChannel(par,channel)
         };
-
-        // take audio to effects
+        // take audio to effects, in a moment
         par.pc.ontrack = (e) => {
             console.log(`${par} par.pc.ontrack into the queue`)
             (par.ontrack_queue ||= []).push(e)
         };
-        // the inverse of ontrack is addTrack, via:
+        // the agent of an ontrack event is an addTrack at the other end
+    }
+    // we wait to accept tracks
+    //  race between our par.effects building after par.name
+    //   and their track arriving here after they get our par.name
+    // < because crypto trust
+    open_ontrack(par) {
+        // < multiple tracks, one at a time?
+        par.pc.ontrack = (e) => {
+            console.log(`${par} par.pc.ontrack`)
+            par.fresh.input(e.streams[0])
+        };
+        (par.ontrack_queue||[]).map(e => {
+            console.log(`${par} par.pc.ontrack from queue:`)
+            par.pc.ontrack(e)
+        })
+        delete par.ontrack_queue
     }
     lets_send_our_track(par) {
         console.log(`${par} lets_send_our_track!`)
@@ -113,22 +126,6 @@ export class Peering {
         }
     }
     
-    // we wait to accept tracks
-    //  race between our par.effects building after par.name
-    //   and their track arriving here after they get our par.name
-    // < because crypto trust
-    open_ontrack(par) {
-        // < multiple tracks, one at a time?
-        par.pc.ontrack = (e) => {
-            console.log(`${par} par.pc.ontrack`)
-            par.fresh.input(e.streams[0])
-        };
-        (par.ontrack_queue||[]).map(e => {
-            console.log(`${par} par.pc.ontrack from queue:`)
-            par.pc.ontrack(e)
-        })
-        delete par.ontrack_queue
-    }
     
     is_par_pc_ready(par) {
         return [
@@ -169,6 +166,16 @@ export class Peering {
         this.couldbeready(par)
     }
 
+
+
+
+
+
+
+
+
+
+    
     // there are two data channels
     //  because there's no singularity deciding who gets to create one
     //   < track who originated the offer? it kind of gets lost in the mail

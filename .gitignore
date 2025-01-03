@@ -1,6 +1,7 @@
 node_modules
 /not*
 bun.lockb
+research
 
 # Output
 .output

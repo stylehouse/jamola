@@ -569,6 +569,9 @@
             {say_negate}
         </button>
         <button onclick={lets_upload}> 🍇 </button>
+        {#if party.wants_audio_permission}
+            !<button onclick={party.wants_audio_permission}>Enable Audio</button>!
+        {/if}
         <label>
             <!-- onchange={() => activate_recording = activate_recording_checkbox} -->
             <input type="checkbox" bind:checked={party.activate_recording} />

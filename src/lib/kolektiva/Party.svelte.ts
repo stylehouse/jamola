@@ -8,11 +8,13 @@ export class Party {
 
     userName
 
-    // is not server-side so create this in new_pc when we need it
+    // got by the first AudioEffectoid using audioContext
     // < Party etc shouldn't happen server-side at all? lots of *.svelte to be done
     //   subscribing to changes in Party.* or Participant.effect.*.*
     //    to storage...
     audioContext
+    // checked when the above is first got
+    wants_audio_permission?:Function
 
     // some settings can come from the user's stored config:
     // stored:
