@@ -1,4 +1,4 @@
-import { Peering } from "$lib/coms.svelte"
+import { Peering } from "$lib/kolektiva/Peering.svelte"
 import { Participant } from "./Participants.svelte"
 
 export class Party {

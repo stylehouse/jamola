@@ -1,7 +1,7 @@
 
 import { SignalingClient } from "$lib/ws-client.svelte";
 import { tick } from "svelte";
-import type { Party } from "./kolektiva/Party.svelte";
+import type { Party } from "./Party.svelte";
 
 // front ws-client, do par coming-going
 //  not for par that are par.local of course.
