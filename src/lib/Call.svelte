@@ -378,26 +378,26 @@
     }
 
     // was give_localStream
-    party.to_send_our_track = (par) => {
-        localStream.getTracks().forEach((track) => {
-            try {
-                const sender = par.pc.addTrack(track, localStream);
-
-                // For audio tracks, set the desired bitrate
-                if (track.kind === "audio") {
-                    setAudioBitrate(sender, target_bitrate).catch(
-                        (error) =>
-                            console.error(
-                                "Failed to set bitrate:",
-                                error,
-                            ),
-                    );
-                }
-            console.log(`${par} give_localStream...`,{track,localStream,sender})
-            } catch (error) {
-                console.error("Failed to add track:", error);
-            }
-        });
+    // the user has some tracks to give to everyone in here
+    // < it could be per par, avoid sending to non-mixing nodes etc
+    // < numerous local par could exist
+    //    from devices or synthesisers|players
+    //    tracks should be sourced from their effect chain as a send|tape
+    //    and added to localStream, which should then readd tracks for all par
+    //     > sending your track to a remote distortion pedal, and getting it back
+    party.get_localStream = () => localStream
+    // after tracks are added, they bitrate adjust here:
+    party.on_addTrack = (par,track,sender) => {
+        // For audio tracks, set the desired bitrate
+        if (track.kind === "audio") {
+            setAudioBitrate(sender, target_bitrate).catch(
+                (error) =>
+                    console.error(
+                        "Failed to set bitrate:",
+                        error,
+                    ),
+            );
+        }
     }
     
     function setAudioBitrate(sender, bitrate) {

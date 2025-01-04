@@ -7,6 +7,9 @@ export class Party {
     measuring:Measuring
 
     userName
+    // sendable tracks in a stream
+    get_localStream?:Function
+    on_addTrack?:Function
 
     // got by the first AudioEffectoid using audioContext
     // < Party etc shouldn't happen server-side at all? lots of *.svelte to be done

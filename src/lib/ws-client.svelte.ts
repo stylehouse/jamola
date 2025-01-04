@@ -110,7 +110,12 @@ export class SignalingClient {
         };
 
         // negotiation handling
-        // PeerJS doesn't do this (and it turns out neither do we)
+        // PeerJS doesn't do this,
+        //   it adds everything to par.pc early enough to not need to
+        // < if the signaling server forwards peerId,name,cryptotrust
+        //    we could add everything early enough too.
+        //    we're currently waiting for stable->datachanneling->tracking
+        // < further betterment: https://blog.mozilla.org/webrtc/perfect-negotiation-in-webrtc/
         pc.onnegotiationneeded = async () => {
             console.warn(`onnegotiationneeded ${peerId}`)
             this.on_reneg?.({peerId,pc})

@@ -53,49 +53,8 @@ export class Peering {
         this.Signaling.close()
     }
 
-    pc_handlers(par) {
-        // until this stabilises:
-        par.pc.oniceconnectionstatechange =
-        par.pc.onconnectionstatechange =
-        par.pc.onsignalingstatechange = () => {
-            this.stabilise_par_pc(par)
-        }
-        // which leads us (both ends) to createDataChannel(par)
-        //  so get our receiver ready now:
-        par.pc.ondatachannel = ({channel}) => {
-            this.incomingDataChannel(par,channel)
-        };
-        // take audio to effects, in a moment
-        par.pc.ontrack = (e) => {
-            console.log(`${par} par.pc.ontrack into the queue`)
-            (par.ontrack_queue ||= []).push(e)
-        };
-        // the agent of an ontrack event is an addTrack at the other end
-    }
-    // we wait to accept tracks
-    //  race between our par.effects building after par.name
-    //   and their track arriving here after they get our par.name
-    // < because crypto trust
-    open_ontrack(par) {
-        // < multiple tracks, one at a time?
-        par.pc.ontrack = (e) => {
-            console.log(`${par} par.pc.ontrack`)
-            par.fresh.input(e.streams[0])
-        };
-        (par.ontrack_queue||[]).map(e => {
-            console.log(`${par} par.pc.ontrack from queue:`)
-            par.pc.ontrack(e)
-        })
-        delete par.ontrack_queue
-    }
-    lets_send_our_track(par) {
-        console.log(`${par} lets_send_our_track!`)
-        if (!this.is_par_pc_ready(par)) {
-            debugger
-            return
-        }
-        this.party.to_send_our_track(par)
-    }
+
+
 
     // these are a low-level preamble to the lifetime of a par
     // overall:
@@ -125,6 +84,86 @@ export class Peering {
             this.open_ontrack(par)
         }
     }
+
+
+
+
+
+
+
+
+    // we wait to accept tracks
+    //  race between our par.effects building after par.name
+    //   and their track arriving here after they get our par.name
+    // < because crypto trust
+    open_ontrack(par) {
+        console.log(`${par} open_ontrack!`)
+        // < multiple tracks, one at a time?
+        par.pc.ontrack = (e) => {
+            console.log(`${par} par.pc.ontrack`)
+            par.fresh.input(e.streams[0])
+        };
+        (par.ontrack_queue||[]).map(e => {
+            console.log(`${par} par.pc.ontrack from queue:`)
+            par.pc.ontrack(e)
+        })
+        delete par.ontrack_queue
+    }
+    lets_send_our_track(par) {
+        console.log(`${par} lets_send_our_track!`)
+        if (!this.is_par_pc_ready(par)) {
+            debugger
+            return
+        }
+        let localStream:MediaStream = this.party.get_localStream?.()
+        if (!localStream) throw "!localStream"
+        
+        let already_id = (id) => par.outgoing.filter(tr => tr.id == id)[0]
+
+        localStream.getTracks().forEach((track:MediaStreamTrack) => {
+            if (par.outgoing.includes(track)) {
+                if (!already_id(track.id)) {
+                    debugger; throw "pos-ob neg-id"
+                }
+                return
+            }
+            if (already_id(track.id)) {
+                debugger; throw "ne-ob pos-id"
+            }
+            try {
+                const sender = par.pc.addTrack(track, localStream);
+                this.party.on_addTrack?.(par,track,sender,localStream)
+                par.outgoing.push(track)
+                console.log(`${par} give_localStream...`,{track,localStream,sender})
+            } catch (error) {
+                console.error("Failed to add track:", error);
+            }
+        });
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     
     
     is_par_pc_ready(par) {
@@ -165,6 +204,27 @@ export class Peering {
         // call this any time we could breakthrough
         this.couldbeready(par)
     }
+
+    pc_handlers(par) {
+        // until this stabilises:
+        par.pc.oniceconnectionstatechange =
+        par.pc.onconnectionstatechange =
+        par.pc.onsignalingstatechange = () => {
+            this.stabilise_par_pc(par)
+        }
+        // which leads us (both ends) to createDataChannel(par)
+        //  so get our receiver ready now:
+        par.pc.ondatachannel = ({channel}) => {
+            this.incomingDataChannel(par,channel)
+        };
+        // take audio to effects, in a moment
+        par.pc.ontrack = (e) => {
+            console.log(`${par} par.pc.ontrack into the queue`);
+            (par.ontrack_queue ||= []).push(e)
+        };
+        // the agent of an ontrack event is an addTrack at the other end
+    }
+
 
 
 
