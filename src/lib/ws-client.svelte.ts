@@ -8,13 +8,16 @@ export class SignalingClient {
     peerConnections:Map<peerId,pc>
     on_close:Function
     on_peer:Function
+    on_reneg: Function
+    makingOffer: Map<PeerId, boolean>
 
-    constructor(options = {}) {
+    constructor(options: any = {}) {
         this.socket = io();
         this.peerConnections = new Map();
         this.on_peer = options.on_peer || (() => {});
         this.on_close = options.on_close;
         this.on_reneg = options.on_reneg;
+        this.makingOffer = new Map();
 
         // Join a room
         this.socket.emit('join-room', 'room-1');
@@ -42,7 +45,18 @@ export class SignalingClient {
         this.socket.on('offer', async ({ offer, offererId }) => {
             console.log("offer from "+offererId, offer);
             const pc = await this.createPeerConnection(offererId);
-            await pc.setRemoteDescription(offer);
+            const offerCollision = pc.signalingState !== "stable"
+                || this.makingOffer.get(offererId);
+            
+            // We're the polite peer (receiver of the offer)
+            if (offerCollision) {
+                await Promise.all([
+                    pc.setLocalDescription({ type: "rollback" }),
+                    pc.setRemoteDescription(offer)
+                ]);
+            } else {
+                await pc.setRemoteDescription(offer);
+            }
 
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
@@ -56,15 +70,22 @@ export class SignalingClient {
         // When we receive an answer
         this.socket.on('answer', async ({ answer, answererId }) => {
             const pc = this.peerConnections.get(answererId);
-            if (!pc) return
+            if (!pc || pc.signalingState === "stable") return;
             await pc.setRemoteDescription(answer);
         });
 
         // When we receive an ICE candidate
         this.socket.on('ice-candidate', async ({ candidate, from }) => {
             const pc = this.peerConnections.get(from);
-            if (!pc) return
-            await pc.addIceCandidate(candidate);
+            if (!pc) return;
+            try {
+                await pc.addIceCandidate(candidate);
+            } catch (e) {
+                // Ignore candidates if we're not in the right state
+                if (pc.remoteDescription && pc.remoteDescription.type) {
+                    console.error("ICE candidate error:", e);
+                }
+            }
         });
     }
 
@@ -73,13 +94,23 @@ export class SignalingClient {
     // on room join, the newbie sends offers to everyone
     async offerPeerConnection(peerId,pc?) {
         pc ||= await this.createPeerConnection(peerId);
-        const offer = await pc.createOffer();
-
-        await pc.setLocalDescription(offer);
-        this.socket.emit('offer', {
-            targetId: peerId,  // This is who we want to connect to
-            offer
-        });
+        
+        try {
+            this.makingOffer.set(peerId, true);
+            const offer = await pc.createOffer();
+            
+            if (pc.signalingState !== "stable") return;
+            
+            await pc.setLocalDescription(offer);
+            this.socket.emit('offer', {
+                targetId: peerId,
+                offer
+            });
+        } catch (err) {
+            console.error("Error creating offer:", err);
+        } finally {
+            this.makingOffer.set(peerId, false);
+        }
     }
 
     async createPeerConnection(peerId) {
@@ -98,6 +129,7 @@ export class SignalingClient {
 
         // Store it in our map
         this.peerConnections.set(peerId, pc);
+        this.makingOffer.set(peerId, false);
 
         // Handle ICE candidates
         pc.onicecandidate = (event) => {
@@ -120,17 +152,10 @@ export class SignalingClient {
             console.warn(`onnegotiationneeded ${peerId}`)
             this.on_reneg?.({peerId,pc})
 
-            this.renegotiate(pc,peerId)
-            if (1) {
-                // ?
+            // Debounce renegotiation attempts
+            if (!this.makingOffer.get(peerId)) {
+                await this.renegotiate(pc, peerId);
             }
-            else {
-                setTimeout(() => {
-                    this.renegotiate(pc,peerId)
-                }, 230)
-            }
-
-            
         };
 
         // Let them store it in their SvelteMap,
@@ -143,14 +168,12 @@ export class SignalingClient {
     async renegotiate(pc,peerId) {
         try {
             if (pc.signalingState === "stable") {
-                // try to!
-                await this.offerPeerConnection(peerId,pc)
-            }
-            else {
-                console.warn("Avoiding re-offer because pc.signalingState="+pc.signalingState)
+                await this.offerPeerConnection(peerId, pc);
+            } else {
+                console.warn("Skipping renegotiation, signaling state:", pc.signalingState);
             }
         } catch (err) {
-            console.error("Negotiation error for peer", peerId, err);
+            console.error("Negotiation error for peer", err);
         }
     }
     // < possible easy-way-out?
@@ -165,18 +188,10 @@ export class SignalingClient {
     }
 
     close() {
-        // Close all peer connections
-        this.peerConnections.forEach(pc => {
-            pc.close();
-        });
+        this.peerConnections.forEach(pc => pc.close());
         this.peerConnections.clear();
-
-        // Disconnect socket
+        this.makingOffer.clear();
         this.socket.disconnect();
-
-        // Call optional close handler
-        if (this.on_close) {
-            this.on_close();
-        }
+        this.on_close?.();
     }
 }
