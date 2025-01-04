@@ -345,6 +345,7 @@ export class AudioGainEffectoid extends AudioEffectoid {
     }
 }
 
+// gain
 // used as a final fader on the mix end of the chain
 // deciding how much of everything we want,
 //  rather than where is a clear level to record at
@@ -365,6 +366,7 @@ export class Gaintrol extends AudioGainEffectoid {
     }
 }
 
+// gain with metering
 export class Gainorator extends AudioGainEffectoid {
     // looks at the signal after gaining
     private analyserNode: AnalyserNode | null = null;
@@ -379,10 +381,11 @@ export class Gainorator extends AudioGainEffectoid {
 
     constructor(opt) {
         super({order:12, ...opt})
+        this.Gainorator_init()
+    }
+
+    Gainorator_init() {
         this.init_gain()
-        
-        // Create gain node
-        this.gainNode = this.AC.createGain();
         this.gainNode.gain.value = 1;
 
         // Create analyser node for metering
@@ -430,15 +433,14 @@ export class Gainorator extends AudioGainEffectoid {
             // Multiplying by 2 stretches this to a 0-1 range, which is more useful for UI representation
             let level = Math.min(rms * 2, 1);
             // Scale logarithmically, so smaller signals are more visible
-            // Adding 1 ensures we don't take log(0)
-            // Multiplying RMS by 10 spreads out the lower values
-            this.volumeLevel = Math.min(Math.log10(1 + level * 10) / 1, 1);
+            this.volumeLevel = levelToVolumeLevel(level)
 
             // Check for peak (clipping)
             const peak = Math.max(...this.dataArray) / 255;
             this.peakLevel = peak;
 
             // < Check for low entropy, eg all bytes are 127
+            this.on_metering?.()
 
             setTimeout(() => {
                 // Continue metering
@@ -462,3 +464,128 @@ export class Gainorator extends AudioGainEffectoid {
         this.gainValue = 1;
     }
 }
+
+// gain with metering
+export class AutoGainorator extends Gainorator {
+    // Tracking gain adjustments and state
+    private targetPeakLevel = -9; // Target peak level in dB
+    private silenceThreshold = -50; // dB threshold for silence
+    private gainAdjustmentRate = 0.1; // Gentle gain adjustment speed
+    private stableTime = 0; // Time spent near target level
+    private lastAdjustmentTime = 0;
+    private stabilizationPeriod = 3000; // 3 seconds to stabilize
+    private maxGain = 10; // Prevent excessive amplification
+    private minGain = 0.1; // Prevent complete silence
+
+    constructor(opt) {
+        super(opt);
+        if (!this.name) {
+            console.error(`didn't call the AudioEffectoid constructor for ${this.par} `)
+        }
+        this.gainNode.gain.value = 1; // Start with unity gain
+    }
+
+    // hook into the our subclass' Gainorator.startMetering()
+    meterings = 0
+    on_metering() {
+        // Gain adjustment logic
+        if (meterings % 1000) {
+            console.log("Did AutoGainorator.on_metering!")
+        }
+        this.adjustGain();
+    }
+    private adjustGain() {
+        const currentTime = performance.now();
+        const peakDB = amplitudeToDB(this.peakLevel);
+
+        // Calculate needed gain adjustment
+        const targetAmplitude = dbToAmplitude(this.targetPeakLevel);
+        const currentGain = this.gainNode.gain.value;
+        
+        // Silence detection
+        if (peakDB < this.silenceThreshold) {
+            // If signal is very low, don't amplify
+            return;
+        }
+
+        // Calculate gain needed to reach target
+        let newGain = currentGain * (targetAmplitude / this.peakLevel);
+        
+        // Smooth out gain changes
+        newGain = currentGain + (newGain - currentGain) * this.gainAdjustmentRate;
+        
+        // Clamp gain to prevent extreme amplification
+        newGain = Math.max(this.minGain, Math.min(newGain, this.maxGain));
+
+        // Update gain
+        this.gainNode.gain.setValueAtTime(newGain, this.AC.currentTime);
+        
+        // Track stabilization
+        if (Math.abs(peakDB - this.targetPeakLevel) < 1) {
+            this.stableTime += currentTime - this.lastAdjustmentTime;
+        } else {
+            this.stableTime = 0;
+        }
+
+        this.lastAdjustmentTime = currentTime;
+
+        // Emergency loudness catch
+        if (peakDB > 0) {
+            // Rapid gain reduction if clipping occurs
+            this.gainNode.gain.setValueAtTime(
+                Math.max(currentGain * 0.5, this.minGain), 
+                this.AC.currentTime
+            );
+        }
+    }
+
+    // Override startMetering to include gain adjustment
+    protected startMetering() {
+        cancelAnimationFrame(this.meterUpdateId);
+        const meterUpdate = () => {
+            cancelAnimationFrame(this.meterUpdateId);
+            
+            // Existing volume calculation
+            this.analyserNode.getByteTimeDomainData(this.dataArray);
+            
+            let sum = 0;
+            for (let i = 0; i < this.bufferLength; i++) {
+                const value = (this.dataArray[i] - 128) / 128;
+                sum += value * value;
+            }
+            const rms = Math.sqrt(sum / this.bufferLength);
+            
+            // Existing level calculations
+            let level = Math.min(rms * 2, 1);
+            this.volumeLevel = Math.min(Math.log10(1 + level * 10) / 1, 1);
+
+            // Check for peak (clipping)
+            const peak = Math.max(...this.dataArray) / 255;
+            this.peakLevel = peak;
+
+
+            setTimeout(() => {
+                this.meterUpdateId = requestAnimationFrame(meterUpdate);
+            }, 150);
+        };
+        this.meterUpdateId = requestAnimationFrame(meterUpdate);
+    }
+}
+
+// Convert linear amplitude to decibels
+function amplitudeToDB(amplitude: number): number {
+    return 20 * Math.log10(Math.abs(amplitude));
+}
+
+// Convert decibels to linear amplitude
+function dbToAmplitude(db: number): number {
+    return Math.pow(10, db / 20);
+}
+
+// Scale logarithmically, so smaller signals are more visible
+// Adding 1 ensures we don't take log(0)
+// Multiplying RMS by 10 spreads out the lower values
+function levelToVolumeLevel(level: number): number {
+    return Math.min(Math.log10(1 + level * 10) / 1, 1);
+}
+
