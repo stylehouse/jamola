@@ -255,7 +255,10 @@ export class Peering {
             delete par.channel
             // wait for possible par.pc_ready=false when par.pc.close()ing
             await tick()
-            this.couldbeready(par)
+            // < the above isn't enough
+            // we must ensure we check par.pc.connectionstatus -> par.pc_ready
+            //  before trying to rebuild par.channel
+            this.stabilise_par_pc(par)
         };
     }
 
