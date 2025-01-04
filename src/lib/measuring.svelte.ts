@@ -96,7 +96,8 @@ export class LatencyStats {
 
     handle_latency_pong(par, ts) {
         let round_trip = Date.now() - ts
-        par.latency = round_trip / 2
+        // latency is in seconds, as are other par.*Stat.*
+        par.latency = (round_trip / 2) / 1000
         par.last_pong_ts = Date.now()
         const timeoutId = this.pingTimeouts.get(par.peerId);
         if (timeoutId) {
@@ -109,28 +110,78 @@ export class LatencyStats {
 export class BitrateStats {
     async per_par(par) {
         const stats = await par.pc.getStats();
+        
         stats.forEach((stat) => {
-            // Look for inbound-rtp stats for audio
-            if (stat.type === "inbound-rtp" && stat.kind === "audio") {
-                const now = stat.timestamp;
-                const bytes = stat.bytesReceived;
-                if (bytes < par.lastByteCount) {
-                    // par.pc must have been replaced
-                    par.lastByteCount = 0
-                }
-
-                if (par.lastTimestamp > 0) {
-                    // Calculate bitrate in kbps
-                    const deltaTime = now - par.lastTimestamp;
-                    const deltaBytes = bytes - par.lastByteCount;
-                    par.bitrate = Math.round(
-                        (deltaBytes * 8) / deltaTime,
-                    ); // bits per second
-                }
-
-                par.lastByteCount = bytes;
-                par.lastTimestamp = now;
+            if (stat.kind != "audio") return
+            // < every 5s, copy this into user data
+            //    and sync that with the server, for remote diagnostics
+            if (stat.type === "outbound-rtp") {
+                this.gatherstat(par,stat,{
+                    t:'send',
+                    copy: [
+                        'totalPacketSendDelay',   // Time between packet generation and transmission
+                        'encoderDelay',           // Time spent encoding
+                        'targetBitrate',          // Target sending rate
+                        'packetsSent',            // Total packets sent
+                        'targetBitrate',          // Target sending rate
+                        'retransmittedPackets',   // Packets that had to be resent
+                        'qualityLimitationReason',// Target sending rate
+                        'nackCount',              // Number of negative acknowledgments received
+                    ]
+                })
+            }
+            if (stat.type === "inbound-rtp") {
+                this.gatherstat(par,stat,{
+                    t:'receive',
+                    copy: [
+                        'jitterBufferDelay',      // Time spent in receiver's buffer
+                        'interarrivalJitter',     // Variation in packet arrival times
+                        'packetsLost',            // Lost packets on receive side
+                    ]
+                })
             }
         });
+
+        if (par.sendStat && par.receiveStat) {
+            par.bitrate = par.sendStat.bitrate
+            // < tune time machine
+            par.totalLatency =
+                (par.latency||0) +                       // Network transit time (RTT/2)
+                par.sendStat.totalPacketSendDelay + // Sender queuing
+                par.receiveStat.jitterBufferDelay;  // Receiver buffering
+        }
+        else {
+            delete par.bitrate
+            delete par.totalLatency
+        }
+
+    }
+    gatherstat(par,stat,instruct) {
+        // we have an instance of this function's memory per in,out
+        let t = instruct.t+"Stat"
+        let report = par[t] ||= {}
+        const now = stat.timestamp;
+        const bytes = t == 'sendStat' ? stat.bytesSent : stat.bytesReceived;
+        if (bytes < report.lastByteCount) {
+            // par.pc must have been replaced
+            report.lastByteCount = 0
+        }
+
+        if (report.lastTimestamp > 0) {
+            // Calculate bitrate in kbps
+            const deltaTime = now - report.lastTimestamp;
+            const deltaBytes = bytes - report.lastByteCount;
+            report.bitrate = Math.round(
+                (deltaBytes * 8) / deltaTime,
+            ); // bits per second
+        }
+
+        report.lastByteCount = bytes;
+        report.lastTimestamp = now;
+
+        // each has particulars
+        instruct.copy.map(k => {
+            report[k] = stat[k]
+        })
     }
 }

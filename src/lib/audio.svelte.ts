@@ -340,7 +340,8 @@ export class AudioGainEffectoid extends AudioEffectoid {
 
     // Set gain level
     set_gain() {
-        console.log(`${this.par} ${this.name} gain twid ${this.gainValue}`)
+        // < this shouldn't fire so much (too reactive)
+        // console.log(`${this.par} ${this.name} gain twid ${this.gainValue}`)
         this.gainNode.gain.setValueAtTime(this.gainValue, this.AC.currentTime);
     }
 }
