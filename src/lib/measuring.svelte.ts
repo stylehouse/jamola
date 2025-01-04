@@ -123,8 +123,10 @@ export class BitrateStats {
                         'encoderDelay',           // Time spent encoding
                         'targetBitrate',          // Target sending rate
                         'packetsSent',            // Total packets sent
-                        'targetBitrate',          // Target sending rate
                         'retransmittedPackets',   // Packets that had to be resent
+                        'packetsDiscardedOnSend', // Packets dropped before sending
+                        'totalEncodedBytesTarget',// Desired encoded size
+                        'avgEncodeTime',          // Average time to encode frames
                         'qualityLimitationReason',// Target sending rate
                         'nackCount',              // Number of negative acknowledgments received
                     ]
@@ -134,11 +136,26 @@ export class BitrateStats {
                 this.gatherstat(par,stat,{
                     t:'receive',
                     copy: [
-                        'jitterBufferDelay',      // Time spent in receiver's buffer
                         'interarrivalJitter',     // Variation in packet arrival times
+                        'jitterBufferDelay',      // Time spent in receiver's buffer
+                        'jitterBufferEmittedCount',    // Frames played out from buffer
+                        'jitterBufferMinimumDelay',    // Minimum time packets stay in buffer
+                        'jitterBufferTargetDelay',     // Desired buffer delay
                         'packetsLost',            // Lost packets on receive side
+                        'packetsDiscarded',       // Packets dropped (might indicate buffer overflow)
+                        'concealedSamples',       // Audio gaps that needed to be filled
+                        'insertedSamplesForDeceleration', // Added samples to slow down playback
+                        'removedSamplesForAcceleration',  // Removed samples to speed up playback
                     ]
                 })
+            }
+
+            if (stat.type === "candidate-pair" && stat.nominated) {
+                let cS = par.candiStat ||= {}
+                cS.currentRoundTripTime = stat.currentRoundTripTime;
+                cS.availableOutgoingBitrate = stat.availableOutgoingBitrate;
+                cS.priority = stat.priority;
+                cS.transportType = stat.transportType;
             }
         });
 

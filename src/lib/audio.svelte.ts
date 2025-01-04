@@ -323,7 +323,7 @@ export class AudioGainEffectoid extends AudioEffectoid {
     // < what is this supposed to be? -23dB?
     public gainValue = $state(0.85);
 
-    private gainNode: GainNode | null = null;
+    gainNode: GainNode | null = null;
     // < got "super not a function" error if we super() all the way up this subtyping
     init_gain() {
         (this.controls ||= []).push(
@@ -441,6 +441,7 @@ export class Gainorator extends AudioGainEffectoid {
             this.peakLevel = peak;
 
             // < Check for low entropy, eg all bytes are 127
+            // to the AutoGainorator subclass
             this.on_metering?.()
 
             setTimeout(() => {
@@ -486,7 +487,7 @@ export class AutoGainorator extends Gainorator {
         this.gainNode.gain.value = 1; // Start with unity gain
     }
 
-    // hook into the our subclass' Gainorator.startMetering()
+    // hook into super|Gainorator.startMetering()
     meterings = 0
     on_metering() {
         // Gain adjustment logic
@@ -496,6 +497,20 @@ export class AutoGainorator extends Gainorator {
         this.adjustGain();
     }
     private adjustGain() {
+        // AI says:
+        //  performance.now() provides a high-resolution timestamp
+        //   relative to the page load, measuring wall clock time.
+        //   It's not affected by system clock changes and continues
+        //   to increase even when the page is inactive
+        //   or the system is sleeping
+        //  this.AC.currentTime is of the audio context. It starts
+        //   at zero when the context is created and advances in 
+        //   real-time, but only when the audio context is in the
+        //   "running" state.
+        //  The latter may stutter or pause relative to the former,
+        //   if tab is inactive (!running), audio processing
+        //   interruptions, heavy load.
+        //   
         const currentTime = performance.now();
         const peakDB = amplitudeToDB(this.peakLevel);
 
@@ -540,37 +555,6 @@ export class AutoGainorator extends Gainorator {
         }
     }
 
-    // Override startMetering to include gain adjustment
-    protected startMetering() {
-        cancelAnimationFrame(this.meterUpdateId);
-        const meterUpdate = () => {
-            cancelAnimationFrame(this.meterUpdateId);
-            
-            // Existing volume calculation
-            this.analyserNode.getByteTimeDomainData(this.dataArray);
-            
-            let sum = 0;
-            for (let i = 0; i < this.bufferLength; i++) {
-                const value = (this.dataArray[i] - 128) / 128;
-                sum += value * value;
-            }
-            const rms = Math.sqrt(sum / this.bufferLength);
-            
-            // Existing level calculations
-            let level = Math.min(rms * 2, 1);
-            this.volumeLevel = Math.min(Math.log10(1 + level * 10) / 1, 1);
-
-            // Check for peak (clipping)
-            const peak = Math.max(...this.dataArray) / 255;
-            this.peakLevel = peak;
-
-
-            setTimeout(() => {
-                this.meterUpdateId = requestAnimationFrame(meterUpdate);
-            }, 150);
-        };
-        this.meterUpdateId = requestAnimationFrame(meterUpdate);
-    }
 }
 
 // Convert linear amplitude to decibels

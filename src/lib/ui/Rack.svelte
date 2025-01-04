@@ -5,13 +5,17 @@
     // < take over volumeChange from above, directly on the par.effect.*
     let volumeLevel = $derived(par.gain.volumeLevel)
     let peakLevel = $derived(par.gain.peakLevel)
+    let latency = $derived(
+        par.latency == null ? null :
+            par.latency * 1000 // s to ms
+    )
 </script>
 
     {#if par.gain}<span class="bitrate">{Math.round(par.gain.peakLevel*1000)/1000} dB</span
         >{/if}
     {#if par.bitrate}<span class="bitrate" style="filter:hue(45deg)">{par.bitrate} kbps</span
         >{/if}
-    {#if par.latency}<span class="bitrate latency">{par.latency} ms</span
+    {#if latency}<span class="bitrate latency">{latency} ms</span
         >{/if}
 
         <div class="volume-meter">
