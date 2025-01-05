@@ -70,17 +70,8 @@ export class LatencyStats {
         // console.log(`latency del ${par.name}`)
 
         const startTime = Date.now();
-        if (par.channel.readyState == 'open') {
-            par.channel.send(JSON.stringify({
-                type: "latency_ping",
-                timestamp: startTime
-            }));
-        }
-        else {
-            // will become a ping timeout (that we didn't send)
-            // if it misses two more chances before:
-            console.log(`PING NOT SENDABLE: readyState=${par.channel.readyState}`)
-        }
+        // will become a ping timeout if unsendable
+        par.emit("latency_ping", {timestamp: startTime})
 
         // Set a timeout to detect potential packet loss
         let timeout_delta = 3
