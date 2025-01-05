@@ -6,6 +6,7 @@ type pc = RTCPeerConnection
 export class SignalingClient {
     socket:Socket
     peerConnections:Map<peerId,pc>
+    politePeerConnections:Map<peerId,1>
     on_close:Function
     on_peer:Function
     on_reneg: Function
@@ -14,6 +15,7 @@ export class SignalingClient {
     constructor(options: any = {}) {
         this.socket = io();
         this.peerConnections = new Map();
+        this.politePeerConnections = new Map();
         this.on_peer = options.on_peer || (() => {});
         this.on_close = options.on_close;
         this.on_reneg = options.on_reneg;
@@ -45,26 +47,43 @@ export class SignalingClient {
         this.socket.on('offer', async ({ offer, offererId }) => {
             console.log("offer from "+offererId, offer);
             const pc = await this.createPeerConnection(offererId);
-            const offerCollision = pc.signalingState !== "stable"
-                || this.makingOffer.get(offererId);
             
-            // We're the polite peer (receiver of the offer)
-            if (offerCollision) {
-                await Promise.all([
-                    pc.setLocalDescription({ type: "rollback" }),
-                    pc.setRemoteDescription(offer)
-                ]);
-            } else {
-                await pc.setRemoteDescription(offer);
+            try {
+                const offerCollision = pc.signalingState !== "stable" 
+                    || this.makingOffer.get(offererId);
+
+                // Important: We're always the polite peer when receiving an offer
+                //  < are we? looks like either side could renegotiate->offer first
+                if (offerCollision) {
+                    // each pair of peers has an originator, who shall be the polite one
+                    if (this.politePeerConnections.get(offererId)) {
+                        // we are the polite peer
+                        console.log(`Handling offer collision for ${offererId} - politely`);
+                        await Promise.all([
+                            pc.setLocalDescription({type: "rollback"}),
+                            pc.setRemoteDescription(offer)
+                        ]);
+                    } else {
+                        throw new Error("Impolite peer should not rollback");
+                    }
+                } else {
+                    await pc.setRemoteDescription(offer);
+                }
+
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                
+                this.socket.emit('answer', {
+                    targetId: offererId,
+                    answer
+                });
+            } catch (err) {
+                console.error(`Error handling offer from ${offererId}:`, err);
+                // Could implement recovery logic here
+                if (pc.signalingState !== "stable") {
+                    console.warn(`    Unstable state after offer handling: ${pc.signalingState}`);
+                }
             }
-
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-
-            this.socket.emit('answer', {
-                targetId: offererId,  // Send answer back to peer who made offer
-                answer
-            });
         });
 
         // When we receive an answer
@@ -77,10 +96,28 @@ export class SignalingClient {
             //     Failed to set remote answer sdp:
             //     Called in wrong state: have-remote-offer
             // so lets try...
-            if (pc.signalingState === "stable") {
-                console.warn(`Got answer but art stable ${answererId}`)
+            try {
+                // Check state right before attempting to set the description
+                const currentState = pc.signalingState;
+                console.log(`Processing answer in state: ${currentState} for ${answererId}`);
+                
+                if (currentState === "have-local-offer") {
+                    await pc.setRemoteDescription(answer);
+                } else if (currentState === "stable") {
+                    console.warn(`Got answer in stable state for ${answererId} - ignoring`);
+                } else {
+                    console.warn(`Unexpected state ${currentState} while processing answer for ${answererId}`);
+                }
+            } catch (err) {
+                console.error(`Error setting remote description for ${answererId}:`, err);
+                // Optionally handle recovery here
+                if (pc.signalingState === "stable") {
+                    console.log(`Connection ${answererId} reached stable state despite error`);
+                } else {
+                    // Could implement recovery logic here
+                    console.warn(`Connection ${answererId} in uncertain state:`, pc.signalingState);
+                }
             }
-            await pc.setRemoteDescription(answer);
         });
 
         // When we receive an ICE candidate
@@ -103,6 +140,8 @@ export class SignalingClient {
     // on room join, the newbie sends offers to everyone
     async offerPeerConnection(peerId,pc?) {
         pc ||= await this.createPeerConnection(peerId);
+        // each pair of peers has an originator, who shall be the polite one
+        this.politePeerConnections.set(peerId,1)
         
         try {
             this.makingOffer.set(peerId, true);
@@ -127,19 +166,19 @@ export class SignalingClient {
         // we replace these rather than deal with negotiation
         let was = this.peerConnections.get(peerId);
         if (was) {
-            let is_offered = was.signalingState == 'have-local-offer'
-                && was.connectionState == 'new'
-            let is_verynew = Date.now() - was.creation_time < 900
-            if (is_offered || is_verynew) {
-                // sometimes a remote reneg will send another offer
-                console.log(`double-offer`,{is_offered,is_verynew})
-                // we seem to have to close it and start over
-                //  or we constate stays connecting, then goes failed
-                // < or perhaps we should replace par?
-                // return was
+            // Only replace if the connection is failed or closed
+            if (was.connectionState === 'failed' || was.connectionState === 'closed') {
+                console.log(`Replacing failed/closed connection for ${peerId}`);
+                await was.close();
+                // < is there any state stickiness,
+                //    par.channel should replace itself onclose?
+            } else if (was.signalingState === 'stable' && was.connectionState === 'connected') {
+                console.log(`Reusing stable connection for ${peerId}`);
+                return was;
+            } else if (was.signalingState === 'have-local-offer' && Date.now() - was.creation_time < 900) {
+                console.log(`Waiting for very recent offer to complete for ${peerId}`);
+                return was;
             }
-            console.warn(`already had a pc to ${peerId}, closing...`)
-            await was.close()
         }
 
         const pc = new RTCPeerConnection({
@@ -166,38 +205,59 @@ export class SignalingClient {
         // negotiation handling
         // PeerJS doesn't do this,
         //   it adds everything to par.pc early enough to not need to
+        // < and perhaps neither will we... see 'because crypto trust'
         // < if the signaling server forwards peerId,name,cryptotrust
         //    we could add everything early enough too.
         //    we're currently waiting for stable->datachanneling->tracking
-        // < further betterment: https://blog.mozilla.org/webrtc/perfect-negotiation-in-webrtc/
+        // supposedly we do: https://blog.mozilla.org/webrtc/perfect-negotiation-in-webrtc/
         pc.onnegotiationneeded = async () => {
-            console.warn(`onnegotiationneeded ${peerId}`)
-            this.on_reneg?.({peerId,pc})
-
-            // Debounce renegotiation attempts
-            if (!this.makingOffer.get(peerId)) {
-                await this.renegotiate(pc, peerId);
+            try {
+                // Only renegotiate if we're in a stable state
+                if (pc.signalingState === "stable" && !this.makingOffer.get(peerId)) {
+                    console.log(`Starting negotiation for ${peerId}`);
+                    await this.renegotiate(pc, peerId);
+                } else {
+                    console.log(`Skipping negotiation - state: ${pc.signalingState}, makingOffer: ${this.makingOffer.get(peerId)}`);
+                }
+            } catch (err) {
+                console.error("Negotiation error:", err);
             }
         };
 
+        // Only call on_peer for new connections
         // Let them store it in their SvelteMap,
         //  and attach whatever else (eg .ontrack)
-        this.on_peer({ peerId, pc });
+        if (!was) {
+            this.on_peer({ peerId, pc });
+        }
 
         return pc;
     }
 
     async renegotiate(pc,peerId) {
+        if (this.makingOffer.get(peerId)) {
+            console.log(`Already making offer for ${peerId}`);
+            return;
+        }
+    
         try {
+            this.makingOffer.set(peerId, true);
+            const offer = await pc.createOffer();
+            
             if (pc.signalingState === "stable") {
-                await this.offerPeerConnection(peerId, pc);
-            } else {
-                console.warn("Skipping renegotiation, signaling state:", pc.signalingState);
+                await pc.setLocalDescription(offer);
+                this.socket.emit('offer', {
+                    targetId: peerId,
+                    offer
+                });
             }
         } catch (err) {
-            console.error("Negotiation error for peer", err);
+            console.error("Error during renegotiation:", err);
+        } finally {
+            this.makingOffer.set(peerId, false);
         }
     }
+    // < GONE?
     // < possible easy-way-out?
     // just replace the whole pc when any settings change
     async fatal_renegotiate(pc,peerId) {
