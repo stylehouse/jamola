@@ -20,7 +20,15 @@ export class Peering {
         let part = 'Signaling'
         try {
             this.Signaling = new SignalingClient({
-                on_peer: ({ peerId, pc }) => {
+                on_peer_creation: ({pc,polite}) => {
+                    // sync after new RTCPeerConnection
+                    // Create data channel immediately
+                    if (!polite) {
+                        // Only the !polite peer creates the data channel
+                        this.initDataChannel(pc);
+                    }
+                },
+                on_peer: ({ peerId, pc, polite }) => {
                     part = 'on_peer'
                     // a peer connection
                     //  soon to receive tracks, name etc
@@ -29,13 +37,13 @@ export class Peering {
                     this.pc_handlers(par)
                     // which leads to couldbeready(par) to graduate to tracksable.
 
-                    if ('want broken') {
+                    if (0 && 'want broken') {
                         // doesn't createDataChannel() fast enough, causes renegotiation
                         this.couldbeready(par)
                     }
                     else {
                         // throw datachannel out there now, so it can be part of the first negotiation
-                        this.createDataChannel(par)
+                        // this.createDataChannel(par)
                     }
                 },
                 on_reneg: ({ peerId, pc }) => {
@@ -73,7 +81,7 @@ export class Peering {
         }
         if (!par.channel) {
             // see 'want broken'
-            this.createDataChannel(par)
+            // this.createDataChannel(par)
             return
         }
         console.log(`${par} couldbeready...`)
@@ -247,18 +255,35 @@ export class Peering {
 
 
 
-
-    
-    // there are two data channels
-    //  because there's no singularity deciding who gets to create one
-    //   < track who originated the offer? it kind of gets lost in the mail
-    //  both pc just arrive in the right state to be able to
-    // the receiver is this other channel they sent us
-    // put handlers of replies in par_msg_handler.$type
+    // want to include the data channel in the initial negotiation
+    // data channel originates from the !polite peer
+    //  = receiver of the first offer = older non-joining one
+    // put handlers of replies in party.par_msg_handler.$type
+    // sync after new RTCPeerConnection
+    initDataChannel(pc) {
+        // temporarily host the channel object on the pc itself
+        // because par is not made yet
+        // < it probably should be... 
+        if (pc.channel) throw "already pc.channel"
+        pc.channel = pc.createDataChannel("participants");
+        pc.channel.onmessage = (e) => (pc.channel_msg ||= []).push(e)
+    }
     incomingDataChannel(par,channel) {
-        par.their_channel = channel
-        // console.log(`theirData arrives: ${par}`);
-        par.their_channel.onmessage = (event) => {
+        par.channel = channel
+        this.createDataChannel(par,'handlers_only')
+    }
+    createDataChannel(par,handlers_only) {
+        const pc = par.pc
+        if (handlers_only) {
+            if (!par.channel) throw "no channel to handle"
+        }
+        else {
+            par.channel = pc.channel
+            if (!par.channel) throw "no pc.channel to adopt"
+            delete pc.channel
+        }
+        // we have broken the symmetry of its origin via polite
+        par.channel.onmessage = (event) => {
             const data = JSON.parse(event.data);
             // console.log(`theirData message: ${par}`,data);
             let handler = par.party.par_msg_handler[data.type]
@@ -273,20 +298,6 @@ export class Peering {
 
             handler(par,data)
         };
-
-        par.their_channel.onerror = (e) => {
-            console.log(`theirData error: ${par}: ${e.error}`,e);
-        };
-        par.their_channel.onopen = () => {
-            // console.log(`theirData open: ${par}`);
-        };
-        par.their_channel.onclose = () => {
-            console.log(`theirData Leaves: ${par}`);
-        };
-    }
-    createDataChannel(par) {
-        let original = par.channel
-        par.channel = par.pc.createDataChannel("participants");
     
         // you (eg Measuring) can send messages.
         // like socket.io
@@ -307,7 +318,8 @@ export class Peering {
             debugger;
             announce_self();
         }
-        console.log(`${par} createDataChannel`,par.channel)
+        console.log(`${par} createDataChannel`
+            +(handlers_only?"-handlers":''),par.channel)
 
 
         par.channel.onerror = (e) => {
@@ -333,6 +345,10 @@ export class Peering {
             //  before trying to rebuild par.channel
             this.stabilise_par_pc(par)
         };
+
+        // process any waiting messages now we've a handler
+        pc.channel_msg?.map(e => par.channel.onmessage(e))
+        delete pc.channel_msg
     }
 
 }

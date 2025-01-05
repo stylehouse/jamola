@@ -140,6 +140,7 @@ export class SignalingClient {
     // on room join, the newbie sends offers to everyone
     async offerPeerConnection(peerId,pc?) {
         pc ||= await this.createPeerConnection(peerId);
+        
         // each pair of peers has an originator, who shall be the polite one
         this.politePeerConnections.set(peerId,1)
         
@@ -187,6 +188,8 @@ export class SignalingClient {
             ]
         });
         pc.creation_time = Date.now()
+        const polite = this.politePeerConnections.get(peerId)
+        this.on_peer_creation?.({pc,polite})
 
         // Store it in our map
         this.peerConnections.set(peerId, pc);
