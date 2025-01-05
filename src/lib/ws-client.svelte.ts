@@ -136,7 +136,7 @@ export class SignalingClient {
                 // we seem to have to close it and start over
                 //  or we constate stays connecting, then goes failed
                 // < or perhaps we should replace par?
-                return was
+                // return was
             }
             console.warn(`already had a pc to ${peerId}, closing...`)
             await was.close()
