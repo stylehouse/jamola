@@ -122,7 +122,7 @@ export class Participant {
             if (par.cooked.output) return
             // should have it by now
             console.error(`should have ${this} stream by now`)
-        },2500)
+        },6600)
     }
     have_output(stream) {
         if (!this.cooked.output) {

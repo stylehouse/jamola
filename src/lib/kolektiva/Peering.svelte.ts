@@ -42,6 +42,10 @@ export class Peering {
                     // hack for the renegotiation as a new pc, but same par
                     let par = this.party.i_par({ peerId })
                     console.warn(`~~~~~~~~~~~~~ reneg ${par} - ${par.constate}`)
+                    // < should we ever? would we rebuild them?
+                    //    perhaps we should throw out the par?
+                    // par.channel?.close()
+                    // par.their_channel?.close()
                 },
             });
         } catch (error) {
@@ -97,26 +101,28 @@ export class Peering {
     //   and their track arriving here after they get our par.name
     // < because crypto trust
     open_ontrack(par) {
-        console.log(`${par} open_ontrack!`)
+        let had = par.ontrack_queue || []
+        let many = had.length || "none"
+        console.log(`${par} open_ontrack! ${many} waiting`)
         // < multiple tracks, one at a time?
         par.pc.ontrack = (e) => {
-            console.log(`${par} par.pc.ontrack`)
+            console.log(`${par} par.pc.ontrack: `+ e.streams[0].getTracks())
             par.fresh.input(e.streams[0])
         };
-        (par.ontrack_queue||[]).map(e => {
+        had.map(e => {
             console.log(`${par} par.pc.ontrack from queue:`)
             par.pc.ontrack(e)
         })
         delete par.ontrack_queue
     }
     lets_send_our_track(par) {
-        console.log(`${par} lets_send_our_track!`)
         if (!this.is_par_pc_ready(par)) {
             debugger
             return
         }
         let localStream:MediaStream = this.party.get_localStream?.()
         if (!localStream) throw "!localStream"
+        console.log(`${par} lets_send_our_track!`,localStream.getTracks())
         
         let already_id = (id) => par.outgoing.filter(tr => tr.id == id)[0]
 
@@ -133,8 +139,15 @@ export class Peering {
             try {
                 const sender = par.pc.addTrack(track, localStream);
                 this.party.on_addTrack?.(par,track,sender,localStream)
+                track.onended = async () => {
+                    await this.par.pc.removeTrack(sender);
+                    // hopefully it will go again?
+                    par.outgoing = par.outgoing.filter(tr => tr != track)
+                    console.warn("${par} Track Ended")
+                }
                 par.outgoing.push(track)
-                console.log(`${par} give_localStream...`,{track,localStream,sender})
+                console.log(`${par} was sent our track`,{track,localStream,sender})
+
             } catch (error) {
                 console.error("Failed to add track:", error);
             }
@@ -262,7 +275,7 @@ export class Peering {
         };
 
         par.their_channel.onerror = (e) => {
-            console.log(`theirData error: ${par}`,e);
+            console.log(`theirData error: ${par}: ${e.error}`,e);
         };
         par.their_channel.onopen = () => {
             // console.log(`theirData open: ${par}`);
@@ -279,7 +292,7 @@ export class Peering {
         // like socket.io
         par.emit = (type,data) => {
             if (!par.channel || par.channel.readyState != "open") {
-                return console.error(`channel ${par} not open yet`)
+                return console.error(`channel ${par} not open yet, dropping message type=${type}`)
             }
             par.channel.send(JSON.stringify({type,...data}))
         }
@@ -298,7 +311,7 @@ export class Peering {
 
 
         par.channel.onerror = (e) => {
-            console.log(`Data error: ${par}`,e);
+            console.log(`Data error: ${par}: ${e.error}`,e);
         };
         par.channel.onmessage = (e) => {
             console.log(`Data message (on the out channel): ${par}`,e);

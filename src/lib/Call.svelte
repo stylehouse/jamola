@@ -243,7 +243,7 @@
                 par.fresh.input(localStream)
             }
             par.may_record()
-        },1500)
+        },111)
     }
 
 

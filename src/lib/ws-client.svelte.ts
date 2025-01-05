@@ -70,7 +70,16 @@ export class SignalingClient {
         // When we receive an answer
         this.socket.on('answer', async ({ answer, answererId }) => {
             const pc = this.peerConnections.get(answererId);
-            if (!pc || pc.signalingState === "stable") return;
+            if (!pc) return;
+            // < sometimes get: 
+            //    Uncaught (in promise) InvalidStateError: Failed to 
+            //     execute 'setRemoteDescription' on 'RTCPeerConnection':
+            //     Failed to set remote answer sdp:
+            //     Called in wrong state: have-remote-offer
+            // so lets try...
+            if (pc.signalingState === "stable") {
+                console.warn(`Got answer but art stable ${answererId}`)
+            }
             await pc.setRemoteDescription(answer);
         });
 
@@ -99,6 +108,7 @@ export class SignalingClient {
             this.makingOffer.set(peerId, true);
             const offer = await pc.createOffer();
             
+            if (pc.signalingState !== "stable") console.log(`@@@ offerPeerConnection sig=${pc.signalingState}`)
             if (pc.signalingState !== "stable") return;
             
             await pc.setLocalDescription(offer);
@@ -117,6 +127,17 @@ export class SignalingClient {
         // we replace these rather than deal with negotiation
         let was = this.peerConnections.get(peerId);
         if (was) {
+            let is_offered = was.signalingState == 'have-local-offer'
+                && was.connectionState == 'new'
+            let is_verynew = Date.now() - was.creation_time < 900
+            if (is_offered || is_verynew) {
+                // sometimes a remote reneg will send another offer
+                console.log(`double-offer`,{is_offered,is_verynew})
+                // we seem to have to close it and start over
+                //  or we constate stays connecting, then goes failed
+                // < or perhaps we should replace par?
+                return was
+            }
             console.warn(`already had a pc to ${peerId}, closing...`)
             await was.close()
         }
@@ -126,6 +147,7 @@ export class SignalingClient {
                 { urls: 'stun:stun.l.google.com:19302' }
             ]
         });
+        pc.creation_time = Date.now()
 
         // Store it in our map
         this.peerConnections.set(peerId, pc);
