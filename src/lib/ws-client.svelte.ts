@@ -6,19 +6,19 @@ type pc = RTCPeerConnection
 export class SignalingClient {
     socket:Socket
     peerConnections:Map<peerId,pc>
-    politePeerConnections:Map<peerId,1>
+    politePeerConnections:Map<peerId,boolean>
     on_close:Function
+    on_peer_creation:Function
     on_peer:Function
     on_reneg: Function
     makingOffer: Map<PeerId, boolean>
 
-    constructor(options: any = {}) {
+    constructor(opt) {
         this.socket = io();
         this.peerConnections = new Map();
         this.politePeerConnections = new Map();
-        this.on_peer = options.on_peer || (() => {});
-        this.on_close = options.on_close;
-        this.on_reneg = options.on_reneg;
+        Object.assign(this,opt)
+        this.on_peer ||= (() => {});
         this.makingOffer = new Map();
 
         // Join a room
@@ -142,7 +142,8 @@ export class SignalingClient {
         pc ||= await this.createPeerConnection(peerId);
         
         // each pair of peers has an originator, who shall be the polite one
-        this.politePeerConnections.set(peerId,1)
+        this.politePeerConnections.set(peerId,true)
+        console.log("Polite Polite Polite Polite Polite offer")
         
         try {
             this.makingOffer.set(peerId, true);
@@ -189,6 +190,7 @@ export class SignalingClient {
         });
         pc.creation_time = Date.now()
         const polite = this.politePeerConnections.get(peerId)
+        console.log("createPeerConnection "+(polite?"POLITELY":""))
         this.on_peer_creation?.({pc,polite})
 
         // Store it in our map

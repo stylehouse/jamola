@@ -24,6 +24,8 @@ export class Peering {
                     // sync after new RTCPeerConnection
                     // Create data channel immediately
                     if (!polite) {
+
+                        console.log("impoli impoli impoli impoli impoli datachannel")
                         // Only the !polite peer creates the data channel
                         this.initDataChannel(pc);
                     }
@@ -84,8 +86,13 @@ export class Peering {
             // this.createDataChannel(par)
             return
         }
+        if (par.is_ready) {
+            console.log(`${par} still ready...`)
+            return
+        }
         console.log(`${par} couldbeready...`)
         if (par.name != null) {
+            par.is_ready = true
             // their channel delivers to us their name!
             // this is ready!
             // and our par.effects will be created with fully name
@@ -200,6 +207,8 @@ export class Peering {
             "stable",
             // 'have-local-offer'
         ].includes(par.pc.signalingState)
+        &&
+        par.pc.iceConnectionState == 'connected'
 }
     // the newbie phase of a new par.pc
     //  before the rest of the Participant lifetime
@@ -267,6 +276,7 @@ export class Peering {
         if (pc.channel) throw "already pc.channel"
         pc.channel = pc.createDataChannel("participants");
         pc.channel.onmessage = (e) => (pc.channel_msg ||= []).push(e)
+        console.error("initDatachannel")
     }
     incomingDataChannel(par,channel) {
         par.channel = channel
@@ -315,7 +325,6 @@ export class Peering {
             announce_self = () => {};
         };
         if (par.channel.readyState == "open") {
-            debugger;
             announce_self();
         }
         console.log(`${par} createDataChannel`
