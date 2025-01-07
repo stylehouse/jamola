@@ -124,7 +124,7 @@ networks:
 configs:
   caddy_config:
     content: |
-      voulais.duckdns.org {
+      voulais-dev.duckdns.org {
           # Enable automatic HTTPS
           tls {
               dns duckdns $DUCKDNS_API_TOKEN
