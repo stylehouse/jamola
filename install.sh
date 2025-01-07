@@ -58,4 +58,5 @@ echo -e "\n${GREEN}Installation complete!${NC}"
 echo -e "Your Jamola instance is now running at: https://${DUCKDNS_DOMAIN}"
 echo -e "\nTo view logs: docker compose logs -f"
 echo -e "To stop: docker compose down"
+echo -e "See also install-theproxy.sh to run the public Caddy server elsewhere."
 
