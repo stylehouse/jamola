@@ -14,6 +14,7 @@ DEFAULT_USER=$(whoami)
 # Prompt for the user to run the tunnel service
 read -p "Enter username for running the tunnel service [$DEFAULT_USER]: " TUNNEL_USER
 TUNNEL_USER=${TUNNEL_USER:-$DEFAULT_USER}
+TUNNEL_USER_ID=$(id -u $DEFAULT_USER)
 
 # Create jamola-frontend-reverse-tunnel.service in the project directory
 cat > jamola-frontend-reverse-tunnel.service << EOT
@@ -23,6 +24,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
+Environment="SSH_AUTH_SOCK=/run/user/$TUNNEL_USER_ID/keyring/ssh"
 Environment="AUTOSSH_GATETIME=0"
 ExecStart=/usr/bin/autossh -M 0 -N -R 0.0.0.0:3000:localhost:9090 -p 2023 d -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3"
 RestartSec=5
