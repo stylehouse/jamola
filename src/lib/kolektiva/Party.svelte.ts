@@ -3,6 +3,7 @@ import { Participant } from "./Participants.svelte"
 
 export class Party {
     peering
+    // < rename ers or people. it's VR so...
     participants = $state([])
     measuring:Measuring
 
@@ -37,7 +38,6 @@ export class Party {
     start() {
         this.peering && this.stop()
         this.peering = new Peering({party:this})
-        this.peering.start()
     }
 
     stop() {

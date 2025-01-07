@@ -1,12 +1,14 @@
 import type { Socket } from "socket.io";
 import { io } from "socket.io-client";
 
+new Peering
 type peerId = string
 type pc = RTCPeerConnection
 export class SignalingClient {
     socket:Socket
     peerConnections:Map<peerId,pc>
     politePeerConnections:Map<peerId,boolean>
+    peering:Peering
     on_close:Function
     on_peer_creation:Function
     on_peer:Function
