@@ -1,15 +1,13 @@
-I'll reorganize the README to be clearer and reflect our improved setup process:
-
 # Cloud Doorway
 
-A reverse proxy setup using Caddy and SSH tunneling.
+A reverse proxy setup using Caddy and SSH tunneling. This will use minimal resources on the cloud host.
 
 ## Prerequisites
 
 - A cloud host with Docker installed
 - A DuckDNS account and domain
 - SSH access to your cloud host
-- A working jamola instance on this host
+- A working jamola instance on your local host
 
 ## Local Setup
 
@@ -54,7 +52,7 @@ docker compose up -d
 ssh -R 0.0.0.0:3000:localhost:9090 -p 2023 d
 ```
 
-## Optional: Persistent Tunnel
+## Persistent Tunnel
 
 For a persistent connection, install autossh and the service on your local machine:
 

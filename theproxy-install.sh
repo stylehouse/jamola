@@ -26,9 +26,23 @@ Wants=network-online.target
 [Service]
 Environment="SSH_AUTH_SOCK=/run/user/$TUNNEL_USER_ID/keyring/ssh"
 Environment="AUTOSSH_GATETIME=0"
-ExecStart=/usr/bin/autossh -M 0 -N -R 0.0.0.0:3000:localhost:9090 -p 2023 d -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3"
-RestartSec=5
+Environment="AUTOSSH_MAXSTART=0"  # no giving up
+Environment="AUTOSSH_POLL=30"     # polling interval
+ExecStart=/usr/bin/autossh \
+    -M 0 \
+    -N \
+    -R 0.0.0.0:3000:localhost:9090 \
+    -p 2023 \
+    d \
+    -o "ServerAliveInterval=30" \
+    -o "ServerAliveCountMax=3" \
+    -o "ExitOnForwardFailure=yes" \
+    -o TCPKeepAlive=yes
+    RestartSec=30
 Restart=always
+# remove systemd's restart limits
+StartLimitIntervalSec=0    # Add this to remove the restart attempt limit
+StartLimitBurst=0          # Add this to remove the burst limit
 User=$TUNNEL_USER
 
 [Install]
