@@ -2,6 +2,7 @@ x-defaults: &defaults
   restart: always
 
 services:
+  # connects the internet to this caddy, voulais-dev
   router-config:
     build:
       context: .
@@ -82,6 +83,33 @@ services:
     networks:
       - web
     <<: *defaults
+  
+  # See also theproxy/README.md to run the public Caddy server elsewhere.
+  ssh-tunnel-source:
+      build:
+        context: .
+        dockerfile_inline: |
+          FROM alpine:latest
+          RUN apk add --no-cache openssh-client
+          RUN mkdir -p /root/.ssh && chmod 700 /root/.ssh
+      command: |
+        sh -c 'echo "$$SSH_PRIVATE_KEY" > /root/.ssh/id_ed25519 && \
+        chmod 600 /root/.ssh/id_ed25519 && \
+        exec ssh -v -N \
+          -R 0.0.0.0:3000:cos-jamo:3000 \
+          -i /root/.ssh/id_ed25519 \
+          -o ServerAliveInterval=30 \
+          -o ExitOnForwardFailure=yes \
+          -o StrictHostKeyChecking=accept-new \
+          -p 2023 \
+          root@d'
+      environment:
+        - SSH_PRIVATE_KEY=${SSH_PRIVATE_KEY}
+      depends_on:
+        - cos-jamo
+      networks:
+        - web
+      <<: *defaults
     
   # the app itself!
   cos-jamo:

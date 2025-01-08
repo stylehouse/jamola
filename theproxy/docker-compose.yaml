@@ -26,25 +26,33 @@ services:
       - web
     <<: *defaults
 
-  ssh-tunnel:
+  ssh-tunnel-destiny:
     build:
       context: .
       dockerfile_inline: |
         FROM ubuntu:22.04
         RUN apt-get update && apt-get install -y \
-            net-tools curl openssh-server && \
+            net-tools \
+            curl \
+            openssh-server \
+            bash \
+            dnsutils \
+            iputils-ping \
+            iproute2 && \
             mkdir /run/sshd && \
             mkdir -p /root/.ssh
-        RUN echo "${SSH_PUBLIC_KEY}" > /root/.ssh/authorized_keys && \
-            chmod 600 /root/.ssh/authorized_keys && \
-            chown root:root /root/.ssh/authorized_keys
-        # make the forwarded port (3000) accessible on all interfaces (0.0.0.0) instead of just localhost
-        RUN echo "GatewayPorts yes" >> /etc/ssh/sshd_config
-        CMD ["/usr/sbin/sshd", "-D", "-p", "2023"]
+        # Don't try to write the key during build
+        COPY env_to_authorized_keys.sh /root/
+        RUN chmod +x /root/env_to_authorized_keys.sh
+        # make the forwarded port (3000) accessible on all interfaces
+        RUN echo "GatewayPorts yes" >> /etc/ssh/sshd_config && \
+            echo "PasswordAuthentication no" >> /etc/ssh/sshd_config
+            
+        # Write the key at runtime instead of build time
+        CMD ["/bin/sh", "-c", "/root/env_to_authorized_keys.sh && /usr/sbin/sshd -D -p 2023"]
     environment:
       - SSH_PUBLIC_KEY=${SSH_PUBLIC_KEY}
     ports:
-      # - "3000:3000"
       - "2023:2023"
     networks:
       - web
@@ -71,8 +79,8 @@ configs:
           
           # Handle all requests
           handle {
-              # Reverse proxy to your application
-              reverse_proxy ssh-tunnel:3000
+              # the tunnel to your application
+              reverse_proxy ssh-tunnel-destiny:3000
           }
           
           # Basic security headers
