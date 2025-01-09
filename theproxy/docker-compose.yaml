@@ -1,16 +1,12 @@
+# docker-compose.yml
 x-defaults: &defaults
   restart: always
 
 services:
+  # this caddy uses HTTP/TLS challenges (requiring port 443 access)
+  #  not building modules for duckdns saves a bit of time here
   caddy:
-    build:
-      context: .
-      dockerfile_inline: |
-        FROM caddy:2-builder AS builder
-        RUN xcaddy build --with github.com/caddy-dns/duckdns
-
-        FROM caddy:2
-        COPY --from=builder /usr/bin/caddy /usr/bin/caddy
+    image: caddy:2
     ports:
       - "443:443"
     volumes:
@@ -20,35 +16,48 @@ services:
     configs:
       - source: caddy_config
         target: /etc/caddy/Caddyfile
-    environment:
-      - DUCKDNS_API_TOKEN=${DUCKDNS_API_TOKEN}
     networks:
       - web
     <<: *defaults
-
+  duckdns-updater:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM alpine:3.19
+        RUN apk add --no-cache curl jq
+        COPY update-dns.sh /
+        RUN chmod +x /update-dns.sh
+        CMD ["/update-dns.sh"]
+    environment:
+      - DUCKDNS_DOMAIN=${DUCKDNS_DOMAIN}
+      - DUCKDNS_TOKEN=${DUCKDNS_TOKEN}
+    networks:
+      - web
+    <<: *defaults
+  
   ssh-tunnel-destiny:
     build:
       context: .
       dockerfile_inline: |
-        FROM ubuntu:22.04
-        RUN apt-get update && apt-get install -y \
-            net-tools \
-            curl \
+        FROM alpine:3.19
+        RUN apk add --no-cache \
             openssh-server \
-            bash \
-            dnsutils \
-            iputils-ping \
+            curl \
+            bind-tools \
+            iputils \
             iproute2 && \
             mkdir /run/sshd && \
             mkdir -p /root/.ssh
-        # Don't try to write the key during build
+        RUN ssh-keygen -A
         COPY env_to_authorized_keys.sh /root/
         RUN chmod +x /root/env_to_authorized_keys.sh
-        # make the forwarded port (3000) accessible on all interfaces
-        RUN echo "GatewayPorts yes" >> /etc/ssh/sshd_config && \
+        RUN sed -i '/^AllowTcpForwarding no/d; /^GatewayPorts no/d' /etc/ssh/sshd_config && \
+            echo "AllowTcpForwarding yes" >> /etc/ssh/sshd_config && \
+            echo "GatewayPorts yes" >> /etc/ssh/sshd_config && \
             echo "PasswordAuthentication no" >> /etc/ssh/sshd_config
-            
-        # Write the key at runtime instead of build time
+          # < these seem not to work, though sshd -d -e ... did (but very noisy)
+          # echo "LogLevel VERBOSE" >> /etc/ssh/sshd_config && \
+          # echo "SyslogFacility AUTH" >> /etc/ssh/sshd_config
         CMD ["/bin/sh", "-c", "/root/env_to_authorized_keys.sh && /usr/sbin/sshd -D -p 2023"]
     environment:
       - SSH_PUBLIC_KEY=${SSH_PUBLIC_KEY}
@@ -69,33 +78,16 @@ configs:
   caddy_config:
     content: |
       voulais.duckdns.org {
-          # Enable automatic HTTPS
-          tls {
-              dns duckdns $DUCKDNS_API_TOKEN
-          }
-          
-          # Enable compression
           encode zstd gzip
-          
-          # Handle all requests
           handle {
-              # the tunnel to your application
               reverse_proxy ssh-tunnel-destiny:3000
           }
-          
-          # Basic security headers
           header {
-              # Enable HSTS
               Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-              # Prevent browsers from sniffing MIME types
               X-Content-Type-Options "nosniff"
-              # XSS protection
               X-XSS-Protection "1; mode=block"
-              # Click-jacking protection
               X-Frame-Options "DENY"
           }
-          
-          # Enable logging
           log {
               output file /var/log/caddy/access.log
               format console

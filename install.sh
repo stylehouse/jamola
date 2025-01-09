@@ -43,11 +43,12 @@ echo -e "\n${GREEN}Setup DuckDNS configuration:${NC}"
 read -p "Enter your DuckDNS subdomain (e.g., yourname.duckdns.org): " DUCKDNS_DOMAIN
 read -p "Enter your DuckDNS token: " DUCKDNS_TOKEN
 # Update docker-compose.yml with the domain
-sed -i.bak "s/voulais.duckdns.org/${DUCKDNS_DOMAIN}/g" docker-compose.yaml
+sed -E -i.bak "s/voulais(-dev)?.duckdns.org/${DUCKDNS_DOMAIN}/g" docker-compose.yaml
 sed -i.bak "s/voulais.duckdns.org/${DUCKDNS_DOMAIN}/g" theproxy/docker-compose.yaml
 # Create .env file
 cat > .env << EOF
-DUCKDNS_API_TOKEN=${DUCKDNS_TOKEN}
+DUCKDNS_TOKEN=${DUCKDNS_TOKEN}
+DUCKDNS_DOMAIN=${DUCKDNS_DOMAIN}
 EOF
 
 

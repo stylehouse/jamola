@@ -56,7 +56,10 @@ services:
     network_mode: "host"  # Use host networking for better UPnP support
     <<: *defaults
   
-  
+
+  # this caddy uses DNS challenges, not requiring public port 443 access
+  #  ie, you can run your service on a upnp-able port like 9443
+  #   in case you have limited access, see router-config.js merely_upnp()
   caddy:
     build:
       context: .
@@ -76,20 +79,18 @@ services:
       - source: caddy_config
         target: /etc/caddy/Caddyfile
     environment:
-      - DUCKDNS_API_TOKEN=${DUCKDNS_API_TOKEN}
-    # depends_on:
-    #   cos-jamo:
-    #     condition: service_healthy
+      - DUCKDNS_DOMAIN=${DUCKDNS_DOMAIN}
+      - DUCKDNS_TOKEN=${DUCKDNS_TOKEN}
     networks:
       - web
     <<: *defaults
-  
+    
   # See also theproxy/README.md to run the public Caddy server elsewhere.
   ssh-tunnel-source:
       build:
         context: .
         dockerfile_inline: |
-          FROM alpine:latest
+          FROM alpine:3.19
           RUN apk add --no-cache openssh-client
           RUN mkdir -p /root/.ssh && chmod 700 /root/.ssh
       command: |
@@ -155,7 +156,7 @@ configs:
       voulais-dev.duckdns.org {
           # Enable automatic HTTPS
           tls {
-              dns duckdns $DUCKDNS_API_TOKEN
+              dns duckdns $DUCKDNS_TOKEN
           }
           
           # Enable compression

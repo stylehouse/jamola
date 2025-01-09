@@ -52,10 +52,11 @@ sudo ufw allow 2023/tcp # SSH tunnel
 ## Environment Variables
 
 Already configured in .env by the installer:
-- `DUCKDNS_API_TOKEN`: Your DuckDNS token for SSL certificates
+- `DUCKDNS_TOKEN`: Your DuckDNS token for SSL certificates
+- `DUCKDNS_DOMAIN`: Your domain, eg voulais.duckdns.org
 - `SSH_PRIVATE_KEY`: The SSH key for the tunnel client
-- `SSH_PUBLIC_KEY`: The SSH key for the tunnel server
-Ah right! We replaced the systemd service with the Docker container `ssh-tunnel-source`. Let me fix that troubleshooting section:
+- `SSH_PUBLIC_KEY`: The SSH key(s) for the tunnel server
+
 
 ## Troubleshooting
 
