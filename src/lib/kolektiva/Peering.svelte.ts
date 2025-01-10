@@ -11,6 +11,24 @@ import { Participant } from "./Participants.svelte";
             //    much later in parRecorder.uploadCurrentSegment
             //    see "it seems like a svelte5 object proxy problem"
 
+
+/**
+ * WebRTC peer connection management with state tracking:
+ * - Paring: Per-peer connection manager with RTCPeerConnection and DataChannel
+ *   - state: Overall peer state (new->connected->ready)
+ *   - signalingState: SDP negotiation state
+ * - Participant: User representation with derived connection state
+ *   - constate: Combined state string from PC/ICE/channel states
+ *   - pc_ready: Connection readiness flag for track exchange
+ *   - is_ready: High-level ready state after name exchange
+ * 
+ * Flow: socket.io join -> create Paring -> establish RTCPeerConnection -> 
+ * exchange SDP/ICE -> open DataChannel -> exchange names -> exchange tracks
+ * 
+ * The polite peer responds to offers, impolite peer initiates DataChannel.
+ * Track exchange begins only after connection is stable and names exchanged.
+ */
+
 // Types for state management
 type PeerState = 'new' | 'connecting' | 'connected' | 'ready' | 'paused' | 'failed';
 type SignalingState = 'new' | 'offering' | 'answering' | 'stable';
@@ -44,6 +62,14 @@ class Paring {
     lastStateChange: number
     retryCount: number
 
+    // you (eg Measuring) can send messages.
+    // like socket.io
+    emit(type,data) {
+        if (!this.channel || this.channel.readyState != "open") {
+            return console.error(`${this} channel not open yet, dropping message type=${type}`)
+        }
+        this.channel.send(JSON.stringify({type,...data}))
+    }
 
     constructor(opt) {
         Object.assign(this, opt)
@@ -129,7 +155,7 @@ export class Peering {
         if (!ing) {
             // data channel originates from the other, !polite peer
             //  = receiver of the first offer = older non-joining peer
-            ing = await this.createPeer(peerId);
+            ing = await this.createPeer(peerId,false);
         }
         
         try {
@@ -141,10 +167,13 @@ export class Peering {
     }
     // part of offerPeerConnection() or handleOffer()
     private async createPeer(peerId: peerId, polite: boolean): Promise<Paring> {
-        const pc = new RTCPeerConnection({
-            // < run one of these:
-            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-        });
+        const iceServers = [
+            // < run one of these, and a TURN
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun.stunprotocol.org:3478' }
+        ]
+        const pc = new RTCPeerConnection({iceServers});
 
         const ing = new Paring({
             peerId,
@@ -177,15 +206,8 @@ export class Peering {
         let was = this.party.find_par({ peerId })
         // indexed by the peerId
         let par = this.party.createPar({peerId})
-        // you (eg Measuring) can send messages.
-        // like socket.io
-        par.emit = (type,data) => {
-            if (!par.channel || par.channel.readyState != "open") {
-                return console.error(`channel ${par} not open yet, dropping message type=${type}`)
-            }
-            par.channel.send(JSON.stringify({type,...data}))
-        }
         // pair, separate for aesthetics
+        // both have emit
         par.ing = ing
         ing.par = par
         // < GOING
@@ -194,23 +216,76 @@ export class Peering {
         par.on_created?.(this.party,ing)
     }
     private setupPeerHandlers(ing: Paring) {
+        let perc_state = () => this.updateConnectionState(ing)
         ing.pc.oniceconnectionstatechange = () => {
             this.handleICEStateChange(ing);
+            perc_state()
         };
+        ing.pc.onsignalingstatechange = perc_state
+        ing.pc.onconnectionstatechange = perc_state
 
         ing.pc.ondatachannel = ({ channel }) => {
-            console.log(`${ing} channel arrived`);
+            console.log(`${ing} ondatachannel: ${channel.label}`, channel.readyState);
             ing.channel = channel;
             this.setupDataChannelHandlers(ing);
+            perc_state()
         };
 
         ing.pc.onnegotiationneeded = async () => {
             await this.handleNegotiationNeeded(ing);
         };
+
+        ing.pc.onicecandidate = async ({candidate}) => {
+            if (candidate) {
+                await this.handleICECandidate(ing, candidate);
+            }
+        };    
+
+        ing.pc.onicecandidateerror = (event) => {
+            // Log but don't fail on STUN timeouts
+            if (event.errorCode === 701) {
+                console.log(`${ing} STUN timeout for ${event.url} (expected for IPv6)`);
+                return;
+            }
+            console.warn(`${ing} ICE candidate error:`, event);
+        };
+
     }
+    private updateConnectionState(ing: Paring) {
+        const states = [
+            ing.pc.connectionState,
+            ing.pc.signalingState,
+            ing.pc.iceConnectionState,
+            ing.channel?.readyState ?? "?"
+        ];
+        const newState = states.join('/');
+        const par = ing.par;
+        
+        if (newState !== par.constate) {
+            par.constate = newState;
+            console.log(`-o- ${ing} is ${newState}`);
+    
+            // Update pc_ready state
+            par.pc_ready = (
+                ["new", "connected", "connecting"].includes(ing.pc.connectionState) &&
+                ["stable"].includes(ing.pc.signalingState)
+            );
+    
+            // Update offline state based on channel
+            par.offline = !ing.channel || ing.channel.readyState !== "open";
+    
+            // Check if state change enables further progress
+            this.couldbeready(par);
+        }
+    }
+
+//#region channel
     private initDataChannel(ing: Paring) {
         console.log(`${ing} channel create`);
-        ing.channel = ing.pc.createDataChannel('main');
+        ing.channel = ing.pc.createDataChannel('main',{
+            negotiated: false,  // Let's be explicit
+            id: null           // Let WebRTC pick the ID
+        });
         this.setupDataChannelHandlers(ing);
     }
     private setupDataChannelHandlers(ing: Paring) {
@@ -219,12 +294,14 @@ export class Peering {
         };
         ing.channel.onopen = () => {
             this.handleChannelOpen(ing);
+            this.updateConnectionState(ing);
         };
-        ing.channel.onclose = () => {
-            this.handleChannelClose(ing);
+        ing.channel.onclose = (e) => {
+            this.handleChannelClose(ing,e);
+            this.updateConnectionState(ing);
         };
-        ing.channel.onmessage = (event) => {
-            this.handleChannelMessage(ing, JSON.parse(event.data));
+        ing.channel.onmessage = (e) => {
+            this.handleChannelMessage(ing, JSON.parse(e.data));
         };
     }
     // < these could be Paring methods
@@ -232,12 +309,11 @@ export class Peering {
         // < delete par.offline? or rely on a positive ping to?
         this.updatePeerState(ing, 'connected');
         this.sendIdentity(ing);
-        delete par.bitrate;
-        console.warn(`${ing} channel close: ${e.error}`,e);
+        console.warn(`${ing} channel open`);
     }
-    handleChannelClose(ing) {
+    handleChannelClose(ing,e) {
         delete ing.par.bitrate;
-        console.warn(`${ing} channel close`);
+        console.warn(`${ing} channel close`,e);
     }
     // < put at a higher level, no other name in here
     sendIdentity(ing) {
@@ -276,6 +352,7 @@ export class Peering {
         let ing = this.ings.get(peerId);
         
         if (!ing) {
+            // we're politely receiving the offer
             ing = await this.createPeer(peerId, true);
         }
 
@@ -313,7 +390,7 @@ export class Peering {
             this.handleSignalingFailure(ing);
         }
     }
-
+    
     private async handleAnswer(peerId: peerId, answer: RTCSessionDescriptionInit) {
         const ing = this.ings.get(peerId);
         if (!ing) return;
@@ -337,6 +414,15 @@ export class Peering {
                 console.warn(`Connection ${peerId} in uncertain state:`, ing.pc.signalingState);
             }
         }
+    }
+
+    // then magically!
+    private async handleICECandidate(ing: Paring, candidate: RTCIceCandidate) {
+        console.log(`${ing} ICE candidate: ${candidate.type} ${candidate.protocol} ${candidate.address||'[redacted]'}:${candidate.port}`);
+        this.socket.emit('ice-candidate', {
+            targetId: ing.peerId,
+            candidate
+        });
     }
     
     private updatePeerState(ing: Paring, newState: PeerState) {
@@ -434,11 +520,14 @@ export class Peering {
     //  par.on_ready() is the high-level, send|receive tracks time
     // anyway this fires any time we might have satisfied its rules
     couldbeready(par) {
+        console.log(`${par} couldbeready?`)
         if (!par.pc_ready) {
             // wait for par.pc to get in a good state
+            console.log("not ready")
             return
         }
-        if (!par.channel) {
+        if (!par.ing.channel) {
+            console.warn(`${par} pc_ready but no channel`)
             // see 'want broken'
             // this.createDataChannel(par)
             return
@@ -448,17 +537,22 @@ export class Peering {
             return
         }
         console.log(`${par} couldbeready...`)
-        if (par.name != null) {
-            par.is_ready = true
-            // their channel delivers to us their name!
-            // this is ready!
-            // and our par.effects will be created with fully name
-            par.on_ready()
-            // we can send tracks
-            this.lets_send_our_track(par)
-            // we can receive tracks
-            this.open_ontrack(par)
+        if (par.name == null) {
+            console.log(`${par} but for no name!`)
+            return
         }
+
+        par.is_ready = true
+        console.log("Yep, lets track")
+        return
+        // their channel delivers to us their name!
+        // this is ready!
+        // and our par.effects will be created with fully name
+        par.on_ready()
+        // we can send tracks
+        this.lets_send_our_track(par)
+        // we can receive tracks
+        this.open_ontrack(par)
     }
 
 

@@ -43,6 +43,9 @@ export class Participant {
     toString() {
         return this.name || this.peerId
     }
+    emit(type,data) {
+        return this.ing.emit(type,data)
+    }
 
     wants_recording() {
         if (this.party.activate_recording
