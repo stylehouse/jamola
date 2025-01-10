@@ -5,6 +5,11 @@ import { io } from "socket.io-client";
 import { tick } from "svelte";
 import type { Party } from "./Party.svelte";
 import { Participant } from "./Participants.svelte";
+// < hopefully this problem goes away:
+            // < for some reason we have to seek out the par again at this point
+            //   not doing this leads to this.par.name being undefined
+            //    much later in parRecorder.uploadCurrentSegment
+            //    see "it seems like a svelte5 object proxy problem"
 
 // Types for state management
 type PeerState = 'new' | 'connecting' | 'connected' | 'ready' | 'paused' | 'failed';
@@ -19,7 +24,7 @@ interface Paring {
     signalingState: SignalingState;
     polite: boolean;
     channel?: RTCDataChannel;
-    name?: string;
+    
     lastStateChange: number;
     retryCount: number;
 }
@@ -31,9 +36,10 @@ class Paring {
     // == par.pc
     // < but it probably belongs here
     pc: RTCPeerConnection
-    state: PeerState
-    get pc():RTCPeerConnection {
-        return this.par.pc
+    // < show in ui
+    state: PeerState = $state()
+    toString() {
+        return this.par?.name ?? this.peerId
     }
     lastStateChange: number
     retryCount: number
@@ -58,59 +64,82 @@ export class Peering {
     party: Party
     private readonly maxRetries = 3;
     private readonly retryDelay = 1000;
+    public onPeerReady:Function
+    public onStateChange:Function
 
     constructor(opt) {
         Object.assign(this, opt)
-        this.socket = io();
-        // < lift this from ws-client
-        this.setupSocketListeners();
+        this.setupSocket();
 
-        this.room = this.party.get_forever("room")
+        // < this.party.get_forever("room")
+        this.room = this.room;
         this.socket.emit('join-room', this.room);
 
+        // < was passed around, mostly via sock()
+        this.party.Signaling = this
+    }
 
-        // < GOING
-        ({
-            on_peer_creation: ({pc,polite}) => {
-                // sync after new RTCPeerConnection
-                // Create data channel immediately
-                if (!polite) {
 
-                    console.log("impoli impoli impoli impoli impoli datachannel")
-                    // Only the !polite peer creates the data channel
-                    this.initDataChannel(pc);
-                }
-            },
-            on_peer: ({ peerId, pc, polite }) => {
-                part = 'on_peer'
-                // a peer connection
-                //  soon to receive tracks, name etc
-                let par = this.party.i_par({ peerId, pc });
-                // but first:
-                this.pc_handlers(par)
-                // which leads to couldbeready(par) to graduate to tracksable.
 
-                if (0 && 'want broken') {
-                    // doesn't createDataChannel() fast enough, causes renegotiation
-                    this.couldbeready(par)
-                }
-                else {
-                    // throw datachannel out there now, so it can be part of the first negotiation
-                    // this.createDataChannel(par)
-                }
-            },
-            on_reneg: ({ peerId, pc }) => {
-                // hack for the renegotiation as a new pc, but same par
-                let par = this.party.i_par({ peerId })
-                console.warn(`~~~~~~~~~~~~~ reneg ${par} - ${par.constate}`)
-                // < should we ever? would we rebuild them?
-                //    perhaps we should throw out the par?
-                // par.channel?.close()
-                // par.their_channel?.close()
-            },
+
+
+
+    // move down near offer etc
+    setupSocket() {
+        this.socket = io();
+        
+        // When we get list of peers already in the room
+        this.socket.on('peers-in-room', async ({ peers }) => {
+            // Create an offer for each existing peer
+            for (const peerId of peers) {
+                this.offerPeerConnection(peerId);
+            }
+        });
+        // and when others join the room
+        this.socket.on('peer-joined', async ({ peerId }) => {
+            console.log('New peer:', peerId);
+            // they are about to get our peerId via peers-in-room
+        });
+        this.socket.on('offer', async ({ offer, offererId:peerId }) => {
+            await this.handleOffer(peerId,offer)
+        })
+        this.socket.on('answer', async ({ answer, answererId:peerId }) => {
+            await this.handleAnswer(peerId, answer);
+        })
+        this.socket.on('ice-candidate', async ({ candidate, from:peerId }) => {
+            let ing = this.ings.get(peerId);
+            // try {
+                await ing.pc.addIceCandidate(candidate);
+            // } catch (e) {
+            //     // Ignore candidates if we're not in the right state
+            //     if (pc.remoteDescription && pc.remoteDescription.type) {
+            //         console.error("ICE candidate error:", e);
+            //     }
+            // }
         });
     }
 
+
+
+// #region pc
+    
+    async offerPeerConnection(peerId:peerId) {
+        let ing = this.ings.get(peerId);
+            
+        if (!ing) {
+            // data channel originates from the other, !polite peer
+            //  = receiver of the first offer = older non-joining peer
+            ing = await this.createPeer(peerId);
+        }
+        
+        try {
+            // this part is common with handleNegotiationNeeded()  
+            await this.makeOffer(ing)
+        } catch (err) {
+            console.error('offerPeerConnection failed:', err);
+        }
+    }
+    // part of offerPeerConnection() or handleOffer()
     private async createPeer(peerId: peerId, polite: boolean): Promise<Paring> {
         const pc = new RTCPeerConnection({
             // < run one of these:
@@ -126,7 +155,7 @@ export class Peering {
             lastStateChange: Date.now(),
             retryCount: 0
         })
-
+        this.createAlsoPar(ing)
         this.setupPeerHandlers(ing);
         this.ings.set(peerId, ing);
 
@@ -134,68 +163,115 @@ export class Peering {
         if (!polite) {
             this.initDataChannel(ing);
         }
+        let politism = ing.polite ? 'polite' : ''
+        console.log(`${ing} createPeer ${politism}`);
 
         return ing;
     }
+    private async createAlsoPar(ing) {
+        // < where to start having name|cryptotrust meta
+        //    and start allowing multiple pc? what for?
+        // < multiple tracks coming from this pc|par
+        //    each one wants a Rack etc
+        let peerId = ing.peerId
+        let was = this.party.find_par({ peerId })
+        // indexed by the peerId
+        let par = this.party.createPar({peerId})
+        // you (eg Measuring) can send messages.
+        // like socket.io
+        par.emit = (type,data) => {
+            if (!par.channel || par.channel.readyState != "open") {
+                return console.error(`channel ${par} not open yet, dropping message type=${type}`)
+            }
+            par.channel.send(JSON.stringify({type,...data}))
+        }
+        // pair, separate for aesthetics
+        par.ing = ing
+        ing.par = par
+        // < GOING
+        par.pc = ing.pc
 
-    private initDataChannel(ing: Paring) {
-        const channel = ing.pc.createDataChannel('main');
-        
-        channel.onopen = () => {
-            this.updatePeerState(ing, 'connected');
-            this.sendIdentity(ing);
-        };
-
-        channel.onclose = () => {
-            this.handleChannelClose(ing);
-        };
-
-        channel.onmessage = (event) => {
-            this.handleDataMessage(ing, JSON.parse(event.data));
-        };
-
-        ing.channel = channel;
+        par.on_created?.(this.party,ing)
     }
-
     private setupPeerHandlers(ing: Paring) {
         ing.pc.oniceconnectionstatechange = () => {
             this.handleICEStateChange(ing);
         };
 
         ing.pc.ondatachannel = ({ channel }) => {
+            console.log(`${ing} channel arrived`);
             ing.channel = channel;
-            this.setupDataChannelHandlers(ing, channel);
+            this.setupDataChannelHandlers(ing);
         };
 
         ing.pc.onnegotiationneeded = async () => {
             await this.handleNegotiationNeeded(ing);
         };
     }
-
-
-    private async handleNegotiationNeeded(ing: Paring) {
-        if (ing.signalingState !== 'stable') {
-            console.log('Skipping negotiation - not stable');
-            return;
-        }
-
-        try {
-            ing.signalingState = 'offering';
-            const offer = await ing.pc.createOffer();
-            await ing.pc.setLocalDescription(offer);
-
-            this.socket.emit('offer', {
-                targetId: ing.peerId,
-                offer
-            });
-        } catch (err) {
-            console.error('Negotiation failed:', err);
-            this.handleNegotiationFailure(ing);
-        } finally {
-            ing.signalingState = 'stable';
-        }
+    private initDataChannel(ing: Paring) {
+        console.log(`${ing} channel create`);
+        ing.channel = ing.pc.createDataChannel('main');
+        this.setupDataChannelHandlers(ing);
     }
+    private setupDataChannelHandlers(ing: Paring) {
+        ing.channel.onerror = (e) => {
+            console.error(`${ing} channel error: ${e.error}`,e);
+        };
+        ing.channel.onopen = () => {
+            this.handleChannelOpen(ing);
+        };
+        ing.channel.onclose = () => {
+            this.handleChannelClose(ing);
+        };
+        ing.channel.onmessage = (event) => {
+            this.handleChannelMessage(ing, JSON.parse(event.data));
+        };
+    }
+    // < these could be Paring methods
+    handleChannelOpen(ing) {
+        // < delete par.offline? or rely on a positive ping to?
+        this.updatePeerState(ing, 'connected');
+        this.sendIdentity(ing);
+        delete par.bitrate;
+        console.warn(`${ing} channel close: ${e.error}`,e);
+    }
+    handleChannelClose(ing) {
+        delete ing.par.bitrate;
+        console.warn(`${ing} channel close`);
+    }
+    // < put at a higher level, no other name in here
+    sendIdentity(ing) {
+        console.log(`${ing} sendIdentity`)
 
+        ing.emit("participant",{name:ing.par.party.userName})
+    }
+    // channel.onmessage
+    // put handlers of replies in party.par_msg_handler.$type
+    handleChannelMessage(ing, data) {
+        let handler = ing.par.party.par_msg_handler[data.type]
+        if (!handler) {
+            return console.warn(`${ing} channel !handler for message type: `,data)
+        }
+        ing.par = ing.par.party.repar(ing.par)
+
+        handler(ing.par,data)
+    }
+    
+
+
+    // socket.onmessage type=offer
+// #region offer
+    // < can be randomy remade at any time?
+    async makeOffer(ing) {
+        ing.signalingState = 'offering';
+        const offer = await ing.pc.createOffer();
+        await ing.pc.setLocalDescription(offer);
+
+        this.socket.emit('offer', {
+            targetId: ing.peerId,
+            offer
+        });
+    }
     private async handleOffer(peerId: peerId, offer: RTCSessionDescriptionInit) {
         let ing = this.ings.get(peerId);
         
@@ -209,11 +285,14 @@ export class Peering {
                 ing.signalingState === 'offering';
 
             if (offerCollision && !ing.polite) {
-                console.log('Ignoring colliding offer (impolite peer)');
+                console.log(`${ing} Ignoring colliding offer (impolite peer)`);
                 return;
+                // the other peer should receive our offer and
             }
 
             if (offerCollision) {
+                // we are the polite peer
+                console.log(`${ing} Handling colliding offer politely`)
                 await Promise.all([
                     ing.pc.setLocalDescription({ type: 'rollback' }),
                     ing.pc.setRemoteDescription(offer)
@@ -232,6 +311,31 @@ export class Peering {
         } catch (err) {
             console.error('Error handling offer:', err);
             this.handleSignalingFailure(ing);
+        }
+    }
+
+    private async handleAnswer(peerId: peerId, answer: RTCSessionDescriptionInit) {
+        const ing = this.ings.get(peerId);
+        if (!ing) return;
+        
+        try {
+            const currentState = ing.pc.signalingState;
+            console.log(`Processing answer in state: ${currentState} for ${peerId}`);
+            
+            if (currentState === "have-local-offer") {
+                await ing.pc.setRemoteDescription(answer);
+            } else if (currentState === "stable") {
+                console.warn(`Got answer in stable state for ${peerId} - ignoring`);
+            } else {
+                console.warn(`Unexpected state ${currentState} while processing answer for ${peerId}`);
+            }
+        } catch (err) {
+            console.error(`Error setting remote description for ${peerId}:`, err);
+            if (ing.pc.signalingState === "stable") {
+                console.log(`Connection ${peerId} reached stable state despite error`);
+            } else {
+                console.warn(`Connection ${peerId} in uncertain state:`, ing.pc.signalingState);
+            }
         }
     }
     
@@ -265,6 +369,28 @@ export class Peering {
                 break;
         }
     }
+    
+    private async handleNegotiationNeeded(ing: Paring) {
+        if (ing.signalingState !== 'stable') {
+            console.log('Skipping negotiation - not stable: '+ ing.signalingState);
+            setTimeout(() => {
+                console.log('Skipping negotiation - 100ms later: '+ ing.signalingState);
+            },100)
+            setTimeout(() => {
+                console.log('Skipping negotiation - 500ms later: '+ ing.signalingState);
+            },500)
+            return;
+        }
+
+        try {
+            await this.makeOffer(ing)
+        } catch (err) {
+            console.error('Negotiation failed:', err);
+            this.handleNegotiationFailure(ing);
+        } finally {
+            ing.signalingState = 'stable';
+        }
+    }
 
     private async retryConnection(ing: Paring) {
         ing.retryCount++;
@@ -281,7 +407,14 @@ export class Peering {
         }
     }
     
+    handleSignalingFailure(ing) {
+        console.error("< handle handleSignalingFailure(ing)")
+    }
 
+
+
+
+//#region stop
     stop() {
         console.log("Peering stop()")
         for (const peer of this.ings.values()) {
@@ -411,178 +544,6 @@ export class Peering {
 
 
 
-
-
-
-
-
-    
-    
-    is_par_pc_ready(par) {
-        return [
-            // < this may not be true any more:
-            // if we don't accept 'new' initially they never get there...
-            "new",
-            "connected",
-            "connecting"
-        ].includes(par.pc.connectionState)
-        &&
-        [
-            "stable",
-            // 'have-local-offer'
-        ].includes(par.pc.signalingState)
-        &&
-        par.pc.iceConnectionState == 'connected'
-}
-    // the newbie phase of a new par.pc
-    //  before the rest of the Participant lifetime
-    // wait for par.pc to get in a good state
-    //  and forever copy it to par.constate
-    stabilise_par_pc(par) {
-        // this falls down with the network?
-        let says = [
-            par.pc.connectionState,
-            par.pc.signalingState,
-            // PeerJS does pc.close() if this is failed|closed ...
-            par.pc.iceConnectionState,
-            par.channel?.readyState ?? "?",
-        ].join('/')
-        par.constate = says;
-
-        // https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/connectionState
-        
-        par.pc_ready = this.is_par_pc_ready(par)
-        
-        console.log(`-o- ${par}.pc is ${par.constate}`)
-        
-        // call this any time we could breakthrough
-        this.couldbeready(par)
-    }
-
-    pc_handlers(par) {
-        // until this stabilises:
-        par.pc.oniceconnectionstatechange =
-        par.pc.onconnectionstatechange =
-        par.pc.onsignalingstatechange = () => {
-            this.stabilise_par_pc(par)
-        }
-        // which leads us (both ends) to createDataChannel(par)
-        //  so get our receiver ready now:
-        par.pc.ondatachannel = ({channel}) => {
-            this.incomingDataChannel(par,channel)
-        };
-        // take audio to effects, in a moment
-        par.pc.ontrack = (e) => {
-            console.log(`${par} par.pc.ontrack into the queue`);
-            (par.ontrack_queue ||= []).push(e)
-        };
-        // the agent of an ontrack event is an addTrack at the other end
-    }
-
-
-
-
-
-
-
-
-
-
-    // want to include the data channel in the initial negotiation
-    // data channel originates from the !polite peer
-    //  = receiver of the first offer = older non-joining one
-    // put handlers of replies in party.par_msg_handler.$type
-    // sync after new RTCPeerConnection
-    initDataChannel(pc) {
-        // temporarily host the channel object on the pc itself
-        // because par is not made yet
-        // < it probably should be... 
-        if (pc.channel) throw "already pc.channel"
-        pc.channel = pc.createDataChannel("participants");
-        pc.channel.onmessage = (e) => (pc.channel_msg ||= []).push(e)
-        console.error("initDatachannel")
-    }
-    incomingDataChannel(par,channel) {
-        par.channel = channel
-        this.createDataChannel(par,'handlers_only')
-    }
-    createDataChannel(par,handlers_only) {
-        const pc = par.pc
-        if (handlers_only) {
-            if (!par.channel) throw "no channel to handle"
-        }
-        else {
-            par.channel = pc.channel
-            if (!par.channel) throw "no pc.channel to adopt"
-            delete pc.channel
-        }
-        // we have broken the symmetry of its origin via polite
-        par.channel.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            // console.log(`theirData message: ${par}`,data);
-            let handler = par.party.par_msg_handler[data.type]
-            if (!handler) {
-                return console.warn(`No handler for par=${par.name} message: `,data)
-            }
-            // < for some reason we have to seek out the par again at this point
-            //   not doing this leads to this.par.name being undefined
-            //    much later in parRecorder.uploadCurrentSegment
-            //    see "it seems like a svelte5 object proxy problem"
-            par = par.party.repar(par)
-
-            handler(par,data)
-        };
-    
-        // you (eg Measuring) can send messages.
-        // like socket.io
-        par.emit = (type,data) => {
-            if (!par.channel || par.channel.readyState != "open") {
-                return console.error(`channel ${par} not open yet, dropping message type=${type}`)
-            }
-            par.channel.send(JSON.stringify({type,...data}))
-        }
-        let announce_self = () => {
-            console.log(`${par} announce_self`)
-
-            par.emit("participant",{name:par.party.userName})
-            // once
-            announce_self = () => {};
-        };
-        if (par.channel.readyState == "open") {
-            announce_self();
-        }
-        console.log(`${par} createDataChannel`
-            +(handlers_only?"-handlers":''),par.channel)
-
-
-        par.channel.onerror = (e) => {
-            console.log(`Data error: ${par}: ${e.error}`,e);
-        };
-        par.channel.onmessage = (e) => {
-            console.log(`Data message (on the out channel): ${par}`,e);
-        };
-        par.channel.onopen = () => {
-            delete par.offline;
-            announce_self();
-            console.log(`Data open: ${par}`);
-        };
-        par.channel.onclose = async () => {
-            par.offline = 1;
-            delete par.bitrate;
-            console.log(`Data Leaves: ${par}`);
-            delete par.channel
-            // wait for possible par.pc_ready=false when par.pc.close()ing
-            await tick()
-            // < the above isn't enough
-            // we must ensure we check par.pc.connectionstatus -> par.pc_ready
-            //  before trying to rebuild par.channel
-            this.stabilise_par_pc(par)
-        };
-
-        // process any waiting messages now we've a handler
-        pc.channel_msg?.map(e => par.channel.onmessage(e))
-        delete pc.channel_msg
-    }
 
 }
 

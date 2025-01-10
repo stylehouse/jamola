@@ -1,7 +1,6 @@
 import type { Socket } from "socket.io";
 import { io } from "socket.io-client";
 
-new Peering
 type peerId = string
 type pc = RTCPeerConnection
 export class SignalingClient {

@@ -1,7 +1,6 @@
 // Recorder class to manage recording state and chunks for each participant
 
 import type { Socket } from "socket.io-client"
-import type { SignalingClient } from "./ws-client.svelte"
 //
 export class parRecorder {
     par// = $state()
@@ -9,7 +8,6 @@ export class parRecorder {
     title:string
     title_ts:number
     bitrate:number
-    i_par:Function
 
     mediaRecorder:MediaRecorder = null
     recordedChunks = []
@@ -120,7 +118,7 @@ export class parRecorder {
 
         // to relocate a par. see "it seems like a svelte5 object proxy problem"
         let par = this.par
-        par = this.par = this.i_par({par})
+        par = this.par = this.party.repar(this.par)
         if (this.more_reasons_to_avoid_segmentation()) {
             return
         }

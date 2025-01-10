@@ -5,7 +5,8 @@ import { parRecorder } from "$lib/recording"
 export class Participant {
     // peering gives us:
     peerId:string
-    pc?:RTCPeerConnection
+    // < GOING? now on par.ing.pc
+    pc:RTCPeerConnection
 
     // coms
     name = $state()
@@ -37,6 +38,7 @@ export class Participant {
 
     constructor(opt) {
         Object.assign(this, opt);
+        
     }
     toString() {
         return this.name || this.peerId
@@ -53,20 +55,28 @@ export class Participant {
     // i_par calls one of these when a new pc arrives
     // < what to do with the old one..?
 
+    
+
     // a new par, a new pc
     new_pc() {
         this.party.measuring.add_par(this);
         
         if (this.wants_recording()) {
             // they record (.start()) when a track arrives
-            this.recorder = new parRecorder({par:this,...this.party.stuff_we_tell_parRecorder()})
+            this.recorder = new parRecorder({
+                par: this,
+                ...this.party.stuff_we_tell_parRecorder(),
+            })
         }
     }
+    // < GOING Peering handles pc now
     // old par, new pc!?
     new_pc_again(pc) {
         // stream|par.pc changes, same par|peerId
         //  peerId comes from socket.io, is per their websocket
-        console.log(`i_par: stream changes, same peer: ${this}`)
+        console.warn(`i_par: stream changes, same peer: ${this}`)
+        debugger
+        return
         // hangup, change userName, Ring again causes this branch as you re-connect to each par
         // bitratestats will notice this change itself
         if (this.pc == pc) debugger;

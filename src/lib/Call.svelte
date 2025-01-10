@@ -23,7 +23,6 @@
     let title = $state();
     $inspect('title',title)
 
-    // that we i_par into
     let participants = $state(new Party());
     let party = participants
     // < refactor this into party.forever.*
@@ -37,10 +36,6 @@
         party.singularise()
     })
     
-    function i_par(c) {
-        return party.i_par(c)
-    }
-
     // par can .msg()
     let par_msg_handler = party.par_msg_handler = {}
     // $inspect(participants)
@@ -165,7 +160,7 @@
             title,
             title_ts,
             bitrate:target_bitrate,
-            i_par,
+            party,
             sock,
         }
     }
@@ -222,15 +217,13 @@
 
     // this becomes our monitor
     function i_myself_par() {
-        let par = party.i_par({
+        let par = party.createPar({
             peerId: "",
-            pc: {},
             name: userName,
             type: "monitor",
             // < better than type:monitor is:
             local: true,
         });
-        delete par.pc;
         // is ready immediately?
         // doesn't seem to be...
         setTimeout(() => {

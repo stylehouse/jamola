@@ -4,7 +4,7 @@ import { Participant } from "./Participants.svelte"
 export class Party {
     peering
     // < rename ers or people. it's VR so...
-    participants = $state([])
+    participants:Map<peerId, Participant> = $state(new Map())
     measuring:Measuring
 
     userName
@@ -46,7 +46,7 @@ export class Party {
             this.peering?.stop()
         }
 
-        this.participants.map(par => {
+        this.map(par => {
             par.pc?.close && par.pc?.close();
 
             par.local || par.drop_effects()
@@ -89,59 +89,26 @@ export class Party {
     
     // 
     map(y:Function) {
-        return this.participants.map(y)
+        return this.participants.forEach(y)
     }
     repar(par) {
-        return this.i_par({par})
+        return this.find_par({par})
     }
-    // read or add new participant (par)
-    i_par(c:{peerId?,pc?,par?}):Participant {
-        let { par, peerId, pc, ...etc } = c
-        
+    // read a participant (by peerId or par)
+    find_par(c):Participant {
+        let { par, peerId } = c
         if (par && peerId == null) {
-            if (pc != null) throw 'pc'
-            // to relocate a par. see "it seems like a svelte5 object proxy problem"
+            // for par = repar(par)
+            //  see "it seems like a svelte5 object proxy problem"
             peerId = par.peerId
         }
-        par = this.participants.filter((par) => par.peerId == peerId)[0];
-        // they know the room
-        if (par && par.party && par.party != this) throw "teleported party"
-        // bring a piece of it
-        // < is there only one of these? when another?
-        if (pc) {
-            if (!par) {
-                // new par
-                par = new Participant({
-                    party: this,
-                    peerId,
-                    pc,
-                    i_par: this.i_par,
-                })
-
-                par.new_pc()
-
-                this.participants.push(par);
-            } else {
-                par.new_pc_again(pc)
-            }
-        }
-        else {
-            if (!par) {
-                // not found, and no peerconnection to create one around
-                return
-            } else {
-                // found
-            }
-
-        }
-
-        // you give them properties
-        Object.assign(par, etc);
-
-        return par;
+        par = this.participants.get(peerId)
+        return par
     }
 
-
-
-
+    createPar(c) {
+        const par = new Participant({ party: this, ...c })
+        this.participants.set(par.peerId,par);
+        return par
+    }
 }
