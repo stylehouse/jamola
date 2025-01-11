@@ -1,10 +1,11 @@
 import { Peering } from "$lib/kolektiva/Peering.svelte"
+import { SvelteMap } from "svelte/reactivity"
 import { Participant } from "./Participants.svelte"
 
 export class Party {
     peering
     // < rename ers or people. it's VR so...
-    participants:Map<peerId, Participant> = $state(new Map())
+    participants:Map<peerId, Participant> = $state(new SvelteMap())
     measuring:Measuring
 
     userName

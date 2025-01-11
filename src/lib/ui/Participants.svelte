@@ -4,25 +4,23 @@
     let {party} = $props()
 </script>
 <div class="participants">
-
-
-    {#each party.participants as par (par.peerId)}
-        <div class="participant {par.type == 'monitor' && 'monitor'}">
+    {#each [...party.participants.values()] as par (par.peerId)}
+        <div class="participant {par.local ? 'monitor' : ''}">
             <span class="always_visible_horizontally">
                 <span class="theyname">{par.name || par.peerId}</span>
-                {#if par.type}<span class="streamtype">{par.type}</span>{/if}
+                {#if par.local}<span class="streamtype">monitor</span>{/if}
                 {#if par.offline}<span class="error">offline</span>{/if}
-                {#if par.constate}<span class="techwhat">{par.constate}</span
-                    >{/if}
+                {#if par.constate}<span class="techwhat">{par.constate}</span>{/if}
             </span>
-
+    
             {#if par.gain}
                 <span class="rack">
-                    <Rack {par} ></Rack>
+                    <Rack {par} />
                 </span>
             {/if}
         </div>
     {/each}
+    
 </div>
 
 <style>
@@ -37,6 +35,14 @@
     }
     .monitor {
         background-color: #25855d;
+    }
+    .theyname {
+        font-weight: bold;
+    }
+
+    .streamtype {
+        font-size: 0.8em;
+        color: #666;
     }
     .always_visible_horizontally {
         

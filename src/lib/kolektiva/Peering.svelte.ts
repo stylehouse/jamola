@@ -99,6 +99,13 @@ export class Peering {
     // < dubious? simpler just reading ing.state since it is $state()
     public onPeerReady: (ing: Paring) => void;
 
+    // < run one of these, and a TURN
+    iceServers = [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun.stunprotocol.org:3478' }
+    ]
+
     constructor(opt) {
         Object.assign(this, opt)
         this.setupSocket();
@@ -173,13 +180,7 @@ export class Peering {
     }
     // part of offerPeerConnection() or handleOffer()
     private async createPeer(peerId: peerId, polite: boolean): Promise<Paring> {
-        const iceServers = [
-            // < run one of these, and a TURN
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' },
-            { urls: 'stun:stun.stunprotocol.org:3478' }
-        ]
-        const pc = new RTCPeerConnection({iceServers});
+        const pc = new RTCPeerConnection({iceServers:this.iceServers});
 
         const ing = new Paring({
             peerId,
@@ -433,7 +434,7 @@ export class Peering {
     }
 
     // then magically!
-    private async handleICECandidate(ing: Paring, candidate: RTCIceCandidate) {
+    private handleICECandidate(ing: Paring, candidate: RTCIceCandidate) {
         console.log(`${ing} ICE candidate: ${candidate.type} ${candidate.protocol} ${candidate.address||'[redacted]'}:${candidate.port}`);
         this.socket.emit('ice-candidate', {
             targetId: ing.peerId,
@@ -471,25 +472,12 @@ export class Peering {
     }
     
     private async handleNegotiationNeeded(ing: Paring) {
-        if (0 && ing.signalingState !== 'stable') {
-            console.log('Skipping negotiation - not stable: '+ ing.signalingState);
-            setTimeout(() => {
-                console.log('Skipping negotiation - 100ms later: '+ ing.signalingState);
-            },100)
-            setTimeout(() => {
-                console.log('Skipping negotiation - 500ms later: '+ ing.signalingState);
-            },500)
-            return;
-        }
-
         try {
             await this.makeOffer(ing)
         } catch (err) {
             console.error('Negotiation failed:', err);
             console.error(`  will retry...`);
             this.retryConnection(ing)
-        } finally {
-            ing.signalingState = 'stable';
         }
     }
 
