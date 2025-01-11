@@ -75,7 +75,7 @@ export class Party {
             if (k.name?.length) return k.name
             if (k.name != null) return k.name
             if (typeof k == 'string') return k
-            debugger
+            throw "key bit: "+k
         }).join('/')
     }
     set_forever(key:Array,value) {

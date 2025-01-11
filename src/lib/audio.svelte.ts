@@ -80,7 +80,7 @@ export abstract class AudioEffectoid {
             }
         }
         else {
-            throw "other stream"
+            throw "other stream: "+stream.constructor.name
         }
         // console.log(`The input of ${this.constructor.name} for ${this.par.name} stream: `,
         //     stream
@@ -120,7 +120,7 @@ export abstract class AudioEffectoid {
             stream.connect(Node)
         }
         else {
-            throw "other stream"
+            throw "other stream: "+stream.constructor.name
         }
         // shall be the first node
         this.stream = stream

@@ -1,9 +1,14 @@
-import { CookedStream, FreshStream, Gainorator, Gaintrol } from "$lib/audio.svelte"
 import { parRecorder } from "$lib/recording"
+import type { Party } from "./Party.svelte"
+import type { Paring } from "./Peering.svelte"
+import { CookedStream, FreshStream, Gainorator, Gaintrol } from "$lib/audio.svelte"
+import { userAgent } from "$lib/Y"
 
 
 export class Participant {
+    party:Party
     // peering gives us:
+    ing:Paring
     peerId:string
     // < GOING? now on par.ing.pc
     pc:RTCPeerConnection
@@ -62,19 +67,6 @@ export class Participant {
     // < what to do with the old one..?
 
     
-
-    // a new par, a new pc
-    new_pc() {
-        this.party.measuring.add_par(this);
-        
-        if (this.wants_recording()) {
-            // they record (.start()) when a track arrives
-            this.recorder = new parRecorder({
-                par: this,
-                ...this.party.stuff_we_tell_parRecorder(),
-            })
-        }
-    }
     // < GOING Peering handles pc now
     // old par, new pc!?
     new_pc_again(pc) {
@@ -102,8 +94,19 @@ export class Participant {
     //  for local it's i_myself_par(), otherwise open_ontrack()
     on_ready() {
         console.log(`par.on_ready: ${this}`)
+
         this.effects && this.drop_effects()
         this.new_effects()
+
+        this.party.measuring.add_par(this);
+        
+        if (this.wants_recording()) {
+            // they record (.start()) when a track arrives
+            this.recorder = new parRecorder({
+                par: this,
+                ...this.party.stuff_we_tell_parRecorder(),
+            })
+        }
     }
     // disarm anything thaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaat makes sound
     //  the above typo was ubbbbbbbbbbbbbbbbbbbuntu laggin
@@ -115,7 +118,33 @@ export class Participant {
     }
 
 
+    test_track? = $state()
+    test_stream? = $state()
+    onTrack(stream:MediaStream) {
+        // before-effects debug probable
+        // this.test_track = stream.getAudioTracks()[0];
+        // this.test_stream = new MediaStream([this.test_track]);
+        this.fresh.input(stream)
 
+        // < party.get_forever('silent_audio_trick')
+        //    allow the user to switch it on in audio debug ui
+        let silent_audio_trick = userAgent() == 'Chrome'
+        if (silent_audio_trick) {
+            this.keep_silent_audio_trick(stream)
+        }
+    }
+    keeper_audio?:HTMLAudioElement
+    keep_silent_audio_trick(stream:MediaStream) {
+        // Create a silent audio element to please Chrome
+        if (!this.keeper_audio) {
+            this.keeper_audio = new Audio();
+            this.keeper_audio.volume = 0; // Silent
+            this.keeper_audio.onplay = async () => {
+                throw "Why is keeper_audio playing!>?"
+            }
+        }
+        this.keeper_audio.srcObject = stream;
+    }
     // < how to reiterate this function, esp the very inner...
     //   transact par.effects?
     new_effects() {

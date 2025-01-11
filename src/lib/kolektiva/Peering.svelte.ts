@@ -46,7 +46,7 @@ interface Paring {
     lastStateChange: number;
     retryCount: number;
 }
-class Paring {
+export class Paring {
     // JOIN party.participants.
     peerId: string
     // < creation of
@@ -70,9 +70,16 @@ class Paring {
     // like socket.io
     emit(type,data) {
         if (!this.channel || this.channel.readyState != "open") {
-            throw `${this} channel not open yet, dropping message type=${type}`
+            console.error(`${this} channel not open, cannot send message type=${type}`);
+            return false;
         }
-        this.channel.send(JSON.stringify({type,...data}))
+        try {
+            this.channel.send(JSON.stringify({type, ...data}));
+            return true;
+        } catch (err) {
+            console.error(`Failed to send message: ${err}`);
+            return false;
+        }
     }
 
     stop() {
@@ -579,15 +586,17 @@ export class Peering {
     //  race between our par.effects building after par.name
     //   and their track arriving here after they get our par.name
     // < because crypto trust
-    open_ontrack(par) {
+    open_ontrack(par:Participant) {
         let had = par.ontrack_queue || []
         let many = had.length || "none"
         console.log(`${par} open_ontrack! ${many} waiting`)
         // < multiple tracks, one at a time?
         par.pc.ontrack = (e) => {
-            console.log(`${par} par.pc.ontrack: `+ e.streams[0].getTracks())
+            console.log(`${par} par.pc.ontrack: `,
+                {par:par,tracks:e.streams[0].getTracks()})
+                
             par.party.status_msg(`Got ${par}`)
-            par.fresh.input(e.streams[0])
+            par.onTrack(e.streams[0])
         };
         had.map(e => {
             console.log(`${par} par.pc.ontrack from queue:`)
