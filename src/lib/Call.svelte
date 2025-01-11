@@ -114,7 +114,7 @@
                 // console.log("Reacted to received title")
                 return
             }
-            participants.map(par => {
+            party.everyone(par => {
                 announce_title(par)
             })
             

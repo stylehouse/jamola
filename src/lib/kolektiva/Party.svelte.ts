@@ -69,14 +69,18 @@ export class Party {
 
 
     // culture clings to party.forever.*
-    make_forever_key(key) {
-        if (typeof key == 'string') return key
+    make_forever_key(key: string | Array<any>): string {
+        if (typeof key === 'string') return key;
+        if (!Array.isArray(key)) {
+            console.error('Invalid forever key type:', typeof key);
+            return String(key);
+        }
         return key.map(k => {
-            if (k.name?.length) return k.name
-            if (k.name != null) return k.name
-            if (typeof k == 'string') return k
-            throw "key bit: "+k
-        }).join('/')
+            if (typeof k === 'string') return k;
+            if (k?.name != null) return String(k.name);
+            console.warn('Unexpected forever key component:', k);
+            return String(k);
+        }).join('/');
     }
     set_forever(key:Array,value) {
         key = this.make_forever_key(key)
@@ -97,6 +101,13 @@ export class Party {
     // 
     map(y:Function) {
         return this.participants.forEach(y)
+    }
+    // all par that represent other jamola instances, eg for sending titles
+    everyone(y:Function) {
+        return this.participants.forEach((par) => {
+            if (par.local) return
+            y(par)
+        })
     }
     repar(par) {
         return this.find_par({par})

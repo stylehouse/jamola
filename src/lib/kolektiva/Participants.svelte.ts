@@ -15,6 +15,7 @@ export class Participant {
 
     // coms
     name = $state()
+    local?:true|null
     //  about the datachannel closing
     offline = $state()
     // webrtc

@@ -72,6 +72,7 @@
         margin-right: -2em;
         transform: rotate(-90deg) skew(25deg);
         transform-origin: bottom left;
+        pointer-events:none;
     }
     .bitrate {
         width:2em;
