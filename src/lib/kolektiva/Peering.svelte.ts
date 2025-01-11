@@ -340,13 +340,22 @@ export class Peering {
     // < can be randomy remade at any time?
     async makeOffer(ing) {
         ing.signalingState = 'offering';
-        const offer = await ing.pc.createOffer();
-        await ing.pc.setLocalDescription(offer);
-
-        this.socket.emit('offer', {
-            targetId: ing.peerId,
-            offer
-        });
+        try {
+            const offer = await ing.pc.createOffer();
+            await ing.pc.setLocalDescription(offer);
+    
+            this.socket.emit('offer', {
+                targetId: ing.peerId,
+                offer
+            });
+        } catch (err) {
+            if (err.name === 'InvalidAccessError' && err.message.includes('m-lines')) {
+                console.warn(`${ing} renegotiation ordering issue, retrying`);
+                // Could implement recovery here
+                return;
+            }
+            throw err;  // Let caller handle other errors
+        }
     }
     private async handleOffer(peerId: peerId, offer: RTCSessionDescriptionInit) {
         let ing = this.ings.get(peerId);
@@ -457,7 +466,7 @@ export class Peering {
     }
     
     private async handleNegotiationNeeded(ing: Paring) {
-        if (ing.signalingState !== 'stable') {
+        if (0 && ing.signalingState !== 'stable') {
             console.log('Skipping negotiation - not stable: '+ ing.signalingState);
             setTimeout(() => {
                 console.log('Skipping negotiation - 100ms later: '+ ing.signalingState);
@@ -476,6 +485,12 @@ export class Peering {
         } finally {
             ing.signalingState = 'stable';
         }
+    }
+
+    private handleNegotiationFailure(ing: Paring) {
+        console.error(`${ing} negotiation failed, will reset...`);
+        this.retryConnection(ing)
+
     }
 
     private async retryConnection(ing: Paring) {
@@ -519,33 +534,35 @@ export class Peering {
     //  ...then there are these prosthetic steps below...
     //  par.on_ready() is the high-level, send|receive tracks time
     // anyway this fires any time we might have satisfied its rules
-    couldbeready(par) {
-        console.log(`${par} couldbeready?`)
+    async couldbeready(par) {
         if (!par.pc_ready) {
+            if (par.is_ready) {
+                console.log(`${par} couldbeready? already, but not now`)
+                return
+            }
             // wait for par.pc to get in a good state
-            console.log("not ready")
+            console.log(`${par} couldbeready? not ready`)
             return
         }
         if (!par.ing.channel) {
-            console.warn(`${par} pc_ready but no channel`)
-            // see 'want broken'
-            // this.createDataChannel(par)
+            console.log(`${par} couldbeready? but no channel`)
             return
         }
         if (par.is_ready) {
-            console.log(`${par} still ready...`)
+            console.log(`${par} couldbeready already`)
             return
         }
-        console.log(`${par} couldbeready...`)
+        // their channel delivers to us their name
         if (par.name == null) {
-            console.log(`${par} but for no name!`)
+            console.log(`${par} couldbeready... but for no name!`)
             return
         }
-
+        
+        // once from here, per par...
+        // < when to reset this?
         par.is_ready = true
-        console.log("Yep, lets track")
-        return
-        // their channel delivers to us their name!
+        console.log(`${par} couldbeready! yay`)
+
         // this is ready!
         // and our par.effects will be created with fully name
         par.on_ready()
@@ -581,43 +598,47 @@ export class Peering {
         })
         delete par.ontrack_queue
     }
-    lets_send_our_track(par) {
-        if (!this.is_par_pc_ready(par)) {
-            debugger
-            return
-        }
+    async lets_send_our_track(par) {
         let localStream:MediaStream = this.party.get_localStream?.()
         if (!localStream) throw "!localStream"
         console.log(`${par} lets_send_our_track!`,localStream.getTracks())
         
         let already_id = (id) => par.outgoing.filter(tr => tr.id == id)[0]
 
-        localStream.getTracks().forEach((track:MediaStreamTrack) => {
+        for (const track:MediaStreamTrack of localStream.getTracks()) {
             if (par.outgoing.includes(track)) {
                 if (!already_id(track.id)) {
-                    debugger; throw "pos-ob neg-id"
+                    debugger; 
+                    throw "pos-ob neg-id"
                 }
                 return
             }
             if (already_id(track.id)) {
-                debugger; throw "ne-ob pos-id"
+                debugger;
+                throw "ne-ob pos-id"
             }
             try {
                 const sender = par.pc.addTrack(track, localStream);
-                this.party.on_addTrack?.(par,track,sender,localStream)
+                let before_sent = true
                 track.onended = async () => {
+                    if (before_sent) {
+                        // odd
+                        throw "track.onended during party.on_addTrack"
+                    }
                     await this.par.pc.removeTrack(sender);
                     // hopefully it will go again?
                     par.outgoing = par.outgoing.filter(tr => tr != track)
                     console.warn("${par} Track Ended")
                 }
+                await this.party.on_addTrack?.(par,track,sender,localStream)
+                before_sent = false
                 par.outgoing.push(track)
                 console.log(`${par} was sent our track`,{track,localStream,sender})
 
             } catch (error) {
                 console.error("Failed to add track:", error);
             }
-        });
+        }
     }
 
 

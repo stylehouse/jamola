@@ -6,3 +6,30 @@ export function userAgent() {
             && !navigator.userAgent.includes('Chrome/') ? 'Safari'
         : 'Chrome'
 }
+
+export async function retryUntil(condition, options = {}) {
+    const {
+        baseDelay = 222,
+        maxDelay = 3000,
+        maxRetries = 15,
+        jitterFactor = 0.2,
+        name = 'retryUntil'
+    } = options;
+
+    let retries = 0;
+
+    while (retries < maxRetries) {
+        const result = await condition();
+        if (result) return result;
+
+        const exponentialDelay = baseDelay * Math.pow(2, retries);
+        const jitter = exponentialDelay * jitterFactor * Math.random();
+        const delay = Math.min(exponentialDelay + jitter, maxDelay);
+
+        console.log(`${name}: Retry ${retries + 1}/${maxRetries}: Waiting ${Math.round(delay)}ms`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        retries++;
+    }
+    
+    throw new Error(`${name}: Max retries (${maxRetries}) reached`);
+}

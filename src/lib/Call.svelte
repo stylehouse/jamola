@@ -7,7 +7,7 @@
     import YourName from "./YourName.svelte";
     import YourTitle from "./YourTitle.svelte";
     import { CookedStream, Delaysagne, FreshStream, Gainorator, Gaintrol } from "./audio.svelte";
-    import { userAgent } from "./Y";
+    import { retryUntil, userAgent } from "./Y";
     import { Party } from "./kolektiva/Party.svelte";
     import Participants from "./ui/Participants.svelte";
     
@@ -370,6 +370,7 @@
         };
     }
 
+
     // was give_localStream
     // the user has some tracks to give to everyone in here
     // < it could be per par, avoid sending to non-mixing nodes etc
@@ -380,34 +381,56 @@
     //     > sending your track to a remote distortion pedal, and getting it back
     party.get_localStream = () => localStream
     // after tracks are added, they bitrate adjust here:
-    party.on_addTrack = (par,track,sender) => {
-        // For audio tracks, set the desired bitrate
+    party.on_addTrack = async (par, track, sender) => {
         if (track.kind === "audio") {
-            setAudioBitrate(sender, target_bitrate).catch(
-                (error) =>
-                    console.error(
-                        "Failed to set bitrate:",
-                        error,
-                    ),
-            );
-        }
-    }
-    
-    function setAudioBitrate(sender, bitrate) {
-        const params = sender.getParameters();
-        // Check if we have encoding parameters
-        if (!params.encodings) {
-            params.encodings = [{}];
-        }
-        if (!params.encodings.length) {
-            throw "setAudioBitrate: sender has no encodings"
-        }
-        // Set the maximum bitrate (in bps)
-        params.encodings[0].maxBitrate = bitrate * 1000; // Convert kbps to bps
+            try {
+                // First wait for track to be ready
+                await retryUntil(
+                    () => track.readyState === 'live',
+                    {
+                        name: `${par} waitForTrack`,
+                        baseDelay: 22
+                    }
+                );
 
-        // Apply the parameters
-        return sender.setParameters(params);
+                // Now wait for transport setup and set bitrate
+                await setAudioBitrate(sender, target_bitrate);
+            } catch (error) {
+                console.error(`${par} Failed to set bitrate:`, error);
+            }
+        }
     }
+
+    async function setAudioBitrate(sender, bitrate) {
+        // First wait for encodings to be available
+        await retryUntil(
+            async () => {
+                const params = sender.getParameters();
+                if (params.encodings?.length) {
+                    return params;
+                }
+                // Check connection state
+                console.log('Current states:', {
+                    iceConnectionState: sender.transport?.iceConnectionState,
+                    dtlsState: sender.transport?.dtlsState,
+                    params: params
+                });
+                return false;
+            },
+            { 
+                name: 'waitForEncodings',
+                baseDelay: 11
+            }
+        );
+
+        // Now we know we have encodings, set the bitrate
+        const params = sender.getParameters();
+        params.encodings[0].maxBitrate = bitrate * 1000; // Convert kbps to bps
+        await sender.setParameters(params);
+        console.log(`setAudioBitrate: ${bitrate}`, {params, sender});
+    }
+
+    
     function updateAudioBitrate(newBitrate) {
         target_bitrate = newBitrate;
         participants.map((par) => {
