@@ -357,6 +357,7 @@
 
 
     // take audio from a peer
+    party.status_msg = (s) => status = s
     function take_remoteStream(par) {
         par.pc.ontrack = (e) => {
             // < multiple tracks

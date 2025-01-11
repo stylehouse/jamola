@@ -62,17 +62,23 @@ class Paring {
     lastStateChange: number
     retryCount: number
 
+    constructor(opt) {
+        Object.assign(this, opt)
+    }
+
     // you (eg Measuring) can send messages.
     // like socket.io
     emit(type,data) {
         if (!this.channel || this.channel.readyState != "open") {
-            return console.error(`${this} channel not open yet, dropping message type=${type}`)
+            throw `${this} channel not open yet, dropping message type=${type}`
         }
         this.channel.send(JSON.stringify({type,...data}))
     }
 
-    constructor(opt) {
-        Object.assign(this, opt)
+    stop() {
+        // Stop all tracks
+        this.pc.getSenders().forEach(sender => sender.track?.stop());
+        this.pc.close();
     }
 }
 
@@ -90,8 +96,8 @@ export class Peering {
     party: Party
     private readonly maxRetries = 3;
     private readonly retryDelay = 1000;
-    public onPeerReady:Function
-    public onStateChange:Function
+    // < dubious? simpler just reading ing.state since it is $state()
+    public onPeerReady: (ing: Paring) => void;
 
     constructor(opt) {
         Object.assign(this, opt)
@@ -134,14 +140,14 @@ export class Peering {
         })
         this.socket.on('ice-candidate', async ({ candidate, from:peerId }) => {
             let ing = this.ings.get(peerId);
-            // try {
+            try {
                 await ing.pc.addIceCandidate(candidate);
-            // } catch (e) {
-            //     // Ignore candidates if we're not in the right state
-            //     if (pc.remoteDescription && pc.remoteDescription.type) {
-            //         console.error("ICE candidate error:", e);
-            //     }
-            // }
+            } catch (e) {
+                // Ignore candidates if we're not in the right state
+                if (ing.pc.remoteDescription && ing.pc.remoteDescription.type) {
+                    console.error("ICE candidate error:", e);
+                }
+            }
         });
     }
 
@@ -267,7 +273,7 @@ export class Peering {
     
             // Update pc_ready state
             par.pc_ready = (
-                ["new", "connected", "connecting"].includes(ing.pc.connectionState) &&
+                ["connected", "connecting"].includes(ing.pc.connectionState) &&
                 ["stable"].includes(ing.pc.signalingState)
             );
     
@@ -307,9 +313,9 @@ export class Peering {
     // < these could be Paring methods
     handleChannelOpen(ing) {
         // < delete par.offline? or rely on a positive ping to?
-        this.updatePeerState(ing, 'connected');
+        this.updatePeerState(ing, 'ready');
         this.sendIdentity(ing);
-        console.warn(`${ing} channel open`);
+        console.log(`${ing} channel open`);
     }
     handleChannelClose(ing,e) {
         delete ing.par.bitrate;
@@ -396,7 +402,8 @@ export class Peering {
             });
         } catch (err) {
             console.error('Error handling offer:', err);
-            this.handleSignalingFailure(ing);
+            console.error(`  will retry...`);
+            this.retryConnection(ing)
         }
     }
     
@@ -442,8 +449,6 @@ export class Peering {
         if (newState === 'ready' && oldState !== 'ready') {
             this.onPeerReady?.(ing);
         }
-
-        this.onStateChange?.(ing.peerId, newState);
     }
 
     private async handleICEStateChange(ing: Paring) {
@@ -457,7 +462,7 @@ export class Peering {
                 break;
             case 'failed':
                 if (ing.retryCount < this.maxRetries) {
-                    await this.retryConnection(ing);
+                    this.retryConnection(ing);
                 } else {
                     this.updatePeerState(ing, 'failed');
                 }
@@ -481,16 +486,11 @@ export class Peering {
             await this.makeOffer(ing)
         } catch (err) {
             console.error('Negotiation failed:', err);
-            this.handleNegotiationFailure(ing);
+            console.error(`  will retry...`);
+            this.retryConnection(ing)
         } finally {
             ing.signalingState = 'stable';
         }
-    }
-
-    private handleNegotiationFailure(ing: Paring) {
-        console.error(`${ing} negotiation failed, will reset...`);
-        this.retryConnection(ing)
-
     }
 
     private async retryConnection(ing: Paring) {
@@ -507,10 +507,6 @@ export class Peering {
             this.updatePeerState(ing, 'failed');
         }
     }
-    
-    handleSignalingFailure(ing) {
-        console.error("< handle handleSignalingFailure(ing)")
-    }
 
 
 
@@ -518,11 +514,18 @@ export class Peering {
 //#region stop
     stop() {
         console.log("Peering stop()")
-        for (const peer of this.ings.values()) {
-            peer.pc.close();
-        }
+        this.stop_ings()
         this.ings.clear();
+        // < put off until audio-uploads complete
         this.socket.disconnect();
+    }
+    // stop all peer connections
+    // the definitely-immediate part of Peering.stop()
+    //   which can wait a little longer for audio-upload via websocket to finish
+    stop_ings() {
+        for (const ing of this.ings.values()) {
+            ing.stop()
+        }
     }
 
 
@@ -557,19 +560,24 @@ export class Peering {
             console.log(`${par} couldbeready... but for no name!`)
             return
         }
-        
-        // once from here, per par...
-        // < when to reset this?
-        par.is_ready = true
-        console.log(`${par} couldbeready! yay`)
 
         // this is ready!
         // and our par.effects will be created with fully name
-        par.on_ready()
-        // we can send tracks
-        this.lets_send_our_track(par)
-        // we can receive tracks
-        this.open_ontrack(par)
+        try {
+            // Run operations in sequence
+            par.on_ready();
+            await this.lets_send_our_track(par);
+            this.open_ontrack(par);
+
+            // Mark as ready after operations complete
+            // < when to reset this?
+            par.is_ready = true;
+        } catch (error) {
+            console.error(`${par} failed to become ready:`, error);
+            par.is_ready = false;
+            // These functions are designed to be retriggered by state changes anyway
+            // so we don't need explicit retry logic here
+        }
     }
 
 
@@ -590,6 +598,7 @@ export class Peering {
         // < multiple tracks, one at a time?
         par.pc.ontrack = (e) => {
             console.log(`${par} par.pc.ontrack: `+ e.streams[0].getTracks())
+            par.party.status_msg(`Got ${par}`)
             par.fresh.input(e.streams[0])
         };
         had.map(e => {
@@ -611,7 +620,7 @@ export class Peering {
                     debugger; 
                     throw "pos-ob neg-id"
                 }
-                return
+                continue
             }
             if (already_id(track.id)) {
                 debugger;
@@ -625,10 +634,10 @@ export class Peering {
                         // odd
                         throw "track.onended during party.on_addTrack"
                     }
-                    await this.par.pc.removeTrack(sender);
+                    await par.pc.removeTrack(sender);
                     // hopefully it will go again?
                     par.outgoing = par.outgoing.filter(tr => tr != track)
-                    console.warn("${par} Track Ended")
+                    console.warn(`${par} Track Ended`)
                 }
                 await this.party.on_addTrack?.(par,track,sender,localStream)
                 before_sent = false

@@ -36,19 +36,25 @@ export class Party {
         window.party_singleton = this
     }
     start() {
-        this.peering && this.stop()
-        this.peering = new Peering({party:this})
+        this.peering?.stop()
+        this.peering = new Peering({
+            party: this,
+            onPeerReady: (ing) => {
+                console.log(`onPeerReady: ${ing}`)
+            }
+        })
     }
 
     stop() {
-        // waylay closing the socket for any final audio-upload
+        // stop all peer connections
+        // the definitely-immediate part of Peering.stop()
+        this.peering?.stop_ings()
+        // this may wait a little longer for audio-upload via websocket to finish
         let let_go = () => {
             this.peering?.stop()
         }
 
         this.map(par => {
-            par.pc?.close && par.pc?.close();
-
             par.local || par.drop_effects()
 
             if (par.recorder) {
