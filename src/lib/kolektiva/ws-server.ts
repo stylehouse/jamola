@@ -20,116 +20,116 @@ export const webSocketServer = {
 			// socket.id is its own room, becomes targetId
 			//  saves inventing a concept to address individuals
 
-			WebRTCSignalingServer(socket,io)
+			WebRTCSignalingServer(socket, io)
 
-			AudioUploadServer(socket,io)
+			AudioUploadServer(socket, io)
 		});
 	}
 }
 
-function AudioUploadServer(socket,io) {
+function AudioUploadServer(socket, io) {
 	// Server-side receiving with acknowledgement
-	socket.on('audio-upload', async (data,callback) => {
+	socket.on('audio-upload', async (data, callback) => {
 		try {
-		  const { metadata, audioData } = data;
-		  const filename = metadata.filename
-		  if (filename.match(/[^.\w/-]/)) {
-			  return callback({
-				  success: false,
-				  error: `filename is /[^\w/-]/`
-			  });
-		  }
-		  // Validate single forward slash requirement
-		  const slashCount = (filename.match(/\//g) || []).length;
-		  if (slashCount !== 1) {
-			  return callback({
-				  success: false,
-				  error: `filename must contain exactly one forward slash for directory structure`
-			  });
-		  }
+			const { metadata, audioData } = data;
+			const filename = metadata.filename
+			if (filename.match(/[^.\w/-]/)) {
+				return callback({
+					success: false,
+					error: `filename is /[^\w/-]/`
+				});
+			}
+			// Validate single forward slash requirement
+			const slashCount = (filename.match(/\//g) || []).length;
+			if (slashCount !== 1) {
+				return callback({
+					success: false,
+					error: `filename must contain exactly one forward slash for directory structure`
+				});
+			}
 
-            // Get directory path and ensure it's within uploads!
-            const fullPath = join(UPLOAD_DIR, filename);
-            const dirPath = dirname(fullPath);
-            // Normalize paths for comparison to prevent directory traversal
-            const normalizedPath = join(process.cwd(), fullPath);
-            const uploadRoot = join(process.cwd(), UPLOAD_DIR);
-            
-            // Debug path information
-            console.log('Path debug:', {
-                fullPath,
-                normalizedPath,
-                uploadRoot,
-                cwd: process.cwd()
-            });
-            
-            // Ensure path doesn't try to escape uploads directory
-			console.log(`audio-upload... ${process.cwd()}, ${UPLOAD_DIR}`)
-            if (!normalizedPath.startsWith(uploadRoot)) {
-                return callback({
-                    success: false,
-                    error: 'Invalid path: attempting to write outside uploads directory'
-                });
-            }
+			// Get directory path and ensure it's within uploads!
+			const fullPath = join(UPLOAD_DIR, filename);
+			const dirPath = dirname(fullPath);
+			// Normalize paths for comparison to prevent directory traversal
+			const normalizedPath = join(process.cwd(), fullPath);
+			const uploadRoot = join(process.cwd(), UPLOAD_DIR);
 
-		  const metaFilename = filename.replace(/\.\w+$/, '.json');
-		  
-		  if (filename == metaFilename) {
-			return callback({
-				success: false,
-				error: `filename should be /\.\w+$/, eg .webm`
+			// Debug path information
+			console.log('Path debug:', {
+				fullPath,
+				normalizedPath,
+				uploadRoot,
+				cwd: process.cwd()
 			});
-		  }
 
-            // Check if files already exist
-            const fullMetaPath = join(UPLOAD_DIR, metaFilename);
-            if (await fileExists(fullPath) || await fileExists(fullMetaPath)) {
-                return callback({
-                    success: false,
-                    error: `file already exists`
-                });
-            }
+			// Ensure path doesn't try to escape uploads directory
+			console.log(`audio-upload... ${process.cwd()}, ${UPLOAD_DIR}`)
+			if (!normalizedPath.startsWith(uploadRoot)) {
+				return callback({
+					success: false,
+					error: 'Invalid path: attempting to write outside uploads directory'
+				});
+			}
 
-		  // Validate audioBlob before creating Buffer
-		  if (!audioData || !audioData.length) {
-			throw new Error('Invalid audio blob data of length='+audioData.length);
-		  }
-		  
-		  console.log(`audio-upload ${filename}`)
-		  
-		  // Save audio file
-		// Create directory if it doesn't exist
-		await mkdir(dirPath, { recursive: true });
+			const metaFilename = filename.replace(/\.\w+$/, '.json');
 
-		await writeFile(fullPath, Buffer.from(audioData));
-		  
-		  // Save metadata separately
-            await writeFile(fullMetaPath, JSON.stringify(metadata, null, 2));
-		  
-		  return callback({
-			success: true,
-		  });
+			if (filename == metaFilename) {
+				return callback({
+					success: false,
+					error: `filename should be /\.\w+$/, eg .webm`
+				});
+			}
+
+			// Check if files already exist
+			const fullMetaPath = join(UPLOAD_DIR, metaFilename);
+			if (await fileExists(fullPath) || await fileExists(fullMetaPath)) {
+				return callback({
+					success: false,
+					error: `file already exists`
+				});
+			}
+
+			// Validate audioBlob before creating Buffer
+			if (!audioData || !audioData.length) {
+				throw new Error('Invalid audio blob data of length=' + audioData.length);
+			}
+
+			console.log(`audio-upload ${filename}`)
+
+			// Save audio file
+			// Create directory if it doesn't exist
+			await mkdir(dirPath, { recursive: true });
+
+			await writeFile(fullPath, Buffer.from(audioData));
+
+			// Save metadata separately
+			await writeFile(fullMetaPath, JSON.stringify(metadata, null, 2));
+
+			return callback({
+				success: true,
+			});
 		} catch (error) {
-		  console.error(error)
-		  socket.emit('upload-error', { 
-			error: error.message,
-			filename: data?.metadata?.filename 
-		  });
+			console.error(error)
+			socket.emit('upload-error', {
+				error: error.message,
+				filename: data?.metadata?.filename
+			});
 		}
-	  });
+	});
 }
 async function fileExists(path) {
-    try {
-        await access(path, constants.F_OK);
-        return true;
-    } catch {
-        return false;
-    }
+	try {
+		await access(path, constants.F_OK);
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 
 
-function WebRTCSignalingServer(socket,io) {
+function WebRTCSignalingServer(socket, io) {
 	// When a peer joins a room
 	socket.on('join-room', async (roomId: string) => {
 		// Let everyone in the room know about the new peer
@@ -143,9 +143,9 @@ function WebRTCSignalingServer(socket,io) {
 		const peers = Array.from(await io.in(roomId).fetchSockets())
 			.map(peer => peer.id)
 			.filter(id => id != socket.id)
-		
-		peers.length && console.log('Other peers in '+roomId+': ', peers);
-		socket.emit('peers-in-room', {peers});
+
+		peers.length && console.log('Other peers in ' + roomId + ': ', peers);
+		socket.emit('peers-in-room', { peers });
 	});
 
 	// Handle SDP offer/answer exchange
