@@ -1,6 +1,6 @@
 import { Server } from 'socket.io'
-import { writeFile, access } from 'fs/promises';
-import { join } from 'path';
+import { writeFile, access, mkdir } from 'fs/promises';
+import { join, dirname } from 'path';
 import { constants } from 'fs';
 
 const UPLOAD_DIR = 'uploads'
@@ -18,26 +18,60 @@ export const webSocketServer = {
 			// console.log('Client address:', socket.handshake);
 
 			// socket.id is its own room, becomes targetId
+			//  saves inventing a concept to address individuals
 
-			SignalingServer(socket,io)
+			WebRTCSignalingServer(socket,io)
 
-			UploadServer(socket,io)
+			AudioUploadServer(socket,io)
 		});
 	}
 }
 
-function UploadServer(socket,io) {
+function AudioUploadServer(socket,io) {
 	// Server-side receiving with acknowledgement
 	socket.on('audio-upload', async (data,callback) => {
 		try {
 		  const { metadata, audioData } = data;
 		  const filename = metadata.filename
-		  if (filename.match(/[^.\w-]/)) {
+		  if (filename.match(/[^.\w/-]/)) {
 			  return callback({
 				  success: false,
-				  error: `filename is /[^\w-]/`
+				  error: `filename is /[^\w/-]/`
 			  });
 		  }
+		  // Validate single forward slash requirement
+		  const slashCount = (filename.match(/\//g) || []).length;
+		  if (slashCount !== 1) {
+			  return callback({
+				  success: false,
+				  error: `filename must contain exactly one forward slash for directory structure`
+			  });
+		  }
+
+            // Get directory path and ensure it's within uploads!
+            const fullPath = join(UPLOAD_DIR, filename);
+            const dirPath = dirname(fullPath);
+            // Normalize paths for comparison to prevent directory traversal
+            const normalizedPath = join(process.cwd(), fullPath);
+            const uploadRoot = join(process.cwd(), UPLOAD_DIR);
+            
+            // Debug path information
+            console.log('Path debug:', {
+                fullPath,
+                normalizedPath,
+                uploadRoot,
+                cwd: process.cwd()
+            });
+            
+            // Ensure path doesn't try to escape uploads directory
+			console.log(`audio-upload... ${process.cwd()}, ${UPLOAD_DIR}`)
+            if (!normalizedPath.startsWith(uploadRoot)) {
+                return callback({
+                    success: false,
+                    error: 'Invalid path: attempting to write outside uploads directory'
+                });
+            }
+
 		  const metaFilename = filename.replace(/\.\w+$/, '.json');
 		  
 		  if (filename == metaFilename) {
@@ -47,19 +81,14 @@ function UploadServer(socket,io) {
 			});
 		  }
 
-		  // checks
-		  if (await fileExists(metaFilename)) {
-			  return callback({
-				  success: false,
-				  error: `metaFilename already exists`
-			  });
-		  }
-		  if (await fileExists(filename)) {
-			  return callback({
-				  success: false,
-				  error: `filename already exists`
-			  });
-		  }
+            // Check if files already exist
+            const fullMetaPath = join(UPLOAD_DIR, metaFilename);
+            if (await fileExists(fullPath) || await fileExists(fullMetaPath)) {
+                return callback({
+                    success: false,
+                    error: `file already exists`
+                });
+            }
 
 		  // Validate audioBlob before creating Buffer
 		  if (!audioData || !audioData.length) {
@@ -69,16 +98,13 @@ function UploadServer(socket,io) {
 		  console.log(`audio-upload ${filename}`)
 		  
 		  // Save audio file
-		  await writeFile(
-			join(UPLOAD_DIR, filename),
-			Buffer.from(audioData)
-		  );
+		// Create directory if it doesn't exist
+		await mkdir(dirPath, { recursive: true });
+
+		await writeFile(fullPath, Buffer.from(audioData));
 		  
 		  // Save metadata separately
-		  await writeFile(
-			join(UPLOAD_DIR, metaFilename),
-			JSON.stringify(metadata, null, 2)
-		  );
+            await writeFile(fullMetaPath, JSON.stringify(metadata, null, 2));
 		  
 		  return callback({
 			success: true,
@@ -103,7 +129,7 @@ async function fileExists(path) {
 
 
 
-function SignalingServer(socket,io) {
+function WebRTCSignalingServer(socket,io) {
 	// When a peer joins a room
 	socket.on('join-room', async (roomId: string) => {
 		// Let everyone in the room know about the new peer

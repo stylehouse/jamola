@@ -237,12 +237,14 @@ export class parRecorder {
 
     form_filename({title_ts,title,name,sequenceNumber}) {
         const timestamp = new Date(title_ts).toISOString().replace(/[:.]/g, '-');
-        const sanitizedName = (this.par.name+'').replace(/[^a-z\w0-9]/gi, '_');
         const sanitizedTitle = (this.title+'').replace(/[^a-z\w0-9]/gi, '_');
         const paddedSequenceNumber = String(sequenceNumber).padStart(4, '0');
+        const sanitizedName = (this.par.name+'').replace(/[^a-z\w0-9]/gi, '_');
         return [
+            // for an uploads/ full of date-titles
             timestamp, 
-            sanitizedTitle, 
+            sanitizedTitle
+            +'/'+
             paddedSequenceNumber, 
             sanitizedName
         ].join('_') + '.webm';
