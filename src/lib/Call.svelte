@@ -1,7 +1,5 @@
 <script lang="ts">
     import { onDestroy, untrack } from "svelte";
-    import { SvelteMap } from "svelte/reactivity";
-    import { SignalingClient } from "$lib/ws-client.svelte";
     import { Measuring } from "$lib/measuring.svelte";
     import { parRecorder,retryRecordingUploads } from "$lib/recording";
     import YourName from "./YourName.svelte";
@@ -11,8 +9,7 @@
     import { Party } from "./kolektiva/Party.svelte";
     import Participants from "./ui/Participants.svelte";
     
-    let Signaling: SignalingClient;
-    let sock = () => Signaling?.socket && Signaling.socket.connected && Signaling.socket
+    let sock = () => party?.socket?.connected && party.socket
     let localStream;
     let status = $state("Disconnected");
     let errorMessage = $state("");
@@ -328,6 +325,7 @@
         i_myself_par();
     }
     async function startConnection() {
+        console.log(`startConnection()`)
         // this will be, sync, after negate()
         status = "Plugging out";
         let part = ''
@@ -335,17 +333,9 @@
         try {
             part = 'startStreaming'
             await startStreaming()
-            // start signaling via websocket to bootstrap webrtc sessions...
-            if (Signaling) {
-                // user is clicking the button rapidly
-                //  will find Signaling waiting for uploads to finish
-                Signaling.close();
-            }
             part = 'Peering'
-            
+            // start signaling via websocket to bootstrap webrtc sessions...
             party.start()
-            // < audio-upload via party
-            Signaling = party.Signaling
         } catch (error) {
             errorMessage = `Error in ${part}: ${error.message}`;
             status = "Error occurred";
@@ -457,6 +447,7 @@
 
     // switch everything off
     function stopConnection() {
+        console.log(`stopConnection()`)
         measuring.close();
         party.stop()
         status = "Disconnected";
@@ -550,7 +541,10 @@
     //
     let quitervals = []
     $effect(() => {
-        let retry = () => activate_recording_reuploading && Signaling && retryRecordingUploads(sock)
+        let retry = () => {
+            activate_recording_reuploading
+                && sock() && retryRecordingUploads(sock)
+        }
         setTimeout(() => {
             // Periodically retry failed uploads, eg now
             retry()

@@ -11,6 +11,13 @@ import { Participant } from "./Participants.svelte";
             //    much later in parRecorder.uploadCurrentSegment
             //    see "it seems like a svelte5 object proxy problem"
 
+// negotiation handling
+// PeerJS doesn't do this,
+//   it adds everything to par.pc early enough to not need to
+// < if the signaling server forwards peerId,name,cryptotrust
+//    we could add everything early enough too.
+//    we're currently waiting for stable->datachanneling->tracking
+// supposedly we do: https://blog.mozilla.org/webrtc/perfect-negotiation-in-webrtc/
 
 /**
  * WebRTC peer connection management with state tracking:
@@ -116,13 +123,12 @@ export class Peering {
     constructor(opt) {
         Object.assign(this, opt)
         this.setupSocket();
+        // we share the socket to the party so it can be used for eg audio-upload
+        this.party.socket = this.socket
 
         // < this.party.get_forever("room")
         this.room = this.room;
         this.socket.emit('join-room', this.room);
-
-        // < was passed around, mostly via sock()
-        this.party.Signaling = this
     }
 
 

@@ -1,14 +1,17 @@
 import { Peering } from "$lib/kolektiva/Peering.svelte"
 import { SvelteMap } from "svelte/reactivity"
 import { Participant } from "./Participants.svelte"
+import type { Socket } from "socket.io"
+import type { Measuring } from "$lib/measuring.svelte"
 
 export class Party {
-    peering
+    peering:Peering
+    socket:Socket
     // < rename ers or people. it's VR so...
     participants:Map<peerId, Participant> = $state(new SvelteMap())
     measuring:Measuring
 
-    userName
+    userName:string
     // sendable tracks in a stream
     get_localStream?:Function
     on_addTrack?:Function
