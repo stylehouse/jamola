@@ -5,7 +5,7 @@
     import YourName from "./YourName.svelte";
     import YourTitle from "./YourTitle.svelte";
     import { CookedStream, Delaysagne, FreshStream, Gainorator, Gaintrol } from "./audio.svelte";
-    import { retryUntil, userAgent } from "./Y";
+    import { oncer, retryUntil, throttle, userAgent } from "./Y";
     import { Party } from "./kolektiva/Party.svelte";
     import Participants from "./ui/Participants.svelte";
     
@@ -514,61 +514,42 @@
             if (status === "Disconnected") {
                 throw "we rely on this instantly changing"
             }
-            was_on = true
+            party.was_on = true
             say_negate = "leave";
         } else {
             stopConnection();
-            was_on = false
+            party.was_on = false
             say_negate = "Ring";
         }
     }
-    
-    let was_on = $state(false)
-    // load
-    let party_storables = ['activate_recording','forever']
+
+    // < would reset on HMR? could push config on the new effects, maybe
+    let load_once = $state()
     $effect(() => {
-        if (localStorage.jamola_config_v1) {
-            // < why are enclosing () are required..?
-            let etc
-            ({was_on,...etc} = JSON.parse(localStorage.jamola_config_v1))
-            party_storables.map(k => {
-                if (etc[k] != null) {
-                    party[k] = etc[k]
-                }
-            })
+        load_once ||= oncer()
+        if (load_once()) {
+            party.load_config()
         }
     })
-    // save
+    let dont_save_once = oncer()
     $effect(() => {
-        console.log("Storing was_on="+was_on)
-        let etc = {}
-        party_storables.map(k => {
-            if (etc[k] != null) {
-                party[k] = etc[k]
-            }
-        })
-        localStorage.jamola_config_v1 = JSON.stringify({
-            was_on,
-            activate_recording: party.activate_recording,
-            forever: party.forever,
-        })
-
+        // gets reactive variables in it, updating via this effect
+        party.save_config(dont_save_once())
     })
 
     // auto-resume - good for debugging when all clients refresh all the time
-    let resumable_once = true;
-    let resumable_storable = $state(false)
+    let resumable_once = oncer()
     $effect(() => {
-        if (resumable_once) {
+        if (resumable_once()) {
             // init
-            resumable_once = false;
             // wait for navigator.mediaDevices.enumerateDevices
+            // < actually wait for it, ie no longer
+            //    suppose we separate our localstream + mixer of them to...
             setTimeout(() => {
-                if (was_on && userName != "you" && !errorMessage) {
+                if (party.was_on && userName != "you" && !errorMessage) {
                     console.log("Resuming...");
                     negate()
                 }
-                resumable_storable = 1
             },240)
         }
     });
@@ -591,10 +572,13 @@
         status = "Ping"
         console.log("Ya"+2 )
     }
+    let dead = false
     onDestroy(() => {
         quitervals.map(clearInterval)
         stopConnection();
+        dead = true
     })
+
 </script>
 
 <main class="container" style="display:none;" bind:this={themain}>

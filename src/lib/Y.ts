@@ -33,3 +33,42 @@ export async function retryUntil(condition, options = {}) {
     
     throw new Error(`${name}: Max retries (${maxRetries}) reached`);
 }
+export function oncer() {
+    let ready = true
+    return () => {
+        if (ready) {
+            ready = false;
+            return true
+        }
+    }
+}
+export function true_after(delay_ms) {
+    let ready = false
+    setTimeout(() => ready = true, delay_ms)
+    return () => ready
+}
+export function throttle(func, interval_ms = 200) {
+    let isWaiting = false;
+    let nextArgs:null|Array<any> = null;
+    function handle(...args) {
+        if (isWaiting) {
+            nextArgs = args;
+            return;
+        }
+        isWaiting = true;
+        func(...args);
+
+        setTimeout(() => {
+            isWaiting = false;
+            
+            // If there's a queued call, execute it
+            if (nextArgs !== null) {
+                handle(...nextArgs);
+                nextArgs = null
+            }
+            else {
+            }
+        }, interval_ms);
+    };
+    return handle
+}

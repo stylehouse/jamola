@@ -3,8 +3,99 @@ import { SvelteMap } from "svelte/reactivity"
 import { Participant } from "./Participants.svelte"
 import type { Socket } from "socket.io"
 import type { Measuring } from "$lib/measuring.svelte"
+import { throttle } from "$lib/Y"
 
-export class Party {
+
+
+
+
+
+
+
+
+
+//#region GoodTime
+class GoodTime {
+    // some settings can come from the user's stored config:
+    // whether to Ring on pageload:
+    was_on = $state(false)
+    // stored:
+    activate_recording = $state(false)
+    // not ui'd, records our local stream
+    activate_recording_for_peerIds = [""]
+    // stored:
+    forever = $state({})
+
+    party_storables = ['was_on', 'activate_recording','forever']
+    localStorageConfigKey = 'jamola_config_v1'
+
+    load_config() {
+        if (!localStorage.jamola_config_v1) return
+        // put config items where they go, mostly on party?
+        // < why are enclosing () are required..?
+        let s = localStorage[this.localStorageConfigKey]
+        console.log("Loading config!", s);
+        let config = JSON.parse(s)
+        this.party_storables.map(k => {
+            if (config[k] != null) {
+                // put them in party, from config
+                this[k] = config[k]
+            }
+        })
+        console.log("loaded was_on: "+this.was_on)
+
+    }
+    save_config(dont_save=false) {
+        this.store_config ||= throttle((config) => {
+            if (!config) return
+            let s = JSON.stringify(config);
+            console.log("Storing config!", s);
+            localStorage[this.localStorageConfigKey] = s
+        }, 200);
+
+        let config = {}
+        this.party_storables.map(k => {
+            if (this[k] != null) {
+                // put them in config, from party
+                config[k] = this[k]
+            }
+        })
+        if (dont_save) {
+            // just picking up reactive variables the first time
+            return
+        }
+        console.log("Could be storing config...")
+        this.store_config(config)
+        console.log("saved was_on: "+config.was_on)
+
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//#region Party
+export class Party extends GoodTime {
     peering:Peering
     socket:Socket
     // < rename ers or people. it's VR so...
@@ -24,14 +115,8 @@ export class Party {
     // checked when the above is first got
     wants_audio_permission?:Function
 
-    // some settings can come from the user's stored config:
-    // stored:
-    activate_recording = $state(false)
-    activate_recording_for_peerIds = [""]
-    // stored:
-    forever = $state({})
-    
     constructor() {
+        super()
     }
 
     singularise() {
@@ -88,7 +173,7 @@ export class Party {
     set_forever(key:Array,value) {
         key = this.make_forever_key(key)
         this.forever[key] = value
-        console.log("forever: set for "+key)
+        console.log("forever: set for "+key+"\t"+value)
     }
     // < this could give out defaults
     //   our loose function call to adjust gain to 0.7
@@ -133,3 +218,4 @@ export class Party {
         return par
     }
 }
+
