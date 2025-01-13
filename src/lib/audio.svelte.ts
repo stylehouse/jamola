@@ -1,3 +1,4 @@
+import { untrack } from "svelte"
 import { throttle } from "./Y"
 
 
@@ -248,14 +249,6 @@ class AudioControl {
     constructor(opt) {
         Object.assign(this,opt)
         this.name ||= this.fec_key || "qua"
-
-        // may remember this setting
-        // < we need to not get here until par have names
-        return
-        let v = this.fec.par.party.get_forever([this.fec.par.name,this.fec,this])
-        if (v != null) {
-            this.set(v)
-        }
     }
     get Knob_props() {
         let propos = {
@@ -267,18 +260,37 @@ class AudioControl {
             //   it would need to come from and to this.*...
             feed: (value) => {
                 this.set(value)
-            }
+            },
         }
-        console.log(`made props for fec:${this.fec.name} con:${this.name}`,{this:this,propos})
+        console.log(`made props for fec:${this.fec.name} con:${this.name} aka ${this}`,
+            // < can't write this {this,propos} or big errors
+            {this:this,propos})
         return propos
+    }
+
+    get forever_key():Array<string|Object> {
+        return [this.fec.par,this.fec,this]
     }
     set(value) {
         this.fec[this.fec_key] = value
         // may tell the *Node to adjust
         this.on_set?.(value,this.fec_key)
         // tell config
-        this.fec.par.party.set_forever([this.fec.par,this.fec,this],value)
+        this.fec.par.party.set_forever(this.forever_key,value)
     }
+    // may remember this setting
+    read_config() {
+        let v = this.fec.par.party.get_forever(this.forever_key)
+        if (v != null) {
+            this.set(v)
+            this.ui_version++
+        }
+    }
+    // bump to resync ui from our state
+    //  we are working on values we can't assume are $state()
+    //  but hardly need to read from unless we re-read_config()
+    // you should not be calling Knob_props too often
+    ui_version = $state(1)
 }
 
 // Stream buffering or slight time travels

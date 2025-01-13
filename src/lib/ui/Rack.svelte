@@ -1,7 +1,8 @@
 <script lang="ts">
-    import Knob from "./Knob.svelte";
+    import RackFec from "./RackFec.svelte";
 
     let {par} = $props()
+
     // < take over volumeChange from above, directly on the par.effect.*
     let volumeLevel = $derived(par.gain.volumeLevel)
     let peakLevel = $derived(par.gain.peakLevel)
@@ -9,6 +10,7 @@
         par.latency == null ? null :
             par.latency * 1000 // s to ms
     )
+
 </script>
 
     {#if par.gain}<span class="bitrate">{Math.round(par.gain.peakLevel*1000)/1000} dB</span
@@ -35,45 +37,10 @@
 
 <!-- all the effects themselves, to be verbose -->
         {#each par.effects as fec}
-            <span class="effect ">
-                <span class="theyname" 
-                    onclick={() => console.log("fec: ",fec) }
-                    role="button"
-                    >{fec.name}</span>
-
-                    {#each fec.controls as con (con.this_key)}
-                        <label class=acontrol>
-                            <!-- con.name will appear here, and interact as part of the knob -->
-                            <Knob
-                                {...con.Knob_props}
-                            >
-                            {#snippet label()}
-                                {con.name}
-                            {/snippet}
-                            </Knob>
-                        </label>
-                    {/each}
-
-            </span>
+            <RackFec {fec}></RackFec>
         {/each}
 
 <style>
-    .effect {
-        border:2px solid black;
-        border-radius:1em;
-        border-left:none;
-        min-height:3em;
-        position:relative;
-        display:inline-block;
-    }
-    .effect .theyname {
-        position: absolute;
-        bottom: 0px;
-        margin-right: -2em;
-        transform: rotate(-90deg) skew(25deg);
-        transform-origin: bottom left;
-        pointer-events:none;
-    }
     .bitrate {
         width:2em;
     }

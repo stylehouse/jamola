@@ -1,7 +1,7 @@
 import { parRecorder } from "$lib/recording"
 import type { Party } from "./Party.svelte"
 import type { Paring } from "./Peering.svelte"
-import { CookedStream, FreshStream, Gainorator, Gaintrol } from "$lib/audio.svelte"
+import { AudioEffectoid, CookedStream, FreshStream, Gainorator, Gaintrol } from "$lib/audio.svelte"
 import { userAgent } from "$lib/Y"
 
 
@@ -21,7 +21,7 @@ export class Participant {
     // webrtc
     constate = $state()
     // Call
-    effects = $state()
+    effects:Array<AudioEffectoid> = $state()
     // < tis messy just throwing these on here, but we want them by name sometimes
     // sometimes want to access effects by name
     fresh?:CookedStream
@@ -98,6 +98,7 @@ export class Participant {
 
         this.effects && this.drop_effects()
         this.new_effects()
+        this.configure_effects()
 
         this.party.measuring.add_par(this);
         
@@ -169,6 +170,13 @@ export class Participant {
             // should have it by now
             console.error(`should have ${this} stream by now`)
         },6600)
+    }
+    configure_effects() {
+        this.effects?.map(fec => {
+            fec.controls?.map(con => {
+                con.read_config()
+            })
+        })
     }
     have_output(stream) {
         if (!this.cooked.output) {
