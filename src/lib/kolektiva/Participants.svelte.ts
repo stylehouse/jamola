@@ -147,6 +147,16 @@ export class Participant {
         }
         this.keeper_audio.srcObject = stream;
     }
+    // < various suites of effects we could create
+    //   nothing should assume even par.gain will be there
+    //   low-power mode: par.fresh==par.cooked
+    //   deaf-to-self mode: as opposed to just local gain=0
+    //   a text area to compose systems of a dozen classes
+    //   config -> configs (-> setlist)
+    //    this + more stuff... about a dozen classes
+    //     but arrangeable
+    //   and wanting to sync them to git...
+    //   the server has audio objects we can know about, too
     // < how to reiterate this function, esp the very inner...
     //   transact par.effects?
     new_effects() {

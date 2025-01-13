@@ -40,6 +40,7 @@ export abstract class AudioEffectoid {
         // to par.effects=[]
         this.get_wired_in()
     }
+    // < needs de-experimentalising
     input(stream) {
         this.par = this.par.party.repar(this.par)
         this.disconnect_all_nodes()
@@ -130,10 +131,6 @@ export abstract class AudioEffectoid {
     // and a given last node
     output_Node(Node) {
         this.output = Node
-        if (0) {
-            // branching effects off
-            this.output = this.stream
-        }
     }
 
 

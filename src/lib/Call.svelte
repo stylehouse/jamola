@@ -523,10 +523,10 @@
         }
     }
 
-    // < would reset on HMR? could push config on the new effects, maybe
-    let load_once = $state()
+    // reset on HMR, as is everything in here, if no separated by a component
+    //  see https://howsecologysquad.blogspot.com/2025/01/svelte-hmr.html
+    let load_once = oncer()
     $effect(() => {
-        load_once ||= oncer()
         if (load_once()) {
             party.load_config()
         }
@@ -536,7 +536,6 @@
         // gets reactive variables in it, updating via this effect
         party.save_config(dont_save_once())
     })
-    3+3
 
     // auto-resume - good for debugging when all clients refresh all the time
     let resumable_once = oncer()
