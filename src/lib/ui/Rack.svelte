@@ -45,7 +45,7 @@
                         <label class=acontrol>
                             <!-- con.name will appear here, and interact as part of the knob -->
                             <Knob
-                                {...con.get_Knob_props()}
+                                {...con.Knob_props}
                             >
                             {#snippet label()}
                                 {con.name}

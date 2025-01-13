@@ -1,3 +1,4 @@
+import { throttle } from "./Y"
 
 
 
@@ -256,7 +257,7 @@ class AudioControl {
             this.set(v)
         }
     }
-    get_Knob_props() {
+    get Knob_props() {
         let propos = {
             min: this.min,
             max: this.max,
@@ -268,13 +269,14 @@ class AudioControl {
                 this.set(value)
             }
         }
-        // console.log(`made props for fec:${this.fec.name} con:${this.name}`,{this:this,propos})
+        console.log(`made props for fec:${this.fec.name} con:${this.name}`,{this:this,propos})
         return propos
     }
     set(value) {
         this.fec[this.fec_key] = value
-        this.on_set?.(value)
-
+        // may tell the *Node to adjust
+        this.on_set?.(value,this.fec_key)
+        // tell config
         this.fec.par.party.set_forever([this.fec.par,this.fec,this],value)
     }
 }

@@ -536,6 +536,7 @@
         // gets reactive variables in it, updating via this effect
         party.save_config(dont_save_once())
     })
+    3+3
 
     // auto-resume - good for debugging when all clients refresh all the time
     let resumable_once = oncer()

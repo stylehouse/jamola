@@ -34,7 +34,7 @@ class GoodTime {
         // put config items where they go, mostly on party?
         // < why are enclosing () are required..?
         let s = localStorage[this.localStorageConfigKey]
-        console.log("Loading config!", s);
+        console.log("\t\tLoading config!", s);
         let config = JSON.parse(s)
         this.party_storables.map(k => {
             if (config[k] != null) {
@@ -42,14 +42,13 @@ class GoodTime {
                 this[k] = config[k]
             }
         })
-        console.log("loaded was_on: "+this.was_on)
 
     }
     save_config(dont_save=false) {
         this.store_config ||= throttle((config) => {
             if (!config) return
             let s = JSON.stringify(config);
-            console.log("Storing config!", s);
+            console.log("\t\tStoring config!", s);
             localStorage[this.localStorageConfigKey] = s
         }, 200);
 
@@ -60,13 +59,12 @@ class GoodTime {
                 config[k] = this[k]
             }
         })
+        config.forever = this.forever
         if (dont_save) {
             // just picking up reactive variables the first time
             return
         }
-        console.log("Could be storing config...")
         this.store_config(config)
-        console.log("saved was_on: "+config.was_on)
 
     }
 }
@@ -170,10 +168,16 @@ export class Party extends GoodTime {
             return String(k);
         }).join('/');
     }
+    // only let the config save at 2fps
+    set_forever_throttle = throttle(() => {
+        this.save_config()
+    }, 500)
     set_forever(key:Array,value) {
         key = this.make_forever_key(key)
         this.forever[key] = value
-        console.log("forever: set for "+key+"\t"+value)
+        this.forever = this.forever
+        this.set_forever_throttle()
+        // console.log("forever: set for "+key+"\t"+value)
     }
     // < this could give out defaults
     //   our loose function call to adjust gain to 0.7

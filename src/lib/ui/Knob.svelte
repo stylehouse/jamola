@@ -204,7 +204,7 @@
         if (newValue !== value) {
             value = newValue;
             outpute = true;
-            feed?.(newValue);
+            // leads to feed(), see output stages
 			value = newValue
         }
 		locksanity()
@@ -269,15 +269,19 @@
 		value = constrainValue(v);
 	}
 
-	// outputs
+	// output stages
 	// fast callback
 	let feed_value = value
 	$effect(() => {
 		if (feed && value != null && value != feed_value) {
+			console.log("knob v=", value)
 			feed(value)
 			feed_value = value
 		}
 	})
+	// < not too fast callback
+
+
 	// the min and max values cause the knob to lean either way
 	let lean = $state()
 	$effect(() => {
