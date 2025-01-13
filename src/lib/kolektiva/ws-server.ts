@@ -56,7 +56,7 @@ function AudioUploadServer(socket, io) {
 			const uploadRoot = join(process.cwd(), UPLOAD_DIR);
 
 			// Debug path information
-			console.log('Path debug:', {
+			0 && console.log('Path debug:', {
 				fullPath,
 				normalizedPath,
 				uploadRoot,
@@ -64,7 +64,6 @@ function AudioUploadServer(socket, io) {
 			});
 
 			// Ensure path doesn't try to escape uploads directory
-			console.log(`audio-upload... ${process.cwd()}, ${UPLOAD_DIR}`)
 			if (!normalizedPath.startsWith(uploadRoot)) {
 				return callback({
 					success: false,

@@ -1,6 +1,6 @@
 <script lang="ts">
     import Rack from "./Rack.svelte";
-
+    
     let {party} = $props()
 </script>
 <div class="participants">

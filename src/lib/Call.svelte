@@ -51,9 +51,44 @@
     // it never seems to use more than 266 if given more
     let target_bitrate = 270;
     let default_volume = 0.7;
-
+    
+    // < HMR can sort-of be listened for
+    $effect(() => {
+        if (import.meta.hot) {
+            import.meta.hot.accept((mod) => {
+                let of = {
+                    // always rather opaque
+                    mod,
+                    // always Call.svelte?t=...
+                    url:import.meta.url,
+                    // empty, guesses from AI at what it would expect to be here?
+                    hot:import.meta.hot,
+                    id:import.meta.hot.id,
+                }
+                console.log("Codechange!", of)
+            })
+            // if you write these as import.meta.hot.accept(
+            //  it compiles in a ['default'] as a first argument
+            //  and an error about our strings being a callback occurs elsewhere
+            // so svelte must be obscuring vite's advertised feature of thus:
+            let imh = import.meta.hot
+            // none of these work?
+            imh.accept('/src/lib/kolektiva/Party.svelte', (newFoo) => {
+                console.log("Party Codechange!", {url:import.meta.url,newFoo})
+            })
+            imh.accept('kolektiva/Party.svelte', (newFoo) => {
+                console.log("Party short Codechange!", {url:import.meta.url,newFoo})
+            })
+            imh.accept('./kolektiva/Party.svelte', (newFoo) => {
+                console.log("Party ./short Codechange!", {url:import.meta.url,newFoo})
+            })
+        }
+        else {
+            throw "never here"
+        }
+    })
     // these are good to switch off in DEV
-    let activate_recording_reuploading = 0
+    let activate_recording_reuploading = 2
     
     // < perhaps via insertableStreams we can reuse
     //   the encoded opus that was transmit to us as the recorded copy

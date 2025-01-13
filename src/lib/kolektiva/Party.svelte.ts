@@ -30,7 +30,7 @@ export class Party {
     activate_recording_for_peerIds = [""]
     // stored:
     forever = $state({})
-
+    
     constructor() {
     }
 
