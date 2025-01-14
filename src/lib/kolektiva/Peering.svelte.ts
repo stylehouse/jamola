@@ -65,9 +65,9 @@ interface Paring {
     retryCount: number;
 }
 
-const MAX_BUFFERED_AMOUNT = 64 * 1024; // 64KB for general data
-const CHUNK_SIZE = 16 * 1024;          // 16KB chunks for file transfer
-const LOW_WATER_MARK = MAX_BUFFERED_AMOUNT * 0.8; // Start sending again at 80%
+// channel may have higher latency while uploading files
+const MAX_BUFFER = 64 * 1024; // 64KB
+const LOW_BUFFER = MAX_BUFFER * 0.8; // Start sending again at 80%
 export class Paring {
     // JOIN party.participants.
     peerId: string
@@ -98,30 +98,47 @@ export class Paring {
     // like socket.io
     async emit(
         type: string,
-        data: ArrayBuffer | string,
+        data: any,
         options: {
-            maxBuffered?: number, 
             priority?: 'high' | 'normal' | 'low',
         }) {
+
         options ||= {}
-        const { maxBuffered = MAX_BUFFERED_AMOUNT, priority = 'high' } = options;
+        const { priority = 'high' } = options;
         if (!this.channel || this.channel.readyState != "open") {
             console.error(`${this} channel not open, cannot send message type=${type}`);
             return false;
         }
+        
         try {
-            // Convert string to ArrayBuffer if needed
-            data = JSON.stringify({type, ...data})
-            
-            const buffer = typeof data === 'string' ? 
-                new TextEncoder().encode(data) : 
-                new Uint8Array(data);
+            // put in type
+            data = {type, ...data}
+            // may take out buffer
+            // < {buffer, ...data} = {type, ...data} !?
+            let buffer:Uint8Array|null = data.buffer
+            delete data.buffer
 
-            // Check if we need to queue
-            if (this.channel.bufferedAmount > maxBuffered) {
+            let json = JSON.stringify(data);
+            let encoded: Uint8Array;
+
+            // put a header on?
+            if (buffer) {
+                // Binary mode: 'b' + JSON + '\n' + binary data
+                let header = new TextEncoder().encode('b'+json+"\n")
+                encoded = new Uint8Array(header.length + buffer.byteLength);
+                encoded.set(header, 0);
+                encoded.set(new Uint8Array(buffer), header.length);
+            }
+            else {
+                // the whole message is JSON
+                encoded = new TextEncoder().encode(json)
+            }
+
+            // Queue handling
+            if (this.channel.bufferedAmount > MAX_BUFFER) {
                 this._paused = true;
                 return new Promise((resolve, reject) => {
-                    this._sendQueue.push({ data: buffer, resolve, reject });
+                    this._sendQueue.push({ data: encoded, resolve, reject });
                     
                     // Sort queue by priority if needed
                     if (priority === 'high') {
@@ -131,29 +148,53 @@ export class Paring {
                 });
             }
 
-            this.channel.send(buffer);
+            this.channel.send(encoded);
             return true;
         } catch (err) {
             console.error(`Failed to send message: ${err}`);
             return false;
         }
     }
-    unemit(encoded) {
-        let data = JSON.parse(encoded)
-        let handler = this.par.party.par_msg_handler[data.type]
-        if (!handler) {
-            // might be per-par, see Sharing
-            handler = this.par.msg_handler?.[data.type]
-            if (!handler) {
-                return console.warn(`${this} channel !handler for message type: `,data)
+    unemit(encoded: ArrayBuffer) {
+        // - If you send a string via channel.send(string),
+        //    you get a string in event.data
+        // - If you send any kind of ArrayBuffer, TypedArray,
+        //     or DataView via channel.send(binary),
+        //    you get an ArrayBuffer in event.data
+        // but you can treat them the same!
+        try {
+            const view = new Uint8Array(encoded);
+            if (view[0] === 98) {  // 'b' character
+                const newlineIndex = Array.from(view).findIndex(byte => byte === 10);
+                if (newlineIndex === -1) throw new Error('Invalid binary message format');
+                
+                const text = new TextDecoder().decode(view.slice(1, newlineIndex));
+                const buffer = view.slice(newlineIndex + 1);
+                const data = JSON.parse(text);
+                return this.handleMessage({...data,buffer});
             }
+            // the whole message is JSON
+            const text = new TextDecoder().decode(view);
+            return this.handleMessage(JSON.parse(text));
+        } catch (err) {
+            console.error(`Failed to receive message: ${err}`);
         }
-    
-        handler(this.par,data)
     }
+
+    private handleMessage(data: any) {
+        const handler = this.par.party.par_msg_handler[data.type] 
+            ?? this.par.msg_handler?.[data.type];
+            
+        if (!handler) {
+            return console.warn(`${this} channel !handler for message type:`, data);
+        }
+
+        handler(this.par, data);
+    }
+
     // Process queued messages
     _paused = false
-    _processQueue() {
+    _processEmitQueue() {
         while (!this._paused && this._sendQueue.length > 0) {
             const { data, resolve } = this._sendQueue.shift()!;
             
@@ -161,7 +202,7 @@ export class Paring {
                 this.channel!.send(data);
                 resolve();
                 
-                if (this.channel!.bufferedAmount > MAX_BUFFERED_AMOUNT) {
+                if (this.channel!.bufferedAmount > MAX_BUFFER) {
                     this._paused = true;
                     break;
                 }
@@ -399,10 +440,10 @@ export class Peering {
         ing.channel.onmessage = (e) => {
             this.handleChannelMessage(ing, e.data);
         };
-        ing.channel.bufferedAmountLowThreshold = LOW_WATER_MARK;
+        ing.channel.bufferedAmountLowThreshold = LOW_BUFFER;
         ing.channel.onbufferedamountlow = () => {
             ing._paused = false;
-            ing._processQueue();
+            ing._processEmitQueue();
         };
     }
     // < these could be Paring methods

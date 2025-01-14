@@ -4,19 +4,10 @@ import type { Participant } from "./Participants.svelte";
 // inherited by Sharing, to hide the guts
 //  may export to fancy up Peering's emit
 class Caring {
-    // Set up buffer management on channel creation
-    setupDataChannelHandlers(channel: RTCDataChannel) {
-        channel.bufferedAmountLowThreshold = LOW_WATER_MARK;
-        
-        channel.onbufferedamountlow = () => {
-            this._paused = false;
-            this._processQueue();
-        };
-    }
 
 
 
-
+    to
 
 }
 
@@ -41,7 +32,7 @@ export class Sharing extends Caring {
     async start() {
         try {
             this.fsHandler = new FileSystemHandler();
-            this.setupDataChannelHandlers(this.par.ing.channel);
+            await this.fsHandler.start()
             this.list = await this.listAvailableFiles();
             this.started = true;
             console.log("File sharing started with files:", this.list);
@@ -96,33 +87,46 @@ export class Sharing extends Caring {
         let totalSent = 0;
 
         // Send file metadata
-        await this.send(JSON.stringify({
-            type: 'file-meta',
+        await this.send('file-meta',{
             fileId,
             name: filename
-        }), { priority: 'high' });
+        })
 
         // Read and send chunks
         try {
             for await (const chunk of this.fsHandler.readFileChunks(filename)) {
-                await this.send(chunk, {
-                    maxBuffered: MAX_BUFFERED_AMOUNT,
-                    priority: 'normal'
-                });
+                await this.send('file-chunk',{
+                    buffer:chunk
+                },{priority: 'low'});
 
                 totalSent += chunk.byteLength;
                 onProgress?.(totalSent);
             }
 
             // Send completion message
-            await this.send(JSON.stringify({
-                type: 'file-complete',
-                fileId
-            }), { priority: 'high' });
+            await this.send('file-complete',{
+                fileId,
+            })
         } catch (err) {
             console.error('Error sending file:', err);
             throw err;
         }
+    }
+
+    setupReceiveFileHandlers() {
+        // Set up event listener for chunks
+        this.on('file-chunk', async (data) => {
+            if (data.fileId === fileId) {
+                await handleChunk(data.chunk);
+            }
+        });
+
+        // Set up completion handler
+        this.on('file-complete', async (data) => {
+            if (data.fileId === fileId) {
+                await writable.close();
+            }
+        });
     }
 
     // Receive a file to the filesystem
@@ -141,19 +145,6 @@ export class Sharing extends Caring {
                 onProgress?.(totalReceived);
             };
 
-            // Set up event listener for chunks
-            this.on('file-chunk', async (data) => {
-                if (data.fileId === fileId) {
-                    await handleChunk(data.chunk);
-                }
-            });
-
-            // Set up completion handler
-            this.on('file-complete', async (data) => {
-                if (data.fileId === fileId) {
-                    await writable.close();
-                }
-            });
         } catch (err) {
             console.error('Error receiving file:', err);
             throw err;
@@ -162,7 +153,7 @@ export class Sharing extends Caring {
 
     // List available files
     async listAvailableFiles(): Promise<string[]> {
-        return this.fsHandler.listDirectory();
+        return await this.fsHandler.listDirectory();
     }
 
 }
@@ -244,81 +235,6 @@ class TransferManager {
 //   }
 
 
-// Constants for buffer management
-const MAX_BUFFERED_AMOUNT = 64 * 1024; // 64KB for general data
-const MAX_AUDIO_BUFFERED = 16 * 1024;  // 16KB for audio - lower to reduce latency
-const CHUNK_SIZE = 16 * 1024;          // 16KB chunks for file transfer
-const LOW_WATER_MARK = MAX_BUFFERED_AMOUNT * 0.8; // Start sending again at 80%
-
-// Extend Paring class with buffer management
-export class BufferedParing {
-    private _sendQueue: Array<{
-        data: Uint8Array,
-        resolve: () => void,
-        reject: (error: Error) => void
-    }> = [];
-    private _paused = false;
-
-    constructor() {
-    }
-
-    // < replaces emit
-    // Enhanced send method with buffer management
-    async send(data: ArrayBuffer | string, options: { 
-        maxBuffered?: number, 
-        priority?: 'high' | 'normal' | 'low' 
-    } = {}) {
-        const { maxBuffered = MAX_BUFFERED_AMOUNT, priority = 'normal' } = options;
-
-        if (!this.channel || this.channel.readyState !== 'open') {
-            throw new Error('Channel not ready');
-        }
-
-        // Convert string to ArrayBuffer if needed
-        const buffer = typeof data === 'string' ? 
-            new TextEncoder().encode(data) : 
-            new Uint8Array(data);
-
-        // Check if we need to queue
-        if (this.channel.bufferedAmount > maxBuffered) {
-            this._paused = true;
-            return new Promise((resolve, reject) => {
-                this._sendQueue.push({ data: buffer, resolve, reject });
-                
-                // Sort queue by priority if needed
-                if (priority === 'high') {
-                    this._sendQueue.sort((a, b) => 
-                        (a.data['priority'] === 'high' ? -1 : 1));
-                }
-            });
-        }
-
-        this.channel.send(buffer);
-    }
-
-    // Process queued messages
-    private _processQueue() {
-        while (!this._paused && this._sendQueue.length > 0) {
-            const { data, resolve } = this._sendQueue.shift()!;
-            
-            try {
-                this.channel!.send(data);
-                resolve();
-                
-                if (this.channel!.bufferedAmount > MAX_BUFFERED_AMOUNT) {
-                    this._paused = true;
-                    break;
-                }
-            } catch (err) {
-                console.error('Error sending queued data:', err);
-            }
-        }
-    }
-}
-
-
-
-
 
 
 
@@ -337,17 +253,26 @@ export class BufferedParing {
 
 
 //#region FileSystemHandler
-// FileSystem handling extension for Paring class
+
 interface FileSystemState {
     dirHandle: FileSystemDirectoryHandle | null;
     fileHandles: Map<string, FileSystemFileHandle>;
 }
+
+const CHUNK_SIZE = 16 * 1024;          // 16KB chunks for file transfer
 
 class FileSystemHandler {
     private _fs: FileSystemState = {
         dirHandle: null,
         fileHandles: new Map()
     };
+    constructor() {
+    }
+    async start() {
+        await this.requestDirectoryAccess()
+    }
+
+
     // go somewhere
     async getFileHandle(filename: string): Promise<FileSystemFileHandle> {
         if (!this._fs.dirHandle) {
