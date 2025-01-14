@@ -250,7 +250,6 @@
     // this becomes our monitor
     function i_myself_par() {
         let par = party.createPar({
-            peerId: "",
             name: userName,
             type: "monitor",
             // < better than type:monitor is:

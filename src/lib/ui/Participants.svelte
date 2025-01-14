@@ -1,9 +1,10 @@
 <script lang="ts">
+    import autoAnimate from "@formkit/auto-animate"
     import Rack from "./Rack.svelte";
-    
+
     let {party} = $props()
 </script>
-<div class="participants">
+<div class="participants" use:autoAnimate>
     {#each [...party.participants.values()] as par (par.peerId)}
         <div class="participant {par.local ? 'monitor' : ''}">
             <span class="always_visible_horizontally">

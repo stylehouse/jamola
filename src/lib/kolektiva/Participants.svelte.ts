@@ -9,6 +9,7 @@ export class Participant {
     party:Party
     // peering gives us:
     ing:Paring
+    // < removing this
     peerId:string
     // < GOING? now on par.ing.pc
     pc:RTCPeerConnection

@@ -40,6 +40,9 @@ export abstract class AudioEffectoid {
         // to par.effects=[]
         this.get_wired_in()
     }
+    toString() {
+        return this.name
+    }
     // < needs de-experimentalising
     input(stream) {
         this.par = this.par.party.repar(this.par)
@@ -247,6 +250,9 @@ class AudioControl {
         Object.assign(this,opt)
         this.name ||= this.fec_key || "qua"
     }
+    toString() {
+        return this.name
+    }
     get Knob_props() {
         let propos = {
             min: this.min,
@@ -259,7 +265,7 @@ class AudioControl {
                 this.set(value)
             },
         }
-        console.log(`made props for fec:${this.fec.name} con:${this.name} aka ${this}`,
+        console.log(`made props for fec:${this.fec.name} aka ${this.fec} con:${this.name} aka ${this}`,
             // < can't write this {this,propos} or big errors
             {this:this,propos})
         return propos

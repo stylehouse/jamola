@@ -36,6 +36,18 @@ import { Participant } from "./Participants.svelte";
  * Track exchange begins only after connection is stable and names exchanged.
  */
 
+
+// stuff to look at adopting from simple-peer: 
+// < MAX_BUFFERED_AMOUNT, and large file transfers between peers?
+// < ICECOMPLETE_TIMEOUT
+// < safari null mid, checkTransceivers()
+// < removeTrack (track, stream) etc
+//    for actuating streamstopublish[] <-> ing.outgoings
+//    that wants a matrix across all par?
+//     par give clues how accepting they are
+//      eg drum machine takes only rhythm direction
+// a
+
 // Types for state management
 type PeerState = 'new' | 'connecting' | 'connected' | 'ready' | 'paused' | 'failed';
 type SignalingState = 'new' | 'offering' | 'answering' | 'stable';
@@ -113,7 +125,7 @@ export class Peering {
     // < dubious? simpler just reading ing.state since it is $state()
     public onPeerReady: (ing: Paring) => void;
 
-    // < run one of these, and a TURN
+    // < run one of these, and a https://github.com/coturn/coturn
     iceServers = [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
@@ -259,12 +271,12 @@ export class Peering {
             if (candidate) {
                 await this.handleICECandidate(ing, candidate);
             }
-        };    
+        };
 
         ing.pc.onicecandidateerror = (event) => {
-            // Log but don't fail on STUN timeouts
             if (event.errorCode === 701) {
-                console.log(`${ing} STUN timeout for ${event.url} (expected for IPv6)`);
+                // console.log(`${ing} STUN timeout for ${event.url} (expected for IPv6)`);
+                if (!event.address.startsWith('[')) console.warn(`${ing} STUN timeout for ${event.url} (non-IPv6: ${event.address})`)
                 return;
             }
             console.warn(`${ing} ICE candidate error:`, event);
@@ -393,7 +405,7 @@ export class Peering {
             if (offerCollision && !ing.polite) {
                 console.log(`${ing} Ignoring colliding offer (impolite peer)`);
                 return;
-                // the other peer should receive our offer and
+                // the other peer should receive our offer and ...
             }
 
             if (offerCollision) {
