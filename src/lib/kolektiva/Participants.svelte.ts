@@ -3,6 +3,7 @@ import type { Party } from "./Party.svelte"
 import type { Paring } from "./Peering.svelte"
 import { AudioEffectoid, CookedStream, FreshStream, Gainorator, Gaintrol } from "$lib/audio.svelte"
 import { userAgent } from "$lib/Y"
+import { Sharing } from "./Sharing.svelte"
 
 
 export class Participant {
@@ -42,6 +43,13 @@ export class Participant {
     incoming = $state([])
     // streams from us
     outgoing = $state([])
+
+    // ui drawers
+    // for ftp
+    sharing = $state()
+    start_sharing() {
+        this.sharing = new Sharing({par:this})
+    }
 
     constructor(opt) {
         Object.assign(this, opt);

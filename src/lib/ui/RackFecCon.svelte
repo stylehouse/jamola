@@ -10,13 +10,16 @@
         {...Knob_props}
     >
     {#snippet label()}
-        {con.name}
+        <span class=maxout>
+            {con.name}
+        </span>
     {/snippet}
     </Knob>
 </label>
-<button>
-
-</button>
 <style>
-
+    .maxout {
+        width:100%;
+        height:100%;
+        display:inline-block;
+    }
 </style>

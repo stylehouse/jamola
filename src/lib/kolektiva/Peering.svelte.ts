@@ -39,8 +39,7 @@ import { Participant } from "./Participants.svelte";
 
 // stuff to look at adopting from simple-peer: 
 // < MAX_BUFFERED_AMOUNT, and large file transfers between peers?
-// < ICECOMPLETE_TIMEOUT
-// < safari null mid, checkTransceivers()
+// < ICECOMPLETE_TIMEOUT, as distinct from pc|datachannel-grade connection problem?
 // < removeTrack (track, stream) etc
 //    for actuating streamstopublish[] <-> ing.outgoings
 //    that wants a matrix across all par?
@@ -73,6 +72,7 @@ export class Paring {
     // == par.pc
     // < but it probably belongs here
     pc: RTCPeerConnection
+    channel: RTCDataChannel
     // < show in ui
     state: PeerState = $state()
     toString() {
