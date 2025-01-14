@@ -1,3 +1,4 @@
+import { SvelteMap } from "svelte/reactivity";
 import type { Participant } from "./Participants.svelte";
 
 
@@ -17,16 +18,13 @@ type percentage = number
 export class Sharing extends Caring {
     // leads back to party
     par:Participant
-    tm = new TransferManager()
+    tm:TransferManager
     private fsHandler = new FileSystemHandler()
-    // < GOING?
-    private fileListeners: Map<string, Function[]> = new Map();
-    private activeTransfers: Set<string> = new Set();
     
-    // < GOING?
+    // < figure out how to do:
     // navigation and population
     dir: FileSystemDirectoryHandle | null = null;
-    list: dirlisting | null = $state()
+    list: DirectoryListing | null = $state()
 
     started = $state(false);
 
@@ -37,6 +35,7 @@ export class Sharing extends Caring {
     // then, maybe via ui,
     async start() {
         try {
+            this.tm = new TransferManager({sharing:this})
             this.fsHandler = new FileSystemHandler();
             await this.fsHandler.start()
             this.list = await this.listAvailableFiles();
@@ -50,22 +49,16 @@ export class Sharing extends Caring {
     async stop() {
         try {
             // Cancel any active transfers
-            for (const transferId of this.activeTransfers) {
-                await this.cancelTransfer(transferId);
-            }
-
-            // Remove all file listeners
-            this.fileListeners.clear();
-            this.activeTransfers.clear();
+            this.tm.stop()
 
             // Clear file system state
             this.dir = null;
-            this.list = [];
+            this.list = null
             this.started = false;
 
             // Close any open file handles
             if (this.fsHandler) {
-                await this.fsHandler.closeAllHandles();
+                await this.fsHandler.stop();
             }
 
             console.log("File sharing stopped");
@@ -88,42 +81,46 @@ export class Sharing extends Caring {
     // Send a file from the filesystem
     async sendFile(
         filename: string,
-        onProgress?: (progress: percentage) => void
+        onProgress?: (progress: percentage) => void,
+        seek = 0,
+        fileId?
     ): Promise<void> {
-        const fileId = crypto.randomUUID();
-        let totalSent = 0;
-
-        // Get file reader with metadata
+        // for file-pull, they may already have a transfer object
+        fileId ||= crypto.randomUUID();
         const reader = await this.fsHandler.getFileReader(filename);
+        const transfer = this.tm.initTransfer('upload', fileId, filename, reader.size);
     
-        // Send file metadata first
-        // < they might reply (or initiate) that they have a part already...
-        //    when we'd start another Transfer...
-        await this.send('file-meta', {
+        // Send file metadata
+        let meta = {
             fileId,
             name: filename,
             size: reader.size
-        });
+        }
+        if (seek) {
+            meta.seek = seek
+        }
+        await this.send('file-meta', meta);
 
         // Read and send chunks
         try {
-            for await (const chunk of reader.iterate()) {
+            for await (const chunk of reader.iterate(seek)) {
                 await this.send('file-chunk',{
                     fileId,
                     buffer: chunk
                 },{priority: 'low'});
 
-                totalSent += chunk.byteLength;
-                onProgress?.(totalSent / reader.size * 100);
+                transfer.updateProgress(chunk.byteLength);
+                onProgress?.(transfer.progress);
             }
 
             // Send completion message
             await this.send('file-complete',{
                 fileId,
             })
+            transfer.status = 'completed';
         } catch (err) {
-            console.error('Error sending file:', err);
-            throw err;
+            // < also following a lapse, esp if par.offline
+            await transfer.error('sending: ' + err.message);
         }
     }
 
@@ -131,10 +128,12 @@ export class Sharing extends Caring {
         // Starts a new download
         this.on('file-meta', async (data) => {
             const transfer = this.tm.initTransfer(
+                'download',
                 data.fileId, 
                 data.filename, 
                 data.size
             );
+            transfer.moved = data.seek || 0
             
             try {
                 const writable = await this.fsHandler.writeFileChunks(data.filename);
@@ -155,7 +154,7 @@ export class Sharing extends Caring {
 
             try {
                 await transfer.writable.write(new Uint8Array(data.buffer));
-                this.tm.updateProgress(transfer.id, data.chunkIndex, data.buffer.byteLength);
+                transfer.updateProgress(data.buffer.byteLength);
             } catch (err) {
                 transfer.status = 'error';
                 console.error('Error writing chunk:', err);
@@ -175,6 +174,16 @@ export class Sharing extends Caring {
                 console.error('Error completing transfer:', err);
             }
         });
+        // or do they
+        this.on('file-error', async (data) => {
+            const transfer = this.tm.transfers.get(data.fileId);
+            if (!transfer) return;
+            await transfer.error(data.error, false); // Don't notify back
+        });
+        // remote nabs
+        this.on('file-pull', async (data) => {
+            await this.sendFile(data.filename, undefined, data.seek, data.fileId);
+        });
     }
 
     // List available files
@@ -186,45 +195,140 @@ export class Sharing extends Caring {
 
 
 //#region Transfer
+
 // need individuating
+type TransferType = 'upload' | 'download';
+type TransferStatus = 'pending' | 'active' | 'paused' | 'completed' | 'error';
+
 class Transfer {
     id: string
+    type: TransferType
     filename: string
     size: number
-    progress: number = $state()
-    status: 'pending' | 'active' | 'paused' | 'completed' | 'error'
-    started: Date
-    writable?: FileSystemWritableFileStream;
-    // < don't hold on to all of these?
-    chunks: Set<number>
+    moved: number = $state(0)    // Actual bytes transferred
+    progress: number = $state(0)  // Percentage (0-100)
+    created_ts: Date = new Date();
+    activity_ts: Date = new Date();
+    status: TransferStatus = $state()
+    error: string = $state('')
+    writable?: FileSystemWritableFileStream  // for downloads
+
+    // parent|set
+    tm:TransferManager
+    sharing:Sharing
+    
     constructor(opt: Partial<Transfer>) {
         Object.assign(this,opt)
+    }
+
+    updateProgress(chunkBytes: number) {
+        this.on_activity()
+        this.moved += chunkBytes;
+        this.progress = Math.round((this.moved / this.size) * 100);
+    }
+    on_activity() {
+        this.activity_ts = new Date();
+    }
+    async error(msg: string, notify = true) {
+        this.status = 'error';
+        this.error = msg;
+        if (notify) {
+            await this.sharing.send('file-error', {
+                fileId: this.id,
+                error: msg
+            });
+        }
+    }
+
+    // < if we still have it?
+    // < put in .incoming/
+    async resume() {
+        this.error = '';
+        this.status = 'pending';
+        if (this.type === 'download') {
+            // Request continuation from last received byte...
+            await this.sharing.send('file-pull', {
+                filename: this.filename,
+                fileId: this.id,
+                seek: this.moved
+            });
+        } else {
+            // the downloader would resume, usually
+            //  but it helps to have communal ui that anyone (ish) can facilitate
+            //   asking people for remote procedural clicking is naff
+            await this.sharing.sendFile(this.filename, undefined, 0, this.id);
+        }
+    }
+    async restart() {
+        this.error = '';
+        this.status = 'error';
+        this.stop()
+        this.tm.remove(this)
+        await this.sharing.sendFile(this.filename);
+    }
+
+    async stop() {
+        if (this.writable) {
+            try {
+                await this.writable.close();
+            } catch (err) {
+                console.error('Error closing writable:', err);
+            }
+            this.writable = undefined;
+        }
     }
 }
 
 class TransferManager {
-    private transfers = $state(new Map<string, Transfer>());
+    // parent
+    sharing:Sharing
     
-    initTransfer(id: string, filename: string, size: number): Transfer {
-        const transfer = new Transfer({
-            id,
-            filename,
-            size,
-            progress: 0,
-            status: 'pending',
-            started: new Date(),
-            chunks: new Set()
-        });
-        this.transfers.set(id, transfer);
+    constructor(opt: { sharing: Sharing }) {
+        Object.assign(this,opt)
+    }
+    private transfers = $state(new SvelteMap<string, Transfer>());
+    
+    initTransfer(
+        type: TransferType,
+        id: string, 
+        filename: string, 
+        size: number
+    ): Transfer {
+        // they may have supplied an id that we already have, or the one they want
+        let transfer = this.transfers.get(id);
+        if (transfer) {
+            // Transfer.resume() sanity
+            if (transfer.type != type) throw "~type"
+            if (transfer.filename != filename) throw "~filename"
+            if (transfer.size != size) throw "~size"
+        }
+        else {
+            transfer = new Transfer({
+                type,
+                id,
+                filename,
+                size,
+                progress: 0,
+                status: 'pending',
+                tm: this,
+                sharing: this.sharing
+            });
+            this.transfers.set(id, transfer);
+        }
+
+        this.on_activity()
+        transfer.status = 'pending';
+
         return transfer;
     }
-
-    updateProgress(id: string, chunkIndex: number, chunkSize: number) {
-        const transfer = this.transfers.get(id);
-        if (!transfer) return;
-        
-        transfer.chunks.add(chunkIndex);
-        transfer.progress = (transfer.chunks.size * chunkSize / transfer.size) * 100;
+    remove(transfer) {
+        this.transfers.delete(transfer.id)
+    }
+    async stop() {
+        for (const transfer of this.transfers.values()) {
+            await transfer.stop();
+        }
+        this.transfers.clear();
     }
 }
 
@@ -287,7 +391,7 @@ interface FileSystemState {
 }
 interface FileReader {
     size: number;
-    iterate: () => AsyncGenerator<ArrayBuffer>;
+    iterate: (startFrom?: number) => AsyncGenerator<ArrayBuffer>;
 }
 
 const CHUNK_SIZE = 16 * 1024;          // 16KB chunks for file transfer
@@ -326,7 +430,7 @@ class FileSystemHandler {
         this._fs.fileHandles.set(filename, handle);
         return handle;
     }
-    async closeAllHandles() {
+    async stop() {
         // Clear all stored handles
         this._fs.fileHandles.clear();
         this._fs.dirHandle = null;
@@ -366,8 +470,8 @@ class FileSystemHandler {
         
         return {
             size: file.size,
-            iterate: async function*() {
-                let offset = 0;
+            iterate: async function*(startFrom = 0) {
+                let offset = startFrom;
                 while (offset < file.size) {
                     // Read file in chunks
                     const chunk = file.slice(offset, offset + chunkSize);

@@ -143,8 +143,8 @@ export class Party extends GoodTime {
         }
 
         this.map(par => {
-            par.local || par.drop_effects()
-
+            par.stop()
+            // < tuck in more sensible
             if (par.recorder) {
                 par.recorder.stop(let_go)
                 let_go = () => {}

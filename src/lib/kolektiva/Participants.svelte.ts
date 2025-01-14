@@ -46,9 +46,18 @@ export class Participant {
 
     // ui drawers
     // for ftp
-    sharing = $state()
+    sharing:Sharing = $state()
     start_sharing() {
         this.sharing = new Sharing({par:this})
+    }
+
+    stop() {
+        this.local || this.drop_effects()
+
+        // < pretty sure remote tracks should stop
+        //   because Paring.stop() calls sender.track?.stop() ..?
+
+        this.sharing?.stop()
     }
 
     constructor(opt) {
