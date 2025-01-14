@@ -64,6 +64,10 @@ interface Paring {
     lastStateChange: number;
     retryCount: number;
 }
+
+const MAX_BUFFERED_AMOUNT = 64 * 1024; // 64KB for general data
+const CHUNK_SIZE = 16 * 1024;          // 16KB chunks for file transfer
+const LOW_WATER_MARK = MAX_BUFFERED_AMOUNT * 0.8; // Start sending again at 80%
 export class Paring {
     // JOIN party.participants.
     peerId: string
@@ -84,27 +88,87 @@ export class Paring {
     constructor(opt) {
         Object.assign(this, opt)
     }
+    stop() {
+        // Stop all tracks
+        this.pc.getSenders().forEach(sender => sender.track?.stop());
+        this.pc.close();
+    }
 
     // you (eg Measuring) can send messages.
     // like socket.io
-    emit(type,data) {
+    async emit(
+        type: string,
+        data: ArrayBuffer | string,
+        options: {
+            maxBuffered?: number, 
+            priority?: 'high' | 'normal' | 'low',
+        }) {
+        options ||= {}
+        const { maxBuffered = MAX_BUFFERED_AMOUNT, priority = 'high' } = options;
         if (!this.channel || this.channel.readyState != "open") {
             console.error(`${this} channel not open, cannot send message type=${type}`);
             return false;
         }
         try {
-            this.channel.send(JSON.stringify({type, ...data}));
+            // Convert string to ArrayBuffer if needed
+            data = JSON.stringify({type, ...data})
+            
+            const buffer = typeof data === 'string' ? 
+                new TextEncoder().encode(data) : 
+                new Uint8Array(data);
+
+            // Check if we need to queue
+            if (this.channel.bufferedAmount > maxBuffered) {
+                this._paused = true;
+                return new Promise((resolve, reject) => {
+                    this._sendQueue.push({ data: buffer, resolve, reject });
+                    
+                    // Sort queue by priority if needed
+                    if (priority === 'high') {
+                        this._sendQueue.sort((a, b) => 
+                            (a.data['priority'] === 'high' ? -1 : 1));
+                    }
+                });
+            }
+
+            this.channel.send(buffer);
             return true;
         } catch (err) {
             console.error(`Failed to send message: ${err}`);
             return false;
         }
     }
-
-    stop() {
-        // Stop all tracks
-        this.pc.getSenders().forEach(sender => sender.track?.stop());
-        this.pc.close();
+    unemit(encoded) {
+        let data = JSON.parse(encoded)
+        let handler = this.par.party.par_msg_handler[data.type]
+        if (!handler) {
+            // might be per-par, see Sharing
+            handler = this.par.msg_handler?.[data.type]
+            if (!handler) {
+                return console.warn(`${this} channel !handler for message type: `,data)
+            }
+        }
+    
+        handler(this.par,data)
+    }
+    // Process queued messages
+    _paused = false
+    _processQueue() {
+        while (!this._paused && this._sendQueue.length > 0) {
+            const { data, resolve } = this._sendQueue.shift()!;
+            
+            try {
+                this.channel!.send(data);
+                resolve();
+                
+                if (this.channel!.bufferedAmount > MAX_BUFFERED_AMOUNT) {
+                    this._paused = true;
+                    break;
+                }
+            } catch (err) {
+                console.error('Error sending queued data:', err);
+            }
+        }
     }
 }
 
@@ -333,7 +397,12 @@ export class Peering {
             this.updateConnectionState(ing);
         };
         ing.channel.onmessage = (e) => {
-            this.handleChannelMessage(ing, JSON.parse(e.data));
+            this.handleChannelMessage(ing, e.data);
+        };
+        ing.channel.bufferedAmountLowThreshold = LOW_WATER_MARK;
+        ing.channel.onbufferedamountlow = () => {
+            ing._paused = false;
+            ing._processQueue();
         };
     }
     // < these could be Paring methods
@@ -356,13 +425,8 @@ export class Peering {
     // channel.onmessage
     // put handlers of replies in party.par_msg_handler.$type
     handleChannelMessage(ing, data) {
-        let handler = ing.par.party.par_msg_handler[data.type]
-        if (!handler) {
-            return console.warn(`${ing} channel !handler for message type: `,data)
-        }
         ing.par = ing.par.party.repar(ing.par)
-
-        handler(ing.par,data)
+        ing.unemit(data)
     }
     
 

@@ -95,6 +95,7 @@ class GoodTime {
 //#region Party
 export class Party extends GoodTime {
     peering:Peering
+    par_msg_handler:Record<string,Function>
     socket:Socket
     // < rename ers or people. it's VR so...
     participants:Map<peerId, Participant> = $state(new SvelteMap())

@@ -20,29 +20,78 @@ class Caring {
 
 }
 
+type dirlisting = {dir:string[],fil:string[]}
 export class Sharing extends Caring {
     // leads back to party
     par:Participant
     private fsHandler: FileSystemHandler;
+    private fileListeners: Map<string, Function[]> = new Map();
+    private activeTransfers: Set<string> = new Set();
     // navigation and population
-    dir
-    list = $state()
+    dir: FileSystemDirectoryHandle | null = null;
+    list: dirlisting | null = $state()
+    started = $state(false);
+    tm = new TransferManager();
 
     constructor(opt) {
         super()
         Object.assign(this,opt)
     }
-    // via ui, we begin:
+    // then, maybe via ui,
     async start() {
-        this.fsHandler = new FileSystemHandler();
-        this.setupDataChannelHandlers(this.par.ing.channel);
-        await this.setupFileSystem()
-        this.started = true
-        this.list = this.listAvailableFiles()
+        try {
+            this.fsHandler = new FileSystemHandler();
+            this.setupDataChannelHandlers(this.par.ing.channel);
+            this.list = await this.listAvailableFiles();
+            this.started = true;
+            console.log("File sharing started with files:", this.list);
+        } catch (err) {
+            console.error("Failed to start file sharing:", err);
+            throw err;
+        }
+    }
+    async stop() {
+        try {
+            // Cancel any active transfers
+            for (const transferId of this.activeTransfers) {
+                await this.cancelTransfer(transferId);
+            }
+
+            // Remove all file listeners
+            this.fileListeners.clear();
+            this.activeTransfers.clear();
+
+            // Clear file system state
+            this.dir = null;
+            this.list = [];
+            this.started = false;
+
+            // Close any open file handles
+            if (this.fsHandler) {
+                await this.fsHandler.closeAllHandles();
+            }
+
+            console.log("File sharing stopped");
+        } catch (err) {
+            console.error("Error during file sharing cleanup:", err);
+            throw err;
+        }
+    }
+
+    // make code in here nicer
+    async send(type,data,options) {
+        return this.par.ing.emit(type,data,options)
+    }
+    // create|replaces a per-par handler for this message type
+    on(type,handler) {
+        this.ing.par.on(type,handler)
     }
 
     // Send a file from the filesystem
-    async sendFileFromFS(filename: string, onProgress?: (progress: number) => void): Promise<void> {
+    async sendFile(
+        filename: string,
+        onProgress?: (progress: number) => void
+    ): Promise<void> {
         const fileId = crypto.randomUUID();
         let totalSent = 0;
 
@@ -77,7 +126,7 @@ export class Sharing extends Caring {
     }
 
     // Receive a file to the filesystem
-    async receiveFileToFS(
+    async receiveFile(
         fileId: string,
         filename: string,
         onProgress?: (progress: number) => void
@@ -113,15 +162,71 @@ export class Sharing extends Caring {
 
     // List available files
     async listAvailableFiles(): Promise<string[]> {
-        return this.fsHandler.listFiles();
+        return this.fsHandler.listDirectory();
     }
 
-    // Request directory access
-    async setupFileSystem(): Promise<void> {
-        await this.fsHandler.requestDirectoryAccess();
+}
+
+
+//#region Transfer
+// need individuating
+class Transfer {
+    id: string
+    filename: string
+    size: number
+    progress: number = $state()
+    status: 'pending' | 'active' | 'paused' | 'completed' | 'error'
+    started: Date
+    // < don't hold on to all of these?
+    chunks: Set<number>
+    constructor(opt) {
+        Object.assign(this,opt)
     }
 }
 
+class TransferManager {
+    private transfers = $state(new Map<string, Transfer>());
+    
+    initTransfer(id: string, filename: string, size: number): Transfer {
+        const transfer = new Transfer({
+            id,
+            filename,
+            size,
+            progress: 0,
+            status: 'pending',
+            started: new Date(),
+            chunks: new Set()
+        });
+        this.transfers.set(id, transfer);
+        return transfer;
+    }
+
+    updateProgress(id: string, chunkIndex: number, chunkSize: number) {
+        const transfer = this.transfers.get(id);
+        if (!transfer) return;
+        
+        transfer.chunks.add(chunkIndex);
+        transfer.progress = (transfer.chunks.size * chunkSize / transfer.size) * 100;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//#region ->Peering
 
 // eg, whole, not streaming chunks:
 //   // Read and write files in the directory
@@ -146,7 +251,7 @@ const CHUNK_SIZE = 16 * 1024;          // 16KB chunks for file transfer
 const LOW_WATER_MARK = MAX_BUFFERED_AMOUNT * 0.8; // Start sending again at 80%
 
 // Extend Paring class with buffer management
-class Paring {
+export class BufferedParing {
     private _sendQueue: Array<{
         data: Uint8Array,
         resolve: () => void,
@@ -155,10 +260,9 @@ class Paring {
     private _paused = false;
 
     constructor() {
-        // ... existing constructor code ...
     }
 
-
+    // < replaces emit
     // Enhanced send method with buffer management
     async send(data: ArrayBuffer | string, options: { 
         maxBuffered?: number, 
@@ -210,107 +314,6 @@ class Paring {
             }
         }
     }
-
-    // File transfer with progress handling
-    async sendFile(file: File, onProgress?: (progress: number) => void): Promise<void> {
-        const fileId = crypto.randomUUID();
-        const chunks = Math.ceil(file.size / CHUNK_SIZE);
-        let sent = 0;
-
-        // Send file metadata first
-        await this.send(JSON.stringify({
-            type: 'file-meta',
-            fileId,
-            name: file.name,
-            size: file.size,
-            chunks
-        }), { priority: 'high' });
-
-        // Send file chunks
-        for (let i = 0; i < chunks; i++) {
-            const start = i * CHUNK_SIZE;
-            const end = Math.min(start + CHUNK_SIZE, file.size);
-            const chunk = await file.slice(start, end).arrayBuffer();
-
-            await this.send(chunk, { 
-                maxBuffered: MAX_BUFFERED_AMOUNT,
-                priority: 'normal'
-            });
-
-            sent += chunk.byteLength;
-            onProgress?.(sent / file.size);
-        }
-
-        // Send completion message
-        await this.send(JSON.stringify({
-            type: 'file-complete',
-            fileId
-        }), { priority: 'high' });
-    }
-
-    // Audio buffer management - use smaller buffer for lower latency
-    async sendAudioData(audioData: ArrayBuffer) {
-        return this.send(audioData, { 
-            maxBuffered: MAX_AUDIO_BUFFERED,
-            priority: 'high'
-        });
-    }
-}
-
-// Example file receiver implementation
-class FileReceiver {
-    private chunks: Map<string, Array<ArrayBuffer>> = new Map();
-    private metadata: Map<string, {
-        name: string,
-        size: number,
-        chunks: number
-    }> = new Map();
-
-    handleFileData(message: any) {
-        if (message.type === 'file-meta') {
-            this.metadata.set(message.fileId, {
-                name: message.name,
-                size: message.size,
-                chunks: message.chunks
-            });
-            this.chunks.set(message.fileId, []);
-        }
-        else if (message.type === 'file-chunk') {
-            const fileChunks = this.chunks.get(message.fileId);
-            if (fileChunks) {
-                fileChunks[message.index] = message.data;
-                
-                // Calculate and emit progress
-                const meta = this.metadata.get(message.fileId);
-                if (meta) {
-                    const progress = fileChunks.filter(Boolean).length / meta.chunks;
-                    this.emit('progress', message.fileId, progress);
-                }
-            }
-        }
-        else if (message.type === 'file-complete') {
-            this.assembleFile(message.fileId);
-        }
-    }
-
-    private assembleFile(fileId: string) {
-        const chunks = this.chunks.get(fileId);
-        const meta = this.metadata.get(fileId);
-        
-        if (chunks && meta) {
-            const blob = new Blob(chunks, { type: 'application/octet-stream' });
-            this.emit('file-complete', fileId, blob, meta.name);
-            
-            // Cleanup
-            this.chunks.delete(fileId);
-            this.metadata.delete(fileId);
-        }
-    }
-
-    // Example event emitter implementation
-    private emit(event: string, ...args: any[]) {
-        // Implement your event emission logic
-    }
 }
 
 
@@ -333,7 +336,7 @@ class FileReceiver {
 
 
 
-
+//#region FileSystemHandler
 // FileSystem handling extension for Paring class
 interface FileSystemState {
     dirHandle: FileSystemDirectoryHandle | null;
@@ -345,6 +348,20 @@ class FileSystemHandler {
         dirHandle: null,
         fileHandles: new Map()
     };
+    // go somewhere
+    async getFileHandle(filename: string): Promise<FileSystemFileHandle> {
+        if (!this._fs.dirHandle) {
+            throw new Error('No directory access');
+        }
+        const handle = await this._fs.dirHandle.getFileHandle(filename);
+        this._fs.fileHandles.set(filename, handle);
+        return handle;
+    }
+    async closeAllHandles() {
+        // Clear all stored handles
+        this._fs.fileHandles.clear();
+        this._fs.dirHandle = null;
+    }
 
     // Request directory access from user
     async requestDirectoryAccess(): Promise<FileSystemDirectoryHandle> {
@@ -361,18 +378,24 @@ class FileSystemHandler {
     }
 
     // List all files in the directory
-    async listFiles(): Promise<string[]> {
-        if (!this._fs.dirHandle) {
-            throw new Error('No directory access');
-        }
-
-        const files: string[] = [];
+    async listDirectory(): Promise<DirectoryListing> {
+        if (!this._fs.dirHandle) throw new Error('No directory access');
+        
+        const listing: DirectoryListing = {files: [], directories: []};
+        
         for await (const entry of this._fs.dirHandle.values()) {
             if (entry.kind === 'file') {
-                files.push(entry.name);
+                const file = await entry.getFile();
+                listing.files.push({
+                    name: entry.name,
+                    size: file.size,
+                    modified: new Date(file.lastModified)
+                });
+            } else {
+                listing.directories.push(entry.name);
             }
         }
-        return files;
+        return listing;
     }
 
     // Read file in chunks

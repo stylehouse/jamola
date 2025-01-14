@@ -61,6 +61,11 @@ export class Participant {
     emit(type,data) {
         return this.ing.emit(type,data)
     }
+    msg_handler: Record<string,Function>
+    on(type:string,handler:Function) {
+        this.msg_handler ||= {}
+        this.msg_handler[type] = handler
+    }
     get peerId() {
         return this.ing?.peerId ?? "???"
     }
