@@ -11,18 +11,24 @@ class Caring {
 
 }
 
-type dirlisting = {dir:string[],fil:string[]}
+type FileListing = {name,size,modified}
+type DirectoryListing = {files: Object[], directories: string[]}
+type percentage = number
 export class Sharing extends Caring {
     // leads back to party
     par:Participant
-    private fsHandler: FileSystemHandler;
+    tm = new TransferManager()
+    private fsHandler = new FileSystemHandler()
+    // < GOING?
     private fileListeners: Map<string, Function[]> = new Map();
     private activeTransfers: Set<string> = new Set();
+    
+    // < GOING?
     // navigation and population
     dir: FileSystemDirectoryHandle | null = null;
     list: dirlisting | null = $state()
+
     started = $state(false);
-    tm = new TransferManager();
 
     constructor(opt) {
         super()
@@ -78,29 +84,37 @@ export class Sharing extends Caring {
         this.ing.par.on(type,handler)
     }
 
+//#region sendFile
     // Send a file from the filesystem
     async sendFile(
         filename: string,
-        onProgress?: (progress: number) => void
+        onProgress?: (progress: percentage) => void
     ): Promise<void> {
         const fileId = crypto.randomUUID();
         let totalSent = 0;
 
-        // Send file metadata
-        await this.send('file-meta',{
+        // Get file reader with metadata
+        const reader = await this.fsHandler.getFileReader(filename);
+    
+        // Send file metadata first
+        // < they might reply (or initiate) that they have a part already...
+        //    when we'd start another Transfer...
+        await this.send('file-meta', {
             fileId,
-            name: filename
-        })
+            name: filename,
+            size: reader.size
+        });
 
         // Read and send chunks
         try {
-            for await (const chunk of this.fsHandler.readFileChunks(filename)) {
+            for await (const chunk of reader.iterate()) {
                 await this.send('file-chunk',{
-                    buffer:chunk
+                    fileId,
+                    buffer: chunk
                 },{priority: 'low'});
 
                 totalSent += chunk.byteLength;
-                onProgress?.(totalSent);
+                onProgress?.(totalSent / reader.size * 100);
             }
 
             // Send completion message
@@ -114,41 +128,53 @@ export class Sharing extends Caring {
     }
 
     setupReceiveFileHandlers() {
-        // Set up event listener for chunks
+        // Starts a new download
+        this.on('file-meta', async (data) => {
+            const transfer = this.tm.initTransfer(
+                data.fileId, 
+                data.filename, 
+                data.size
+            );
+            
+            try {
+                const writable = await this.fsHandler.writeFileChunks(data.filename);
+                transfer.writable = writable;
+                transfer.status = 'active';
+            } catch (err) {
+                transfer.status = 'error';
+                console.error('Error starting file transfer:', err);
+            }
+        });
+        // ...downloads
         this.on('file-chunk', async (data) => {
-            if (data.fileId === fileId) {
-                await handleChunk(data.chunk);
+            const transfer = this.tm.transfers.get(data.fileId);
+            if (!transfer || transfer.status !== 'active') {
+                console.warn(`Invalid transfer state for chunk: ${data.fileId}`);
+                return;
+            }
+
+            try {
+                await transfer.writable.write(new Uint8Array(data.buffer));
+                this.tm.updateProgress(transfer.id, data.chunkIndex, data.buffer.byteLength);
+            } catch (err) {
+                transfer.status = 'error';
+                console.error('Error writing chunk:', err);
             }
         });
-
-        // Set up completion handler
+        // ...complete
         this.on('file-complete', async (data) => {
-            if (data.fileId === fileId) {
-                await writable.close();
+            const transfer = this.tm.transfers.get(data.fileId);
+            if (!transfer) return;
+
+            try {
+                await transfer.writable.close();
+                transfer.status = 'completed';
+                this.tm.transfers.delete(data.fileId); // Clean up completed transfer
+            } catch (err) {
+                transfer.status = 'error';
+                console.error('Error completing transfer:', err);
             }
         });
-    }
-
-    // Receive a file to the filesystem
-    async receiveFile(
-        fileId: string,
-        filename: string,
-        onProgress?: (progress: number) => void
-    ): Promise<void> {
-        try {
-            const writable = await this.fsHandler.writeFileChunks(filename);
-            let totalReceived = 0;
-
-            const handleChunk = async (chunk: ArrayBuffer) => {
-                await writable.write(new Uint8Array(chunk));
-                totalReceived += chunk.byteLength;
-                onProgress?.(totalReceived);
-            };
-
-        } catch (err) {
-            console.error('Error receiving file:', err);
-            throw err;
-        }
     }
 
     // List available files
@@ -168,9 +194,10 @@ class Transfer {
     progress: number = $state()
     status: 'pending' | 'active' | 'paused' | 'completed' | 'error'
     started: Date
+    writable?: FileSystemWritableFileStream;
     // < don't hold on to all of these?
     chunks: Set<number>
-    constructor(opt) {
+    constructor(opt: Partial<Transfer>) {
         Object.assign(this,opt)
     }
 }
@@ -258,6 +285,10 @@ interface FileSystemState {
     dirHandle: FileSystemDirectoryHandle | null;
     fileHandles: Map<string, FileSystemFileHandle>;
 }
+interface FileReader {
+    size: number;
+    iterate: () => AsyncGenerator<ArrayBuffer>;
+}
 
 const CHUNK_SIZE = 16 * 1024;          // 16KB chunks for file transfer
 
@@ -270,6 +301,19 @@ class FileSystemHandler {
     }
     async start() {
         await this.requestDirectoryAccess()
+    }
+    // Request directory access from user
+    async requestDirectoryAccess(): Promise<FileSystemDirectoryHandle> {
+        try {
+            const dirHandle = await window.showDirectoryPicker({
+                mode: 'readwrite'
+            });
+            this._fs.dirHandle = dirHandle;
+            return dirHandle;
+        } catch (err) {
+            console.error('Error accessing directory:', err);
+            throw err;
+        }
     }
 
 
@@ -288,19 +332,6 @@ class FileSystemHandler {
         this._fs.dirHandle = null;
     }
 
-    // Request directory access from user
-    async requestDirectoryAccess(): Promise<FileSystemDirectoryHandle> {
-        try {
-            const dirHandle = await window.showDirectoryPicker({
-                mode: 'readwrite'
-            });
-            this._fs.dirHandle = dirHandle;
-            return dirHandle;
-        } catch (err) {
-            console.error('Error accessing directory:', err);
-            throw err;
-        }
-    }
 
     // List all files in the directory
     async listDirectory(): Promise<DirectoryListing> {
@@ -311,11 +342,12 @@ class FileSystemHandler {
         for await (const entry of this._fs.dirHandle.values()) {
             if (entry.kind === 'file') {
                 const file = await entry.getFile();
-                listing.files.push({
+                let meta:FileListing = {
                     name: entry.name,
                     size: file.size,
                     modified: new Date(file.lastModified)
-                });
+                }
+                listing.files.push(meta);
             } else {
                 listing.directories.push(entry.name);
             }
@@ -323,22 +355,27 @@ class FileSystemHandler {
         return listing;
     }
 
-    // Read file in chunks
-    async* readFileChunks(filename: string, chunkSize = CHUNK_SIZE): AsyncGenerator<ArrayBuffer> {
+    // First get file info and iterator factory
+    async getFileReader(filename: string, chunkSize = CHUNK_SIZE): Promise<FileReader> {
         if (!this._fs.dirHandle) {
             throw new Error('No directory access');
         }
 
         const fileHandle = await this._fs.dirHandle.getFileHandle(filename);
         const file = await fileHandle.getFile();
-        const total = file.size;
-        let offset = 0;
-
-        while (offset < total) {
-            const chunk = file.slice(offset, offset + chunkSize);
-            yield await chunk.arrayBuffer();
-            offset += chunkSize;
-        }
+        
+        return {
+            size: file.size,
+            iterate: async function*() {
+                let offset = 0;
+                while (offset < file.size) {
+                    // Read file in chunks
+                    const chunk = file.slice(offset, offset + chunkSize);
+                    yield await chunk.arrayBuffer();
+                    offset += chunkSize;
+                }
+            }
+        };
     }
 
     // Write file in chunks
