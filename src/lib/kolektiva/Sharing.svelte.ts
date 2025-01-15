@@ -49,7 +49,7 @@ export class Sharing extends Caring {
     async stop() {
         try {
             // Cancel any active transfers
-            this.tm.stop()
+            await this.tm.stop()
 
             // Clear file system state
             this.dir = null;
@@ -70,7 +70,7 @@ export class Sharing extends Caring {
 
     // make code in here nicer
     async send(type,data,options) {
-        return this.par.ing.emit(type,data,options)
+        return await this.par.ing.emit(type,data,options)
     }
     // create|replaces a per-par handler for this message type
     on(type,handler) {
@@ -198,24 +198,28 @@ export class Sharing extends Caring {
 
 // need individuating
 type TransferType = 'upload' | 'download';
-type TransferStatus = 'pending' | 'active' | 'paused' | 'completed' | 'error';
+type TransferStatus = 'pending' | 'active' | 'paused' | 'completed' | 'error'
+    | 'restarting'; // briefly before gone, replaced
 
 class Transfer {
+    // State
+    moved: number = $state(0)    // Actual bytes transferred
+    progress: number = $state(0)  // Percentage (0-100)
+    status: TransferStatus = $state()
+    error: string = $state('')
+
+    // Metadata
     id: string
     type: TransferType
     filename: string
     size: number
-    moved: number = $state(0)    // Actual bytes transferred
-    progress: number = $state(0)  // Percentage (0-100)
     created_ts: Date = new Date();
     activity_ts: Date = new Date();
-    status: TransferStatus = $state()
-    error: string = $state('')
-    writable?: FileSystemWritableFileStream  // for downloads
-
-    // parent|set
+    
+    // Services
     tm:TransferManager
     sharing:Sharing
+    writable?: FileSystemWritableFileStream  // for downloads
     
     constructor(opt: Partial<Transfer>) {
         Object.assign(this,opt)
@@ -240,13 +244,19 @@ class Transfer {
         }
     }
 
+    // restart somehow
     // < if we still have it?
     // < put in .incoming/
     async resume() {
         this.error = '';
         this.status = 'pending';
+        // continuation from last byte
+        await this.reinitiate({fileId:this.id,seek:this.moved})
+    }
+    // send some kind of message to restart somehow
+    async reinitiate(opt={}) {
+        opt.filename = this.filename
         if (this.type === 'download') {
-            // Request continuation from last received byte...
             await this.sharing.send('file-pull', {
                 filename: this.filename,
                 fileId: this.id,
@@ -261,10 +271,10 @@ class Transfer {
     }
     async restart() {
         this.error = '';
-        this.status = 'error';
-        this.stop()
+        this.status = 'restarting';
+        await this.stop()
         this.tm.remove(this)
-        await this.sharing.sendFile(this.filename);
+        await this.reinitiate()
     }
 
     async stop() {
@@ -316,7 +326,7 @@ class TransferManager {
             this.transfers.set(id, transfer);
         }
 
-        this.on_activity()
+        transfer.on_activity()
         transfer.status = 'pending';
 
         return transfer;
@@ -406,7 +416,15 @@ class FileSystemHandler {
     async start() {
         await this.requestDirectoryAccess()
     }
+    async stop() {
+        // Clear all stored handles
+        this._fs.fileHandles.clear();
+        this._fs.dirHandle = null;
+    }
+
+    
     // Request directory access from user
+    // < permanent shares
     async requestDirectoryAccess(): Promise<FileSystemDirectoryHandle> {
         try {
             const dirHandle = await window.showDirectoryPicker({
@@ -429,11 +447,6 @@ class FileSystemHandler {
         const handle = await this._fs.dirHandle.getFileHandle(filename);
         this._fs.fileHandles.set(filename, handle);
         return handle;
-    }
-    async stop() {
-        // Clear all stored handles
-        this._fs.fileHandles.clear();
-        this._fs.dirHandle = null;
     }
 
 
