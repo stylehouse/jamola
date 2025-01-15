@@ -13,7 +13,55 @@ class Caring {
 }
 
 type FileListing = {name,size,modified}
+export class FileListing {
+    name: string;
+    size: number;
+    modified: Date;
+    
+    constructor(init: Partial<FileListing>) {
+        this.name = init.name;
+        this.size = init.size;
+        this.modified = init.modified instanceof Date ? init.modified : new Date(init.modified);
+    }
+
+    // Format size in human readable format (KB, MB, etc)
+    get formattedSize(): string {
+        const units = ['B', 'KB', 'MB', 'GB'];
+        let size = this.size;
+        let unitIndex = 0;
+        
+        while (size >= 1024 && unitIndex < units.length - 1) {
+            size /= 1024;
+            unitIndex++;
+        }
+        
+        return `${size.toFixed(1)} ${units[unitIndex]}`;
+    }
+
+    // Format date in a readable way
+    get formattedDate(): string {
+        return this.modified.toLocaleString();
+    }
+}
+// many of the above
+export class DirectoryListing {
+    files: FileListing[];
+    directories: string[];  // For future use
+}
+// many of the above
+export class CollectionListing {
+    files: FileListing[];
+    directories: string[];  // For future use
+}
+
+export interface DirectoryListing {
+}
 type DirectoryListing = {files: Object[], directories: string[]}
+
+
+
+
+//#region sharing
 type percentage = number
 export class Sharing extends Caring {
     // leads back to party

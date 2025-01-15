@@ -48,12 +48,10 @@ export class Participant {
     // for ftp
     sharing:Sharing = $state()
     async start_sharing() {
-        console.log(`start_sharing()`)
         this.sharing = new Sharing({par:this})
         await this.sharing.start()
     }
     async stop_sharing() {
-        console.log(`stop_sharing()`)
         await this.sharing.stop()
         this.sharing = null
     }
