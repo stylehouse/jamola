@@ -11,8 +11,7 @@ class Caring {
     to
 
 }
-
-type FileListing = {name,size,modified}
+//#region *Listing
 export class FileListing {
     name: string;
     size: number;
@@ -42,26 +41,45 @@ export class FileListing {
     get formattedDate(): string {
         return this.modified.toLocaleString();
     }
+
+    toJSON() {
+        return {
+            name: this.name,
+            size: this.size,
+            modified: this.modified.toISOString()
+        };
+    }
 }
 // many of the above
 export class DirectoryListing {
-    files: FileListing[];
-    directories: string[];  // For future use
+    name?: string;
+    files: FileListing[] = $state([])
+    directories: DirectoryListing[] = $state([])
+    constructor(init: Partial<DirectoryListing> = {}) {
+        this.name = init.name
+    }
+    toJSON() {
+        return {
+            files: this.files,
+            directories: this.directories
+        };
+    }
+    static fromJSON(json: any): DirectoryListing {
+        const listing = new DirectoryListing();
+        listing.files = json.files.map(f => new FileListing(f));
+        listing.directories = json.directories.map(d => new FileListing(d));
+        return listing;
+    }
 }
 // many of the above
 export class CollectionListing {
-    files: FileListing[];
-    directories: string[];  // For future use
 }
 
-export interface DirectoryListing {
-}
-type DirectoryListing = {files: Object[], directories: string[]}
 
 
 
 
-//#region sharing
+//#region Sharing
 type percentage = number
 export class Sharing extends Caring {
     // leads back to party
@@ -69,26 +87,52 @@ export class Sharing extends Caring {
     tm:TransferManager
     private fsHandler = new FileSystemHandler()
     
-    // < figure out how to do:
-    // navigation and population
-    dir: FileSystemDirectoryHandle | null = null;
-    list: DirectoryListing | null = $state()
+    // < figure out how to do navigation and population
+    // listings here + there
+    localList: DirectoryListing | null = $state()
+    remoteList: DirectoryListing | null = $state()
+    remoteConsent = false;
 
     started = $state(false);
 
     constructor(opt) {
         super()
         Object.assign(this,opt)
+        if (this.par.sharing_requested) {
+            // they asked for it
+            this.remoteConsent = true
+            this.par.sharing_requested = false
+        }
+    }
+    // we asked for it, they are now ready
+    async consented() {
+        this.remoteConsent = true
+        await this.requestRemoteList()
     }
     // then, maybe via ui,
     async start() {
         try {
             this.tm = new TransferManager({sharing:this})
             this.fsHandler = new FileSystemHandler();
+            // consent by the user
             await this.fsHandler.start()
-            this.list = await this.listAvailableFiles();
+            // consent by the remote
+            
+            // < racey. Paring.unemit() should wait up to 3s for new handlers to arrive
+            this.setupSharingHandlers(this.par)
+            this.localList = await this.listAvailableFiles();
+            if (this.remoteConsent) {
+                await this.requestRemoteList()
+            }
+            else {
+                // if you are first, this asks them to start
+                // once they start it lets you know they are ready
+                this.send('sharing-ready',{})
+            }
+
             this.started = true;
-            console.log("File sharing started with files:", this.list);
+            let say = this.remoteConsent ? " consentedly" : ""
+            console.log(`File sharing started${say} with files:`, this.localList);
         } catch (err) {
             console.error("Failed to start file sharing:", err);
             throw err;
@@ -100,8 +144,8 @@ export class Sharing extends Caring {
             await this.tm.stop()
 
             // Clear file system state
-            this.dir = null;
-            this.list = null
+            this.localList = null
+            this.remoteList = null
             this.started = false;
 
             // Close any open file handles
@@ -117,12 +161,8 @@ export class Sharing extends Caring {
     }
 
     // make code in here nicer
-    async send(type,data,options) {
+    async send(type,data,options?) {
         return await this.par.ing.emit(type,data,options)
-    }
-    // create|replaces a per-par handler for this message type
-    on(type,handler) {
-        this.ing.par.on(type,handler)
     }
 
 //#region sendFile
@@ -172,9 +212,57 @@ export class Sharing extends Caring {
         }
     }
 
-    setupReceiveFileHandlers() {
+    // List available files
+    async listAvailableFiles(): Promise<string[]> {
+        return await this.fsHandler.listDirectory();
+    }
+    async requestRemoteList() {
+        try {
+            await this.par.emit('file-list-request')
+        } catch (err) {
+            console.error('Error requesting remote file list:', err)
+        }
+    }
+    // Watch for local file system changes
+    async watchLocalChanges() {
+        // Periodically check for changes
+        setInterval(async () => {
+            try {
+                const newList = await this.fsHandler.listDirectory()
+                // Only update if there are actual changes
+                if (JSON.stringify(newList) !== JSON.stringify(this.localList)) {
+                    this.localList = newList
+                    // Notify remote peer of changes
+                    await this.par.emit('file-list-response', { listing: newList })
+                }
+            } catch (err) {
+                console.error('Error checking for file changes:', err)
+            }
+        }, 5000) // Check every 5 seconds
+    }
+//#region on
+    setupSharingHandlers(par) {
+        // Handle remote peer requesting our file list
+        this.par.on('file-list-request', async () => {
+            try {
+                const listing = await this.fsHandler.listDirectory()
+                await this.par.emit('file-list-response', {listing})
+            } catch (err) {
+                console.error('Error sending file list:', err)
+            }
+        })
+
+        // Handle receiving remote peer's file list
+        // < data.directory:string[]
+        this.par.on('file-list-response', (data) => {
+            this.remoteList = DirectoryListing.fromJSON(data.listing)
+        })
+
+
+
         // Starts a new download
-        this.on('file-meta', async (data) => {
+        // fyi, our PUT is just a file-meta someone receives
+        this.par.on('file-meta', async (data) => {
             const transfer = this.tm.initTransfer(
                 'download',
                 data.fileId, 
@@ -193,7 +281,7 @@ export class Sharing extends Caring {
             }
         });
         // ...downloads
-        this.on('file-chunk', async (data) => {
+        this.par.on('file-chunk', async (data) => {
             const transfer = this.tm.transfers.get(data.fileId);
             if (!transfer || transfer.status !== 'active') {
                 console.warn(`Invalid transfer state for chunk: ${data.fileId}`);
@@ -209,7 +297,7 @@ export class Sharing extends Caring {
             }
         });
         // ...complete
-        this.on('file-complete', async (data) => {
+        this.par.on('file-complete', async (data) => {
             const transfer = this.tm.transfers.get(data.fileId);
             if (!transfer) return;
 
@@ -223,23 +311,29 @@ export class Sharing extends Caring {
             }
         });
         // or do they
-        this.on('file-error', async (data) => {
+        this.par.on('file-error', async (data) => {
             const transfer = this.tm.transfers.get(data.fileId);
             if (!transfer) return;
             await transfer.error(data.error, false); // Don't notify back
         });
         // remote nabs
-        this.on('file-pull', async (data) => {
+        this.par.on('file-pull', async (data) => {
             await this.sendFile(data.filename, undefined, data.seek, data.fileId);
         });
     }
-
-    // List available files
-    async listAvailableFiles(): Promise<string[]> {
-        return await this.fsHandler.listDirectory();
-    }
-
 }
+    // first user to enable Sharing asks the other to also
+export function setupSharingCourtshipHandlers(par) {
+    par.on('sharing-ready', async (data) => {
+        if (par.sharing) {
+            par.sharing.consented()
+        }
+        else {
+            par.sharing_requested = true
+        }
+    });
+}
+
 
 
 //#region Transfer
@@ -441,12 +535,8 @@ class TransferManager {
 
 
 
-//#region FileSystemHandler
+//#region fs
 
-interface FileSystemState {
-    dirHandle: FileSystemDirectoryHandle | null;
-    fileHandles: Map<string, FileSystemFileHandle>;
-}
 interface FileReader {
     size: number;
     iterate: (startFrom?: number) => AsyncGenerator<ArrayBuffer>;
@@ -454,12 +544,14 @@ interface FileReader {
 
 const CHUNK_SIZE = 16 * 1024;          // 16KB chunks for file transfer
 
+type FileSystemDirectoryHandle = any
 class FileSystemHandler {
     private _fs: FileSystemState = {
-        dirHandle: null,
-        fileHandles: new Map()
-    };
+        dirHandle: FileSystemDirectoryHandle | null,
+        fileHandles: Map<string, FileSystemFileHandle>,
+    }
     constructor() {
+        this.fileHandles = new Map()
     }
     async start() {
         await this.requestDirectoryAccess()
@@ -502,21 +594,27 @@ class FileSystemHandler {
     async listDirectory(): Promise<DirectoryListing> {
         if (!this._fs.dirHandle) throw new Error('No directory access');
         
-        const listing: DirectoryListing = {files: [], directories: []};
-        
+        const listing = new DirectoryListing()
+        // < tabulation?
         for await (const entry of this._fs.dirHandle.values()) {
-            if (entry.kind === 'file') {
-                const file = await entry.getFile();
-                let meta:FileListing = {
-                    name: entry.name,
-                    size: file.size,
-                    modified: new Date(file.lastModified)
+            try {
+                if (entry.kind === 'file') {
+                    const file = await entry.getFile();
+                    listing.files.push(new FileListing({
+                        name: entry.name,
+                        size: file.size,
+                        modified: new Date(file.lastModified)
+                    }));
+                } else {
+                    listing.directories.push(new DirectoryListing({
+                        name: entry.name
+                    }));
                 }
-                listing.files.push(meta);
-            } else {
-                listing.directories.push(entry.name);
+            } catch (err) {
+                console.warn(`Skipping problematic entry ${entry.name}:`, err);
             }
         }
+
         return listing;
     }
 

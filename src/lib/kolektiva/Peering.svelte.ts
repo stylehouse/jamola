@@ -162,6 +162,7 @@ export class Paring {
         //     or DataView via channel.send(binary),
         //    you get an ArrayBuffer in event.data
         // but you can treat them the same!
+        let part = 'decoding'
         try {
             const view = new Uint8Array(encoded);
             if (view[0] === 98) {  // 'b' character
@@ -175,9 +176,11 @@ export class Paring {
             }
             // the whole message is JSON
             const text = new TextDecoder().decode(view);
-            return this.handleMessage(JSON.parse(text));
+            let data = JSON.parse(text)
+            part = 'handling'
+            return this.handleMessage(data);
         } catch (err) {
-            console.error(`Failed to receive message: ${err}`);
+            console.error(`Error in unemit() ${part}: ${err}`);
         }
     }
 

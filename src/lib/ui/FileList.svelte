@@ -1,28 +1,56 @@
 <script lang="ts">
     import type { FileListing } from "$lib/kolektiva/Sharing.svelte";
 
-    
-    export let files: FileListing[] = [];
-    export let title: string;
-    export let onFileClick: (file: FileListing) => void = () => {};
+    type args = {
+        list: DirectoryListing,
+        title: string,
+        onFileClick: (file: FileListing) => void
+    }
+    let { list,title,onFileClick }:args = $props();
+    let {files,directories} = $derived(list || {})
+    onFileClick ||= () => {
+        throw "plug in"
+    }
 </script>
 
 <div class="file-list">
     <h3 class="title">{title}</h3>
-    {#if files.length === 0}
-        <div class="empty">No files</div>
+
+    {#if !list}
+        list awaits...
     {:else}
-        <div class="files">
-            {#each files as file}
-                <div class="file" on:click={() => onFileClick(file)}>
-                    <span class="name">{file.name}</span>
-                    <span class="meta">
-                        <span class="size">{file.formattedSize}</span>
-                        <span class="date">{file.formattedDate}</span>
-                    </span>
-                </div>
-            {/each}
-        </div>
+        {#if directories?.length}
+            <div class="items">
+                {#each directories as dir (dir.name)}
+                    <div class="item dir" on:click={() => onFileClick(dir)}>
+                        <span class="name">
+                            {dir.name}
+                            <span class=slash>/</span>
+                        </span>
+                        <span class="meta">
+                            <span class="size">{dir.formattedSize}</span>
+                            <span class="date">{dir.formattedDate}</span>
+                        </span>
+                    </div>
+                {/each}
+            </div>
+        {/if}
+
+        {#if !files?.length}
+            <div class="empty">No files</div>
+        {:else}
+            <div class="items">
+                {#each files as file (file.name)}
+                    <div class="item file" on:click={() => onFileClick(file)}>
+                        <span class="name">{file.name}</span>
+                        <span class="meta">
+                            <span class="size">{file.formattedSize}</span>
+                            <span class="date">{file.formattedDate}</span>
+                        </span>
+                    </div>
+                {/each}
+            </div>
+        {/if}
     {/if}
 </div>
 
@@ -47,21 +75,29 @@
         text-align: center;
     }
 
-    .files {
+    .items {
         display: flex;
         flex-direction: column;
         gap: 0.25rem;
     }
 
-    .file {
+    .item {
         display: flex;
         justify-content: space-between;
         padding: 0.25rem 0.5rem;
         border-radius: 2px;
         cursor: pointer;
     }
+    .file {
+    }
+    .dir {
+        font-weight:400;
+    }
+    .dir .slash {
+        color:whitesmoke;
+    }
 
-    .file:hover {
+    .item:hover {
         background: rgba(255, 255, 255, 0.1);
     }
 

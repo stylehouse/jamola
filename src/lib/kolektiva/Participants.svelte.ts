@@ -3,7 +3,7 @@ import type { Party } from "./Party.svelte"
 import type { Paring } from "./Peering.svelte"
 import { AudioEffectoid, CookedStream, FreshStream, Gainorator, Gaintrol } from "$lib/audio.svelte"
 import { userAgent } from "$lib/Y"
-import { Sharing } from "./Sharing.svelte"
+import { setupSharingCourtshipHandlers, Sharing } from "./Sharing.svelte"
 
 
 export class Participant {
@@ -44,9 +44,11 @@ export class Participant {
     // streams from us
     outgoing = $state([])
 
+//#region ui drawers
     // ui drawers
     // for ftp
     sharing:Sharing = $state()
+    sharing_requested = $state(false)
     async start_sharing() {
         this.sharing = new Sharing({par:this})
         await this.sharing.start()
@@ -123,6 +125,10 @@ export class Participant {
     //  for local it's i_myself_par(), otherwise open_ontrack()
     on_ready() {
         console.log(`par.on_ready: ${this}`)
+
+        // more message handlers
+        setupSharingCourtshipHandlers(this)
+        
 
         this.effects && this.drop_effects()
         this.new_effects()

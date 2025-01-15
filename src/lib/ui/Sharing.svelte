@@ -5,11 +5,6 @@
     let { par } = $props();
     let sharing = par.sharing;
 
-    // Convert raw file data to FileListing instances
-    let localFiles = $derived(
-        sharing.list?.files.map(f => new FileListing(f)) ?? []
-    );
-
     // Convert transfer objects to FileListing-like objects
     let transfers = $derived(
         Array.from(sharing.tm?.transfers.values() ?? []).map(t => ({
@@ -21,26 +16,33 @@
         }))
     );
 
-    let remoteFiles: FileListing[] = []; // Will be populated when implemented
-
-    function startTransfer(file: FileListing) {
+    // < higher level things to click on, eg tags
+    // < modes of picking at huger collections:
+    //    nab - all
+    //    rummage - randomly
+    //     should offer to heal the gaps left in the result
+    function click_push(file: FileListing) {
         sharing.sendFile(file.name);
     }
-
-    function requestFile(file: FileListing) {
-        // To be implemented when remote files are available
+    function click_pull(file: FileListing) {
+        // < do
         console.log('Request file:', file.name);
     }
+    function huh() {
+        // < do
+        console.log('stuffs:', [sharing.localList,sharing.remoteList]);
+    }
+    
 </script>
 
 <div class="file-sharing">
     <div class="lists-container">
         <FileList 
             title="Local Files" 
-            files={localFiles} 
-            onFileClick={startTransfer}
+            list={sharing.localList} 
+            onFileClick={click_push}
         />
-        
+        <button onclick={() => huh()} >huh</button>
         {#if transfers.length > 0}
             <div class="transfers">
                 <h3>Active Transfers</h3>
@@ -61,8 +63,8 @@
 
         <FileList 
             title="Remote Files" 
-            files={remoteFiles}
-            onFileClick={requestFile}
+            list={sharing.remoteList}
+            onFileClick={click_pull}
         />
     </div>
 </div>
