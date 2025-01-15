@@ -197,7 +197,7 @@ export class Sharing extends Caring {
         parhand('file-list-request', async () => {
             try {
                 // < could be moving around
-                let listing = this.localList
+                let listing = this.localList.transportable()
                 await this.par.emit('file-list-response', {listing})
             } catch (err) {
                 console.error('Error sending file list:', err)
@@ -522,22 +522,43 @@ export class FileListing {
 }
 // many of the above
 export class DirectoryListing {
-    name?: string;
+    name: string;
+    up?: DirectoryListing;
     files: FileListing[] = $state([])
     directories: DirectoryListing[] = $state([])
+    
     constructor(init: Partial<DirectoryListing> = {}) {
-        this.name = init.name
+        Object.assign(this,init)
     }
+    // for sending only one directory-full at a time
+    //  ie return a Partial<DirectoryListing> without any 2-inners
+    //   ie dir/dir/dir or dir/dir/file
+    //  reduce dir/dir to their name
+    // < paginate?
+    transportable() {
+        return {
+            name: this.name,
+            files: this.files,
+            directories: this.directories.map(dir => {
+                // before toJSON gets called on them, and so on, snip
+                return {name: dir.name}
+            })
+        }
+    }
+    // might be huge if your have resolved a lot of inners
     toJSON() {
         return {
+            name: this.name,
             files: this.files,
             directories: this.directories
         };
     }
     static fromJSON(json: any): DirectoryListing {
-        const listing = new DirectoryListing();
-        listing.files = json.files.map(f => new FileListing(f));
-        listing.directories = json.directories.map(d => new FileListing(d));
+        // it'll have no name until stitched into the landscape
+        const listing = new DirectoryListing(json);
+        listing.files = listing.files.map(f => new FileListing(f))
+        listing.directories = listing.directories.map(d => new DirectoryListing(d))
+        listing.directories.map(d => d.up = listing)
         return listing;
     }
 }
