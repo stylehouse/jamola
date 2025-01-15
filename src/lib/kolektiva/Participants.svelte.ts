@@ -47,8 +47,15 @@ export class Participant {
     // ui drawers
     // for ftp
     sharing:Sharing = $state()
-    start_sharing() {
+    async start_sharing() {
+        console.log(`start_sharing()`)
         this.sharing = new Sharing({par:this})
+        await this.sharing.start()
+    }
+    async stop_sharing() {
+        console.log(`stop_sharing()`)
+        await this.sharing.stop()
+        this.sharing = null
     }
 
     stop() {
