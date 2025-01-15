@@ -78,6 +78,8 @@ export class Paring {
     // < but it probably belongs here
     pc: RTCPeerConnection
     channel: RTCDataChannel
+    // binary emit() puts backpressure here (from Sharing.sendFile)
+    _sendQueue = []
     // < show in ui
     state: PeerState = $state()
     toString() {

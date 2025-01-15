@@ -155,6 +155,9 @@ export class Sharing extends Caring {
             await transfer.error('sending: ' + err.message);
         }
     }
+    async pull(name) {
+        await this.par.emit('file-pull', {name})
+    }
 
     // List available files
     async refresh_localList(): Promise<string[]> {
@@ -217,13 +220,13 @@ export class Sharing extends Caring {
             const transfer = this.tm.initTransfer(
                 'download',
                 data.fileId, 
-                data.filename, 
+                data.name, 
                 data.size
             );
             transfer.moved = data.seek || 0
             
             try {
-                const writable = await this.fsHandler.writeFileChunks(data.filename);
+                const writable = await this.fsHandler.writeFileChunks(data.name);
                 transfer.writable = writable;
                 transfer.status = 'active';
             } catch (err) {
@@ -269,7 +272,7 @@ export class Sharing extends Caring {
         });
         // remote nabs
         parhand('file-pull', async (data) => {
-            await this.sendFile(data.filename, undefined, data.seek, data.fileId);
+            await this.sendFile(data.name, undefined, data.seek, data.fileId);
         });
     }
 }

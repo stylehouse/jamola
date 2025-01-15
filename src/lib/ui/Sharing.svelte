@@ -25,8 +25,7 @@
         sharing.sendFile(file.name);
     }
     function click_pull(file: FileListing) {
-        // < do
-        console.log('Request file:', file.name);
+        sharing.pull(file.name)
     }
     function huh() {
         // < do
@@ -42,7 +41,6 @@
             list={sharing.localList} 
             onFileClick={click_push}
         />
-        <button onclick={() => huh()} >huh</button>
         {#if transfers.length > 0}
             <div class="transfers">
                 <h3>Active Transfers</h3>
