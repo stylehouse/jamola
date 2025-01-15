@@ -11,70 +11,6 @@ class Caring {
     to
 
 }
-//#region *Listing
-export class FileListing {
-    name: string;
-    size: number;
-    modified: Date;
-    
-    constructor(init: Partial<FileListing>) {
-        this.name = init.name;
-        this.size = init.size;
-        this.modified = init.modified instanceof Date ? init.modified : new Date(init.modified);
-    }
-
-    // Format size in human readable format (KB, MB, etc)
-    get formattedSize(): string {
-        const units = ['B', 'KB', 'MB', 'GB'];
-        let size = this.size;
-        let unitIndex = 0;
-        
-        while (size >= 1024 && unitIndex < units.length - 1) {
-            size /= 1024;
-            unitIndex++;
-        }
-        
-        return `${size.toFixed(1)} ${units[unitIndex]}`;
-    }
-
-    // Format date in a readable way
-    get formattedDate(): string {
-        return this.modified.toLocaleString();
-    }
-
-    toJSON() {
-        return {
-            name: this.name,
-            size: this.size,
-            modified: this.modified.toISOString()
-        };
-    }
-}
-// many of the above
-export class DirectoryListing {
-    name?: string;
-    files: FileListing[] = $state([])
-    directories: DirectoryListing[] = $state([])
-    constructor(init: Partial<DirectoryListing> = {}) {
-        this.name = init.name
-    }
-    toJSON() {
-        return {
-            files: this.files,
-            directories: this.directories
-        };
-    }
-    static fromJSON(json: any): DirectoryListing {
-        const listing = new DirectoryListing();
-        listing.files = json.files.map(f => new FileListing(f));
-        listing.directories = json.directories.map(d => new FileListing(d));
-        return listing;
-    }
-}
-// many of the above
-export class CollectionListing {
-}
-
 
 
 
@@ -402,6 +338,7 @@ class Transfer {
         }
     }
 
+    // < ui these, they are not called yet
     // restart somehow
     // < if we still have it?
     // < put in .incoming/
@@ -543,6 +480,70 @@ class TransferManager {
 
 
 
+
+//#region *Listing
+export class FileListing {
+    name: string;
+    size: number;
+    modified: Date;
+    
+    constructor(init: Partial<FileListing>) {
+        this.name = init.name;
+        this.size = init.size;
+        this.modified = init.modified instanceof Date ? init.modified : new Date(init.modified);
+    }
+
+    // Format size in human readable format (KB, MB, etc)
+    get formattedSize(): string {
+        const units = ['B', 'KB', 'MB', 'GB'];
+        let size = this.size;
+        let unitIndex = 0;
+        
+        while (size >= 1024 && unitIndex < units.length - 1) {
+            size /= 1024;
+            unitIndex++;
+        }
+        
+        return `${size.toFixed(1)} ${units[unitIndex]}`;
+    }
+
+    // Format date in a readable way
+    get formattedDate(): string {
+        return this.modified.toLocaleString();
+    }
+
+    toJSON() {
+        return {
+            name: this.name,
+            size: this.size,
+            modified: this.modified.toISOString()
+        };
+    }
+}
+// many of the above
+export class DirectoryListing {
+    name?: string;
+    files: FileListing[] = $state([])
+    directories: DirectoryListing[] = $state([])
+    constructor(init: Partial<DirectoryListing> = {}) {
+        this.name = init.name
+    }
+    toJSON() {
+        return {
+            files: this.files,
+            directories: this.directories
+        };
+    }
+    static fromJSON(json: any): DirectoryListing {
+        const listing = new DirectoryListing();
+        listing.files = json.files.map(f => new FileListing(f));
+        listing.directories = json.directories.map(d => new FileListing(d));
+        return listing;
+    }
+}
+// many of the above
+export class CollectionListing {
+}
 
 
 
