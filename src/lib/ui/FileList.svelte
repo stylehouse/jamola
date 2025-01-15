@@ -28,8 +28,7 @@
                             <span class=slash>/</span>
                         </span>
                         <span class="meta">
-                            <span class="size">{dir.formattedSize}</span>
-                            <span class="date">{dir.formattedDate}</span>
+                            <span class="remember">...</span>
                         </span>
                     </div>
                 {/each}

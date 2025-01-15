@@ -23,13 +23,13 @@ export class Participant {
     // webrtc
     constate = $state()
     // Call
-    effects:Array<AudioEffectoid> = $state()
+    effects:Array<AudioEffectoid>|undefined = $state()
     // < tis messy just throwing these on here, but we want them by name sometimes
     // sometimes want to access effects by name
-    fresh?:CookedStream
+    fresh?:CookedStream|undefined
     // this one triggers the Participant/Rack.svelte to appear
-    gain:Gainorator = $state()
-    cooked?:CookedStream
+    gain:Gainorator|undefined = $state()
+    cooked?:CookedStream|undefined
     vol?:Gaintrol
     // incoming tracks from Peering while setting up
     ontrack_queue
@@ -47,7 +47,7 @@ export class Participant {
 //#region ui drawers
     // ui drawers
     // for ftp
-    sharing:Sharing = $state()
+    sharing:Sharing|undefined = $state()
     sharing_requested = $state(false)
     async start_sharing() {
         this.sharing = new Sharing({par:this})

@@ -114,6 +114,10 @@ export class Party extends GoodTime {
     // checked when the above is first got
     wants_audio_permission?:Function
 
+    // to sometimes log your _D(name,...)
+    //  set (name =~ /^(\w+)/)[0] to true in here:
+    debugthe = {emit:1,unemit:1,notping:1}
+
     constructor() {
         super()
     }

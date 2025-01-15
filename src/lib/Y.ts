@@ -72,3 +72,11 @@ export function throttle(func, interval_ms = 200) {
     };
     return handle
 }
+export function _D(name,data) {
+    let [key] = name.match(/^(\w+)/)||[]
+    let party = window.party_singleton
+    if (!party || party.debugthe[key]) {
+        if (data?.json && data.json.startsWith('{"type":"latency_p')) return
+        console.log(name,data)
+    }
+}

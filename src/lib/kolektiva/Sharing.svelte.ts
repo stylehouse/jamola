@@ -106,8 +106,13 @@ export class Sharing extends Caring {
     }
     // we asked for it, they are now ready
     async consented() {
+        if (this.remoteConsent) return
         this.remoteConsent = true
-        await this.requestRemoteList()
+        await this.consented_acts()
+    }
+    async consented_acts() {
+        await this.refresh_localList()
+        await this.refresh_remoteList()
     }
     // then, maybe via ui,
     async start() {
@@ -120,14 +125,17 @@ export class Sharing extends Caring {
             
             // < racey. Paring.unemit() should wait up to 3s for new handlers to arrive
             this.setupSharingHandlers(this.par)
-            this.localList = await this.listAvailableFiles();
+            
             if (this.remoteConsent) {
-                await this.requestRemoteList()
+                // this will let them know we are ready
+                this.consented_acts()
             }
             else {
                 // if you are first, this asks them to start
-                // once they start it lets you know they are ready
                 this.send('sharing-ready',{})
+                // make things look like they're working here
+                //  but we'll do this again when they're ready
+                await this.refresh_localList()
             }
 
             this.started = true;
@@ -213,10 +221,10 @@ export class Sharing extends Caring {
     }
 
     // List available files
-    async listAvailableFiles(): Promise<string[]> {
-        return await this.fsHandler.listDirectory();
+    async refresh_localList(): Promise<string[]> {
+        this.localList = await this.fsHandler.listDirectory();
     }
-    async requestRemoteList() {
+    async refresh_remoteList() {
         try {
             await this.par.emit('file-list-request')
         } catch (err) {
@@ -226,14 +234,13 @@ export class Sharing extends Caring {
     // Watch for local file system changes
     async watchLocalChanges() {
         // Periodically check for changes
-        setInterval(async () => {
+        this.watchLocal_interval = setInterval(async () => {
             try {
-                const newList = await this.fsHandler.listDirectory()
-                // Only update if there are actual changes
-                if (JSON.stringify(newList) !== JSON.stringify(this.localList)) {
-                    this.localList = newList
+                let was = this.localList
+                this.refresh_localList()
+                if (JSON.stringify(was) !== JSON.stringify(this.localList)) {
                     // Notify remote peer of changes
-                    await this.par.emit('file-list-response', { listing: newList })
+                    await this.par.emit('file-list-response', { listing: this.localList })
                 }
             } catch (err) {
                 console.error('Error checking for file changes:', err)
@@ -242,19 +249,27 @@ export class Sharing extends Caring {
     }
 //#region on
     setupSharingHandlers(par) {
-        // Handle remote peer requesting our file list
-        this.par.on('file-list-request', async () => {
+        // every handler in here counts as consent
+        let parhand = (name,callback) => {
+            this.par.on(name, async (par,data) => {
+                par.sharing.consented()
+                await callback(data)
+            })
+        }
+
+        // remote peer requesting our file list
+        parhand('file-list-request', async () => {
             try {
-                const listing = await this.fsHandler.listDirectory()
+                // < could be moving around
+                let listing = this.localList
                 await this.par.emit('file-list-response', {listing})
             } catch (err) {
                 console.error('Error sending file list:', err)
             }
         })
-
-        // Handle receiving remote peer's file list
+        // receiving remote peer's file list
         // < data.directory:string[]
-        this.par.on('file-list-response', (data) => {
+        parhand('file-list-response', async (data) => {
             this.remoteList = DirectoryListing.fromJSON(data.listing)
         })
 
@@ -262,7 +277,7 @@ export class Sharing extends Caring {
 
         // Starts a new download
         // fyi, our PUT is just a file-meta someone receives
-        this.par.on('file-meta', async (data) => {
+        parhand('file-meta', async (data) => {
             const transfer = this.tm.initTransfer(
                 'download',
                 data.fileId, 
@@ -281,7 +296,7 @@ export class Sharing extends Caring {
             }
         });
         // ...downloads
-        this.par.on('file-chunk', async (data) => {
+        parhand('file-chunk', async (data) => {
             const transfer = this.tm.transfers.get(data.fileId);
             if (!transfer || transfer.status !== 'active') {
                 console.warn(`Invalid transfer state for chunk: ${data.fileId}`);
@@ -297,7 +312,7 @@ export class Sharing extends Caring {
             }
         });
         // ...complete
-        this.par.on('file-complete', async (data) => {
+        parhand('file-complete', async (data) => {
             const transfer = this.tm.transfers.get(data.fileId);
             if (!transfer) return;
 
@@ -311,18 +326,19 @@ export class Sharing extends Caring {
             }
         });
         // or do they
-        this.par.on('file-error', async (data) => {
+        parhand('file-error', async (data) => {
             const transfer = this.tm.transfers.get(data.fileId);
             if (!transfer) return;
             await transfer.error(data.error, false); // Don't notify back
         });
         // remote nabs
-        this.par.on('file-pull', async (data) => {
+        parhand('file-pull', async (data) => {
             await this.sendFile(data.filename, undefined, data.seek, data.fileId);
         });
     }
 }
-    // first user to enable Sharing asks the other to also
+
+// first user to enable Sharing asks the other to reciprocate
 export function setupSharingCourtshipHandlers(par) {
     par.on('sharing-ready', async (data) => {
         if (par.sharing) {
@@ -551,7 +567,7 @@ class FileSystemHandler {
         fileHandles: Map<string, FileSystemFileHandle>,
     }
     constructor() {
-        this.fileHandles = new Map()
+        this._fs.fileHandles = new Map()
     }
     async start() {
         await this.requestDirectoryAccess()

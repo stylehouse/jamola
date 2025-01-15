@@ -5,6 +5,7 @@ import { io } from "socket.io-client";
 import { tick } from "svelte";
 import type { Party } from "./Party.svelte";
 import { Participant } from "./Participants.svelte";
+import { _D } from "$lib/Y";
 // < hopefully this problem goes away:
             // < for some reason we have to seek out the par again at this point
             //   not doing this leads to this.par.name being undefined
@@ -132,6 +133,7 @@ export class Paring {
             else {
                 // the whole message is JSON
                 encoded = new TextEncoder().encode(json)
+                _D("emit()",{json,data})
             }
 
             // Queue handling
@@ -175,15 +177,15 @@ export class Paring {
                 return this.handleMessage({...data,buffer});
             }
             // the whole message is JSON
-            const text = new TextDecoder().decode(view);
-            let data = JSON.parse(text)
+            const json = new TextDecoder().decode(view);
+            let data = JSON.parse(json)
+            _D("unemit()",{json,data})
             part = 'handling'
             return this.handleMessage(data);
         } catch (err) {
             console.error(`Error in unemit() ${part}: ${err}`);
         }
     }
-
     private handleMessage(data: any) {
         const handler = this.par.party.par_msg_handler[data.type] 
             ?? this.par.msg_handler?.[data.type];
