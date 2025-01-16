@@ -8,11 +8,13 @@
     import { oncer, retryUntil, throttle, userAgent } from "./Y";
     import { Party } from "./kolektiva/Party.svelte";
     import Participants from "./ui/Participants.svelte";
+    import ErrorLog from "./ui/ErrorLog.svelte";
     
     let sock = () => party?.socket?.connected && party.socket
     let localStream;
     let status = $state("Disconnected");
     let errorMessage = $state("");
+    
 
     // provided by YourName.svelte
     let userName = $state();
@@ -31,6 +33,7 @@
     $effect(() => {
         // parties keep going in the background on HMR unless we:
         party.singularise()
+        party.global_error_handlers()
     })
     
     // par can .msg()
@@ -606,6 +609,8 @@
             <input type="checkbox" bind:checked={party.activate_recording} />
             rec
         </label>
+
+        <ErrorLog {party} />
     </div>
     <div class="controls">
         <label>

@@ -57,7 +57,6 @@ export class Sharing extends Caring {
             this.fsHandler = new FileSystemHandler();
             // consent by the user
             await this.fsHandler.start()
-            // consent by the remote
             
             // < racey. Paring.unemit() should wait up to 3s for new handlers to arrive
             this.setupSharingHandlers(this.par)
@@ -303,7 +302,7 @@ class Transfer {
     moved: number = $state(0)    // Actual bytes transferred
     progress: number = $state(0)  // Percentage (0-100)
     status: TransferStatus = $state()
-    error: string = $state('')
+    errorMessage: string = $state('')
 
     // Metadata
     id: string
@@ -332,7 +331,7 @@ class Transfer {
     }
     async error(msg: string, notify = true) {
         this.status = 'error';
-        this.error = msg;
+        this.errorMessage = msg;
         if (notify) {
             await this.sharing.send('file-error', {
                 fileId: this.id,

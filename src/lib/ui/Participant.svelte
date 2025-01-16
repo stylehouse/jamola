@@ -12,6 +12,11 @@
     async function accept_sharing() {
         par.start_sharing()
     }
+    function wanterror() {
+        setTimeout(() => {
+            throw "unhandles"
+        },400)
+    }
 </script>
 
 <div class="participant {par.local ? 'monitor' : ''}">
@@ -28,14 +33,14 @@
                     {#if par.sharing_requested}
                         <div class="sharing-request">
                             <span>...asked to share files</span>
-                            <button on:click={accept_sharing}>Accept</button>
+                            <button onclick={accept_sharing}>Accept</button>
                         </div>
                     {:else}
                         <label class="ftp-toggle">
                             <input 
                                 type="checkbox" 
                                 checked={!!par.sharing}
-                                on:change={() => tog_ftp()}
+                                onchange={() => tog_ftp()}
                             />
                             <span class="ftp-label">ftp</span>
                         </label>
@@ -49,6 +54,7 @@
                 <Rack {par} />
             </div>
         {/if}
+        <button onclick={wanterror}>error?</button>
     </div>
 
     {#if par.sharing}

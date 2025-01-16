@@ -226,5 +226,48 @@ export class Party extends GoodTime {
         this.participants.set(par.peerId,par);
         return par
     }
-}
 
+
+    recent_errors = $state([])
+    global_error_handlers() {
+        let party = this
+        window.onerror = function(msg, url, line, col, error) {
+            // Clean up the error message
+            let cleanMessage = msg;
+            if (typeof msg === 'object') {
+                cleanMessage = msg.type || 'Unknown Error';
+            }
+            
+            // Format the error location if available
+            let location = '';
+            if (url) {
+                let shortUrl = url.split('/').pop();
+                let loc = line
+                if (col) loc += ':'+col
+                location = ` at ${loc} ${shortUrl}`;
+            }
+            // put on the page
+            // < on the screen.
+            //   some elements can vibrate
+            //   stretch-float into the viewport for attention
+            msg = `${cleanMessage}${location}`;
+            
+            party.recent_errors.push({
+                now: Date.now(),
+                via: "global",
+                msg, url, line, col, error
+            })
+            // console.error('Global error:', {msg, url, line, col, error});
+            return false; // Let the error propagate
+        };
+        // Also catch unhandled promise rejections
+        window.onunhandledrejection = function(event) {
+            let msg = event.reason?.message || event.reason || 'Promise rejected';
+            party.recent_errors.push({
+                now: Date.now(),
+                via: "rejection",
+                msg, reason: event.reason
+            })
+        };
+    }
+}

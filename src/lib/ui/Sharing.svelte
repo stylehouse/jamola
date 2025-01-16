@@ -54,6 +54,9 @@
                             ></div>
                         </div>
                         <span class="status">{transfer.status}</span>
+                        {#if transfers.errorMessage}
+                            <span class="status">{transfer.errorMessage}</span>
+                        {/if}
                     </div>
                 {/each}
             </div>
