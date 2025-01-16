@@ -250,28 +250,6 @@
     // life and times
     
 
-    // this becomes our monitor
-    function i_myself_par() {
-        let par = party.createPar({
-            name: userName,
-            type: "monitor",
-            // < better than type:monitor is:
-            local: true,
-        });
-        // is ready immediately?
-        // doesn't seem to be...
-        setTimeout(() => {
-            //  create effects!
-            par.on_ready()
-            if (!par.fresh.stream) {
-                if (!localStream) {
-                    debugger
-                }
-                par.fresh.input(localStream)
-            }
-            par.may_record()
-        },111)
-    }
 
 
     party.setup_par_effects = (par) => {
@@ -349,17 +327,51 @@
             }
         }
     }
+
+    // create our local streams
+    // < as an $effect() against a savable state...
     async function startStreaming() {
-        if (!localStream) {
-            // they might choose a stream, null for default
-            constraints.audio.deviceId = chosen_audio_device
-            // Get microphone stream
-            localStream ||=
-                await navigator.mediaDevices.getUserMedia(constraints);
-            status = "Got microphone access";
+        if (localStream) {
+            throw "sort out doing this > once"
         }
-        // every-Ring stuff
-        i_myself_par();
+        await createLocalStream({
+            name: userName,
+            deviceId: chosen_audio_device,
+            to: ['everyone']
+        })
+        status = "Got microphone access";
+    }
+    // create a local stream
+    async function createLocalStream({deviceId,...opt}) {
+        // reuse this media options object
+        // they might choose a stream, null for default
+        constraints.audio.deviceId = deviceId
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia(constraints)
+        }
+        catch (err) {
+            throw erring("getUserMedia()",err)
+        }
+
+        let par = party.createPar({
+            name: userName,
+            local: true,
+        });
+
+        // is ready immediately?
+        // doesn't seem to be...
+        setTimeout(() => {
+            //  create effects!
+            par.on_ready()
+            if (!par.fresh.stream) {
+                if (!localStream) {
+                    debugger
+                }
+                par.fresh.input(localStream)
+            }
+            par.may_record()
+        },111)
+
     }
     async function startConnection() {
         console.log(`startConnection()`)
@@ -373,10 +385,10 @@
             part = 'Peering'
             // start signaling via websocket to bootstrap webrtc sessions...
             party.start()
-        } catch (error) {
-            errorMessage = `Error in ${part}: ${error.message}`;
+        } catch (err) {
+            errorMessage = `Error in ${part}: ${err.message}`;
             status = "Error occurred";
-            console.error(`Error in ${part}:`, error);
+            throw erring(`startConnection()`, err);
         }
     }
 
