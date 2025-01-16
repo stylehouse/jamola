@@ -12,11 +12,6 @@
     async function accept_sharing() {
         par.start_sharing()
     }
-    function wanterror() {
-        setTimeout(() => {
-            throw "unhandles"
-        },400)
-    }
 </script>
 
 <div class="participant {par.local ? 'monitor' : ''}">
@@ -54,7 +49,6 @@
                 <Rack {par} />
             </div>
         {/if}
-        <button onclick={wanterror}>error?</button>
     </div>
 
     {#if par.sharing}

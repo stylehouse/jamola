@@ -51,6 +51,9 @@
 </div>
 
 <style>
+    button {
+        font-size:30%;
+    }
     .error-log {
         position: fixed;
         bottom: 1rem;

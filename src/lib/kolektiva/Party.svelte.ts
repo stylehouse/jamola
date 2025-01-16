@@ -231,6 +231,51 @@ export class Party extends GoodTime {
     recent_errors = $state([])
     global_error_handlers() {
         let party = this
+
+        // Preserve original console.error
+        window._originalConsoleError ||= console.error;
+        // Track last error message to prevent doubles
+        //  because we handle direct-to-console.error() in this list too
+        //   errors propagate there after coming here
+        window._lastErrorMsg = null;
+        console.log("re global_error_handlers()")
+
+        // Override console.error
+        console.error = function(...args) {
+            // Call original console.error
+            window._originalConsoleError.apply(console, args);
+
+            // Format the error message
+            let msg = args.map(arg => {
+                if (typeof arg === 'string') return arg;
+                if (arg instanceof Error) return arg.message;
+                try {
+                    return JSON.stringify(arg);
+                } catch {
+                    return String(arg);
+                }
+            }).join(' ');
+            // Skip if this is the same message we just handled
+            let is = msg === window._lastErrorMsg ? 'IS' : '--'
+            console.log(`an error ${window._lastErrorMsg} \t\t\t ${is} \t\t\t ${msg}`)
+            if (msg === window._lastErrorMsg) {
+                console.log(" =================== duplicate err ignored")
+                window._lastErrorMsg = null;
+                return;
+            }
+            // Extract stack trace if available
+            let error = args.find(arg => arg instanceof Error);
+            let stack = error?.stack;
+
+            party.recent_errors.push({
+                now: Date.now(),
+                via: "console",
+                msg,
+                stack,
+                args  // Store original args for the log button
+            });
+        };
+
         window.onerror = function(msg, url, line, col, error) {
             // Clean up the error message
             let cleanMessage = msg;
@@ -251,18 +296,19 @@ export class Party extends GoodTime {
             //   some elements can vibrate
             //   stretch-float into the viewport for attention
             msg = `${cleanMessage}${location}`;
+            window._lastErrorMsg = msg;
             
             party.recent_errors.push({
                 now: Date.now(),
                 via: "global",
                 msg, url, line, col, error
             })
-            // console.error('Global error:', {msg, url, line, col, error});
             return false; // Let the error propagate
         };
         // Also catch unhandled promise rejections
         window.onunhandledrejection = function(event) {
             let msg = event.reason?.message || event.reason || 'Promise rejected';
+            window._lastErrorMsg = msg;
             party.recent_errors.push({
                 now: Date.now(),
                 via: "rejection",

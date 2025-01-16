@@ -1,5 +1,6 @@
 import { SvelteMap } from "svelte/reactivity";
 import type { Participant } from "./Participants.svelte";
+import { erring } from "$lib/Y";
 
 
 // inherited by Sharing, to hide the guts
@@ -77,8 +78,8 @@ export class Sharing extends Caring {
             let say = this.remoteConsent ? " consentedly" : ""
             console.log(`File sharing started${say} with files:`, this.localList);
         } catch (err) {
-            console.error("Failed to start file sharing:", err);
-            throw err;
+            console.error("    OH NO! "+err)
+            throw erring("Failed to start file sharing", err);
         }
     }
     async stop() {
@@ -613,17 +614,14 @@ class FileSystemHandler {
             this._fs.dirHandle = dirHandle;
             return dirHandle;
         } catch (err) {
-            console.error('Error accessing directory:', err);
-            throw err;
+            throw erring('Error accessing directory', err);
         }
     }
 
 
     // go somewhere
     async getFileHandle(filename: string): Promise<FileSystemFileHandle> {
-        if (!this._fs.dirHandle) {
-            throw new Error('No directory access');
-        }
+        if (!this._fs.dirHandle) throw erring('No directory access')
         const handle = await this._fs.dirHandle.getFileHandle(filename);
         this._fs.fileHandles.set(filename, handle);
         return handle;
@@ -632,7 +630,7 @@ class FileSystemHandler {
 
     // List all files in the directory
     async listDirectory(): Promise<DirectoryListing> {
-        if (!this._fs.dirHandle) throw new Error('No directory access');
+        if (!this._fs.dirHandle) throw erring('No directory access')
         
         const listing = new DirectoryListing()
         // < tabulation?
@@ -660,9 +658,7 @@ class FileSystemHandler {
 
     // First get file info and iterator factory
     async getFileReader(filename: string, chunkSize = CHUNK_SIZE): Promise<FileReader> {
-        if (!this._fs.dirHandle) {
-            throw new Error('No directory access');
-        }
+        if (!this._fs.dirHandle) throw erring('No directory access')
 
         const fileHandle = await this._fs.dirHandle.getFileHandle(filename);
         const file = await fileHandle.getFile();
@@ -683,9 +679,7 @@ class FileSystemHandler {
 
     // Write file in chunks
     async writeFileChunks(filename: string): Promise<FileSystemWritableFileStream> {
-        if (!this._fs.dirHandle) {
-            throw new Error('No directory access');
-        }
+        if (!this._fs.dirHandle) throw erring('No directory access')
 
         const fileHandle = await this._fs.dirHandle.getFileHandle(filename, { create: true });
         const writable = await fileHandle.createWritable();

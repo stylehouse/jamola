@@ -80,3 +80,28 @@ export function _D(name,data) {
         console.log(name,data)
     }
 }
+
+
+
+
+
+export function erring(label: string, err: Error | string): Error {
+    // Create base error from string if needed
+    if (typeof err === 'string') {
+        err = new Error(err);
+    }
+    
+    // Create new error with the original as its cause
+    const wrappedError = new Error(label, { cause: err });
+    
+    // Make the message include the full chain
+    let fullMessage = label;
+    let currentErr = err;
+    while (currentErr) {
+        fullMessage += `: ${currentErr.message}`;
+        currentErr = currentErr.cause;
+    }
+    wrappedError.message = fullMessage;
+    
+    return wrappedError;
+}
