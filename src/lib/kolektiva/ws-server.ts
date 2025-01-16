@@ -109,8 +109,8 @@ function AudioUploadServer(socket, io) {
 				success: true,
 			});
 		} catch (error) {
-			console.error(error)
-			socket.emit('upload-error', {
+			console.error("Error in audio-upload",error)
+			socket.emit('audio-upload-error', {
 				error: error.message,
 				filename: data?.metadata?.filename
 			});

@@ -255,14 +255,14 @@ export class Party extends GoodTime {
                     return String(arg);
                 }
             }).join(' ');
-            // Skip if this is the same message we just handled
-            let is = msg === window._lastErrorMsg ? 'IS' : '--'
-            console.log(`an error ${window._lastErrorMsg} \t\t\t ${is} \t\t\t ${msg}`)
-            if (msg === window._lastErrorMsg) {
-                console.log(" =================== duplicate err ignored")
-                window._lastErrorMsg = null;
-                return;
-            }
+            // // Skip if this is the same message we just handled
+            // let is = msg === window._lastErrorMsg ? 'IS' : '--'
+            // console.log(`an error ${window._lastErrorMsg} \t\t\t ${is} \t\t\t ${msg}`)
+            // if (msg === window._lastErrorMsg) {
+            //     console.log(" =================== duplicate err ignored")
+            //     window._lastErrorMsg = null;
+            //     return;
+            // }
             // Extract stack trace if available
             let error = args.find(arg => arg instanceof Error);
             let stack = error?.stack;

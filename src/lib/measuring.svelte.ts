@@ -1,4 +1,5 @@
 import type { Party } from "./kolektiva/Participants.svelte"
+import { erring } from "./Y"
 
 export class Measuring {
     statsIntervals = new Map()
@@ -46,7 +47,7 @@ export class Measuring {
         try {
             await meas.per_par(par)
         } catch (error) {
-            console.error(`Error measuring {par.name} with ${meas}:`, error);
+            throw erring(`Error measuring {par.name} with ${meas}`, error);
         }
     }
 

@@ -85,14 +85,18 @@ export function _D(name,data) {
 
 
 
-export function erring(label: string, err: Error | string): Error {
+export function erring(label: string, err?: Error | string): Error {
+    if (!err) {
+        // same as just "throw $label", but 
+        return new Error(label)
+    }
     // Create base error from string if needed
     if (typeof err === 'string') {
         err = new Error(err);
     }
     
     // Create new error with the original as its cause
-    const wrappedError = new Error(label, { cause: err });
+    const wrappedError = new Error(label, err &&{ cause: err });
     
     // Make the message include the full chain
     let fullMessage = label;

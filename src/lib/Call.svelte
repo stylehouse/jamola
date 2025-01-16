@@ -5,7 +5,7 @@
     import YourName from "./YourName.svelte";
     import YourTitle from "./YourTitle.svelte";
     import { CookedStream, Delaysagne, FreshStream, Gainorator, Gaintrol } from "./audio.svelte";
-    import { oncer, retryUntil, throttle, userAgent } from "./Y";
+    import { erring, oncer, retryUntil, throttle, userAgent } from "./Y";
     import { Party } from "./kolektiva/Party.svelte";
     import Participants from "./ui/Participants.svelte";
     import ErrorLog from "./ui/ErrorLog.svelte";
@@ -436,7 +436,7 @@
                 // Now wait for transport setup and set bitrate
                 await setAudioBitrate(sender, target_bitrate);
             } catch (error) {
-                console.error(`${par} Failed to set bitrate:`, error);
+                throw erring(`${par} Failed to set bitrate`, error);
             }
         }
     }
@@ -480,9 +480,9 @@
                     .find((sender) => sender.track?.kind === "audio");
 
                 if (audioSender) {
-                    setAudioBitrate(audioSender, newBitrate).catch((error) =>
-                        console.error("Failed to update bitrate:", error),
-                    );
+                    setAudioBitrate(audioSender, newBitrate).catch((error) => {
+                        throw erring("Failed to update bitrate:", error)
+                    });
                 }
 
                 // we record like that too?
@@ -585,6 +585,7 @@
     function lets_upload() {
         status = "Ping"
         console.log("Ya"+2 )
+        throw "Finely"
     }
     let dead = false
     onDestroy(() => {

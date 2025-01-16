@@ -246,6 +246,6 @@ export class Participant {
         //     ie in post ie post-production, which can mean any treatment not live
         //    since it's better to record clear audio
         //     and make it into a reverb cloud after decoded
-        this.recorder.start(this.cooked.output);
+        this.recorder.tape_in(this.cooked.output);
     }
 }

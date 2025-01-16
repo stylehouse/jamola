@@ -78,7 +78,6 @@ export class Sharing extends Caring {
             let say = this.remoteConsent ? " consentedly" : ""
             console.log(`File sharing started${say} with files:`, this.localList);
         } catch (err) {
-            console.error("    OH NO! "+err)
             throw erring("Failed to start file sharing", err);
         }
     }
@@ -99,8 +98,7 @@ export class Sharing extends Caring {
 
             console.log("File sharing stopped");
         } catch (err) {
-            console.error("Error during file sharing cleanup:", err);
-            throw err;
+            throw erring("Error during file sharing cleanup", err);
         }
     }
 
@@ -164,11 +162,7 @@ export class Sharing extends Caring {
         this.localList = await this.fsHandler.listDirectory();
     }
     async refresh_remoteList() {
-        try {
-            await this.par.emit('file-list-request')
-        } catch (err) {
-            console.error('Error requesting remote file list:', err)
-        }
+        await this.par.emit('file-list-request')
     }
     // Watch for local file system changes
     async watchLocalChanges() {
@@ -182,7 +176,7 @@ export class Sharing extends Caring {
                     await this.par.emit('file-list-response', { listing: this.localList })
                 }
             } catch (err) {
-                console.error('Error checking for file changes:', err)
+                throw erring('watchLocalChanges()', err)
             }
         }, 5000) // Check every 5 seconds
     }
@@ -203,7 +197,7 @@ export class Sharing extends Caring {
                 let listing = this.localList.transportable()
                 await this.par.emit('file-list-response', {listing})
             } catch (err) {
-                console.error('Error sending file list:', err)
+                throw erring('sending file list:', err)
             }
         })
         // receiving remote peer's file list
@@ -231,7 +225,7 @@ export class Sharing extends Caring {
                 transfer.status = 'active';
             } catch (err) {
                 transfer.status = 'error';
-                console.error('Error starting file transfer:', err);
+                throw erring('starting file transfer', err);
             }
         });
         // ...downloads
@@ -247,7 +241,7 @@ export class Sharing extends Caring {
                 transfer.updateProgress(data.buffer.byteLength);
             } catch (err) {
                 transfer.status = 'error';
-                console.error('Error writing chunk:', err);
+                throw erring('Error writing chunk', err);
             }
         });
         // ...complete
@@ -261,7 +255,7 @@ export class Sharing extends Caring {
                 this.tm.transfers.delete(data.fileId); // Clean up completed transfer
             } catch (err) {
                 transfer.status = 'error';
-                console.error('Error completing transfer:', err);
+                throw erring('Error completing transfer', err);
             }
         });
         // or do they
@@ -380,7 +374,7 @@ class Transfer {
             try {
                 await this.writable.close();
             } catch (err) {
-                console.error('Error closing writable:', err);
+                throw erring('Error closing writable', err);
             }
             this.writable = undefined;
         }

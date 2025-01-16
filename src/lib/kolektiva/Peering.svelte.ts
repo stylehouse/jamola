@@ -5,7 +5,7 @@ import { io } from "socket.io-client";
 import { tick } from "svelte";
 import type { Party } from "./Party.svelte";
 import { Participant } from "./Participants.svelte";
-import { _D } from "$lib/Y";
+import { _D, erring } from "$lib/Y";
 // < hopefully this problem goes away:
             // < for some reason we have to seek out the par again at this point
             //   not doing this leads to this.par.name being undefined
@@ -155,7 +155,7 @@ export class Paring {
             this.channel.send(encoded);
             return true;
         } catch (err) {
-            console.error(`Failed to send message: ${err}`);
+            throw erring(`Failed to send message`,err)
             return false;
         }
     }
@@ -185,7 +185,7 @@ export class Paring {
             part = 'handling'
             return this.handleMessage(data);
         } catch (err) {
-            console.error(`Error in unemit() ${part}: ${err}`);
+            throw erring(`Error in unemit() ${part}`,err)
         }
     }
     private handleMessage(data: any) {
@@ -214,7 +214,7 @@ export class Paring {
                     break;
                 }
             } catch (err) {
-                console.error('Error sending queued data:', err);
+                throw erring('Error sending queued data', err);
             }
         }
     }
@@ -289,9 +289,13 @@ export class Peering {
             } catch (e) {
                 // Ignore candidates if we're not in the right state
                 if (ing.pc.remoteDescription && ing.pc.remoteDescription.type) {
-                    console.error("ICE candidate error:", e);
+                    throw erring("ICE candidate error:", e);
                 }
             }
+        });
+        // audio-upload may cause these
+        this.socket.on('audio-upload-error', async ({ error, filename }) => {
+            throw erring("audio-upload-error", e)
         });
     }
 
@@ -312,7 +316,7 @@ export class Peering {
             // this part is common with handleNegotiationNeeded()  
             await this.makeOffer(ing)
         } catch (err) {
-            console.error('offerPeerConnection failed:', err);
+            throw erring('offerPeerConnection() makeOffer() failed', err);
         }
     }
     // part of offerPeerConnection() or handleOffer()
@@ -434,7 +438,7 @@ export class Peering {
     }
     private setupDataChannelHandlers(ing: Paring) {
         ing.channel.onerror = (e) => {
-            console.error(`${ing} channel error: ${e.error}`,e);
+            throw erring(`${ing} channel error: ${e.error}`,e);
         };
         ing.channel.onopen = () => {
             this.handleChannelOpen(ing);
@@ -498,7 +502,7 @@ export class Peering {
                 // Could implement recovery here
                 return;
             }
-            throw err;  // Let caller handle other errors
+            throw erring("makeOffer()",err)
         }
     }
     private async handleOffer(peerId: peerId, offer: RTCSessionDescriptionInit) {
@@ -539,8 +543,7 @@ export class Peering {
                 answer
             });
         } catch (err) {
-            console.error('Error handling offer:', err);
-            console.error(`  will retry...`);
+            throw erring('handleOffer()', err);
             this.retryConnection(ing)
         }
     }
@@ -561,12 +564,12 @@ export class Peering {
                 console.warn(`Unexpected state ${currentState} while processing answer for ${peerId}`);
             }
         } catch (err) {
-            console.error(`Error setting remote description for ${peerId}:`, err);
             if (ing.pc.signalingState === "stable") {
-                console.log(`Connection ${peerId} reached stable state despite error`);
+                console.log(`Connection ${ing} reached stable state despite error`);
             } else {
-                console.warn(`Connection ${peerId} in uncertain state:`, ing.pc.signalingState);
+                console.warn(`Connection ${ing} in uncertain state:`, ing.pc.signalingState);
             }
+            throw erring(`handleAnswer() ${ing} no setRemoteDescription()`, err);
         }
     }
 
@@ -612,9 +615,8 @@ export class Peering {
         try {
             await this.makeOffer(ing)
         } catch (err) {
-            console.error('Negotiation failed:', err);
-            console.error(`  will retry...`);
             this.retryConnection(ing)
+            throw erring('Negotiation makeOffer()', err);
         }
     }
 
@@ -628,8 +630,8 @@ export class Peering {
                 await this.handleNegotiationNeeded(ing);
             }
         } catch (err) {
-            console.error('Retry failed:', err);
             this.updatePeerState(ing, 'failed');
+            throw erring('retryConnection()', err);
         }
     }
 
@@ -698,8 +700,8 @@ export class Peering {
             // < when to reset this?
             par.is_ready = true;
         } catch (error) {
-            console.error(`${par} failed to become ready:`, error);
             par.is_ready = false;
+            throw erring(`${par} failed to become ready`, error);
             // These functions are designed to be retriggered by state changes anyway
             // so we don't need explicit retry logic here
         }
@@ -772,7 +774,7 @@ export class Peering {
                 console.log(`${par} was sent our track`,{track,localStream,sender})
 
             } catch (error) {
-                console.error("Failed to add track:", error);
+                throw erring("Failed to add track", error);
             }
         }
     }

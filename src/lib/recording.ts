@@ -1,6 +1,7 @@
 // Recorder class to manage recording state and chunks for each participant
 
 import type { Socket } from "socket.io-client"
+import { erring } from "./Y"
 //
 export class parRecorder {
     par// = $state()
@@ -28,7 +29,7 @@ export class parRecorder {
         }
     }
 
-    start(stream:MediaStream) {
+    tape_in(stream:MediaStream) {
         try {
             // reset per segment
             this.start_ts = Date.now();
@@ -62,7 +63,7 @@ export class parRecorder {
             // Request a new chunk every second for fine-grained recording
             this.mediaRecorder.start(1000);
         } catch (error) {
-            console.error('Failed to start recording:', error);
+            throw erring('Failed to start recording:', error);
         }
     }
     
@@ -291,7 +292,7 @@ export class parRecorder {
             await store.add({...rec})
             
         } catch (error) {
-            console.error('Failed to store failed upload:', error);
+            throw erring('Failed to store failed upload:', error);
         }
     }
 }
@@ -377,11 +378,11 @@ export async function retryRecordingUploads(sock: () => Socket) {
                     await store.delete(upload.id);
                 },
                 bad: (error) => {
-                    console.error('Failed to retry upload:', error);
+                    throw erring('Failed to retry upload', error);
                 },
             })
         }
     } catch (error) {
-        console.error('Failed to process upload retry queue:', error);
+        throw erring('Failed to process upload retry queue', error);
     }
 }
