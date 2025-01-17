@@ -104,15 +104,23 @@ export function erring(label: string, err?: Error | string): Error {
     let depth = 1;
     while (currentErr) {
         fullMessage += '\n' + indent.repeat(depth)
-            + (currentErr.local_message || currentErr.message);
+            + (currentErr.local_msg || currentErr.msg);
         currentErr = currentErr.cause;
         depth++;
     }
     // Create new error with the original as its cause
     const wrappedError = new Error(fullMessage, { cause: err });
-    wrappedError.message = fullMessage;
-    wrappedError.local_message = label
+    wrappedError.msg = fullMessage;
+    wrappedError.local_msg = label
     
+    
+    // Clean up stack trace to remove erring frames
+    const stackLines = wrappedError.stack.split('\n');
+    const cleanedStack = stackLines
+        .slice(1)  // Remove the error message line
+        .filter(line => !line.includes('at erring'))  // Remove erring frames
+        .join('\n');
+    wrappedError.local_stack = cleanedStack;
     
     // V8-specific stack cleanup
     //  makes it go from the caller's perspective

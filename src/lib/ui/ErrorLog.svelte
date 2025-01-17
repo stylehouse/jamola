@@ -1,22 +1,25 @@
 <script lang="ts">
     import { onDestroy } from 'svelte';
     import autoAnimate from "@formkit/auto-animate"
+    import { SvelteSet } from 'svelte/reactivity';
 
     let {party} = $props();
-    let hovered:Map<Error,boolean> = new Map()
+    let hovered = new Map<Error,boolean>();
     
     let cleanupInterval: any;
     $effect(() => {
         cleanupInterval = setInterval(() => {
             const now = Date.now();
             party.recent_errors = party.recent_errors.filter(error => {
-                return (now - error.now < 9000) || hovered.get(error);
+                return (now - error.now < 9000) || hovered.get(error)
+                    || party.recent_errors.length == 1;
             });
         }, 1000);
     });
     
     onDestroy(() => {
         clearInterval(cleanupInterval);
+        hovered.clear();
     });
 
     function formatTime(timestamp: number): string {
@@ -29,19 +32,36 @@
         });
     }
 
-    function formatStack(error) {
-        let stack = '';
+    function* errorChain(error) {
         let current = error;
+        let depth = 0;
+
         while (current) {
-            if (current.stack) {
-                stack += current.stack.split('\n').slice(1).join('\n');
-            }
+            let the = {
+                depth,
+                msg: current.local_msg || current.msg,
+                stack: current.local_stack || current.stack,
+                error: current
+            };
+            console.log(`error chain @${depth}`,the)
+            yield the
             current = current.cause;
-            if (current) {
-                stack += '\n\nCaused by:\n';
-            }
+            depth++;
         }
-        return stack;
+    }
+
+    let expandedStacks = $state(new SvelteSet());
+    
+    function toggleStack(error) {
+        if (expandedStacks.has(error)) {
+            expandedStacks.delete(error);
+        } else {
+            expandedStacks.add(error);
+        }
+    }
+    
+    function logError(error) {
+        console.info('Error debug:', error);
     }
 </script>
 
@@ -52,17 +72,28 @@
             class:global={error.via === 'global'}
             class:rejection={error.via === 'rejection'}
             class:console={error.via === 'console'}
-            onmouseenter={() => hovered.set(error, true)}
-            onmouseleave={() => hovered.set(error, false)}
+            on:mouseenter={() => hovered.set(error, true)}
+            on:mouseleave={() => hovered.set(error, false)}
         >
             <div class="error-time">{formatTime(error.now)}</div>
-            <div class="error-msg" style="white-space: pre-wrap">{error.msg}</div>
-            {#if error.stack || (error.error && error.error.stack)}
-                <details class="error-details">
-                    <summary>Stack trace</summary>
-                    <pre class="error-stack">{formatStack(error.error || error)}</pre>
-                </details>
-            {/if}
+            <div class="error-msg">
+                {#each [...errorChain(error)] as {depth, msg, stack, error: err}}
+                    <div class="error-line" style="padding-left: {depth * 1}em">
+                        <span 
+                            class="error-text" 
+                            class:has-stack={stack}
+                            on:click={() => stack && toggleStack(err)}
+                        >{msg}</span>
+                        <button 
+                            class="log-button" 
+                            on:click|stopPropagation={() => logError(err)}
+                        >ℹ️</button>
+                        {#if stack && expandedStacks.has(err)}
+                            <pre class="local-stack">{stack}</pre>
+                        {/if}
+                    </div>
+                {/each}
+            </div>
         </div>
     {/each}
 </div>
@@ -91,6 +122,44 @@
         border-left: 3px solid #f55;
     }
 
+    .error-text {
+        cursor: default;
+        display: block;
+    }
+
+    .error-text.has-stack {
+        cursor: pointer;
+        border-bottom: 1px dotted rgba(255,255,255,0.2);
+    }
+
+    .error-text.has-stack:hover {
+        border-bottom-color: rgba(255,255,255,0.5);
+    }
+
+    .local-stack {
+        margin: 0.3em 0 0.3em 1em;
+        padding: 0.3em;
+        font-size: 0.85em;
+        background: rgba(100, 0, 0, 0.3);
+        border-radius: 2px;
+        white-space: pre-wrap;
+        font-family: monospace;
+    }
+
+    .log-button {
+        opacity: 0.5;
+        background: none;
+        border: none;
+        padding: 0 0.2em;
+        cursor: pointer;
+        font-size: 0.8em;
+        vertical-align: top;
+    }
+
+    .log-button:hover {
+        opacity: 1;
+    }
+
     .error-item.global { border-left-color: #f55; }
     .error-item.rejection { border-left-color: #f95; }
     .error-item.console { border-left-color: #f75; }
@@ -99,32 +168,6 @@
         font-size: 0.8rem;
         opacity: 0.8;
         margin-bottom: 0.2rem;
-    }
-
-    .error-details {
-        margin-top: 0.5rem;
-        font-size: 0.8rem;
-    }
-
-    .error-details summary {
-        cursor: pointer;
-        opacity: 0.7;
-        transition: opacity 0.2s;
-    }
-
-    .error-details summary:hover {
-        opacity: 1;
-    }
-
-    .error-stack {
-        margin: 0.5rem 0;
-        padding: 0.5rem;
-        background: rgba(0, 0, 0, 0.3);
-        border-radius: 2px;
-        white-space: pre-wrap;
-        font-family: monospace;
-        font-size: 0.8rem;
-        overflow-x: auto;
     }
 
     @keyframes slide-in {
@@ -136,19 +179,5 @@
             transform: translateX(0);
             opacity: 1;
         }
-    }
-
-    /* Scrollbar styling */
-    .error-log::-webkit-scrollbar {
-        width: 6px;
-    }
-
-    .error-log::-webkit-scrollbar-track {
-        background: rgba(0, 0, 0, 0.1);
-    }
-
-    .error-log::-webkit-scrollbar-thumb {
-        background: rgba(255, 85, 85, 0.5);
-        border-radius: 3px;
     }
 </style>
