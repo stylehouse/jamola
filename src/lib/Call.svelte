@@ -585,8 +585,34 @@
     function lets_upload() {
         status = "Ping"
         console.log("Ya"+2 )
-        throw "Finely"
+        bang_top()
     }
+    function bang_top() {
+        try {
+            bang_middle()
+        }
+        catch (err) {
+            throw erring("bang_top()",err)
+        }
+    }
+    function bang_middle() {
+        try {
+            bang_end()
+        }
+        catch (err) {
+            throw erring("bang_middle()",err)
+        }
+    }
+    function bang_end() {
+        try {
+            throw "bang!"
+        }
+        catch (err) {
+            throw erring("bang_end()",err)
+        }
+    }
+    
+
     let dead = false
     onDestroy(() => {
         quitervals.map(clearInterval)

@@ -2,22 +2,18 @@
     import { onDestroy } from 'svelte';
     import autoAnimate from "@formkit/auto-animate"
 
-    let {party}:any = $props()
+    let {party} = $props();
+    let hovered:Map<Error,boolean> = new Map()
     
-    // Clean up errors every second
-    let cleanupInterval:any;
+    let cleanupInterval: any;
     $effect(() => {
         cleanupInterval = setInterval(() => {
             const now = Date.now();
             party.recent_errors = party.recent_errors.filter(error => {
-                // Keep if either:
-                // 1. Less than 9 seconds old
-                // 2. Currently being hovered
-                return (now - error.now < 9000) || error.hover
+                return (now - error.now < 9000) || hovered.get(error);
             });
         }, 1000);
     });
-
     
     onDestroy(() => {
         clearInterval(cleanupInterval);
@@ -32,6 +28,21 @@
             second: '2-digit'
         });
     }
+
+    function formatStack(error) {
+        let stack = '';
+        let current = error;
+        while (current) {
+            if (current.stack) {
+                stack += current.stack.split('\n').slice(1).join('\n');
+            }
+            current = current.cause;
+            if (current) {
+                stack += '\n\nCaused by:\n';
+            }
+        }
+        return stack;
+    }
 </script>
 
 <div class="error-log" use:autoAnimate>
@@ -40,20 +51,23 @@
             class="error-item"
             class:global={error.via === 'global'}
             class:rejection={error.via === 'rejection'}
-            onmouseenter={() => error.hover = true}
-            onmouseleave={() => error.hover = false}
+            class:console={error.via === 'console'}
+            onmouseenter={() => hovered.set(error, true)}
+            onmouseleave={() => hovered.set(error, false)}
         >
             <div class="error-time">{formatTime(error.now)}</div>
-            <div class="error-msg">{error.msg}</div>
-            <button onclick={() => console.log("ErrorLog's ",error)}>log</button>
+            <div class="error-msg" style="white-space: pre-wrap">{error.msg}</div>
+            {#if error.stack || (error.error && error.error.stack)}
+                <details class="error-details">
+                    <summary>Stack trace</summary>
+                    <pre class="error-stack">{formatStack(error.error || error)}</pre>
+                </details>
+            {/if}
         </div>
     {/each}
 </div>
 
 <style>
-    button {
-        font-size:30%;
-    }
     .error-log {
         position: fixed;
         bottom: 1rem;
@@ -77,13 +91,9 @@
         border-left: 3px solid #f55;
     }
 
-    .error-item.global {
-        border-left-color: #f55;
-    }
-
-    .error-item.rejection {
-        border-left-color: #f95;
-    }
+    .error-item.global { border-left-color: #f55; }
+    .error-item.rejection { border-left-color: #f95; }
+    .error-item.console { border-left-color: #f75; }
 
     .error-time {
         font-size: 0.8rem;
@@ -91,11 +101,30 @@
         margin-bottom: 0.2rem;
     }
 
-    .error-location {
+    .error-details {
+        margin-top: 0.5rem;
         font-size: 0.8rem;
+    }
+
+    .error-details summary {
+        cursor: pointer;
         opacity: 0.7;
-        margin-top: 0.2rem;
+        transition: opacity 0.2s;
+    }
+
+    .error-details summary:hover {
+        opacity: 1;
+    }
+
+    .error-stack {
+        margin: 0.5rem 0;
+        padding: 0.5rem;
+        background: rgba(0, 0, 0, 0.3);
+        border-radius: 2px;
+        white-space: pre-wrap;
         font-family: monospace;
+        font-size: 0.8rem;
+        overflow-x: auto;
     }
 
     @keyframes slide-in {
