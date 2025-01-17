@@ -140,8 +140,10 @@
         font-size: 0.85em;
         background: rgba(100, 0, 0, 0.3);
         border-radius: 2px;
-        white-space: pre-wrap;
+        white-space: pre;
         font-family: monospace;
+        display: block;
+        overflow-x: auto;
     }
 
     .log-button {

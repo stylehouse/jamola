@@ -104,7 +104,8 @@ export function erring(label: string, err?: Error | string): Error {
     let depth = 1;
     while (currentErr) {
         fullMessage += '\n' + indent.repeat(depth)
-            + (currentErr.local_msg || currentErr.msg);
+            + (currentErr.local_msg || currentErr.msg
+                || currentErr.message || currentErr);
         currentErr = currentErr.cause;
         depth++;
     }
