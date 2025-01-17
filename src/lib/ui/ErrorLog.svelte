@@ -2,10 +2,15 @@
     import { onDestroy } from 'svelte';
     import autoAnimate from "@formkit/auto-animate"
     import { SvelteSet } from 'svelte/reactivity';
+    import { processErrorChain } from './Error';
 
-    let {party} = $props();
-    let hovered = new Map<Error,boolean>();
+    let { party } = $props();
+    let hovered = new Map<Error, boolean>();
+    let expandedStacks = $state(new SvelteSet());
     
+    // Process error chains
+    let processedErrors = $derived(party.recent_errors.map(error => processErrorChain(error)));
+
     let cleanupInterval: any;
     $effect(() => {
         cleanupInterval = setInterval(() => {
@@ -31,28 +36,8 @@
             second: '2-digit'
         });
     }
-
-    function* errorChain(error) {
-        let current = error;
-        let depth = 0;
-
-        while (current) {
-            let the = {
-                depth,
-                msg: current.local_msg || current.msg,
-                stack: current.local_stack || current.stack,
-                error: current
-            };
-            console.log(`error chain @${depth}`,the)
-            yield the
-            current = current.cause;
-            depth++;
-        }
-    }
-
-    let expandedStacks = $state(new SvelteSet());
     
-    function toggleStack(error) {
+    function toggleStack(error: Error) {
         if (expandedStacks.has(error)) {
             expandedStacks.delete(error);
         } else {
@@ -60,36 +45,46 @@
         }
     }
     
-    function logError(error) {
-        console.info('Error debug:', error);
+    function logError(error: Error) {
+        console.info('Error chain:');
+        const { chain } = processErrorChain(error);
+        chain.forEach(({ depth, message, stack }) => {
+            console.info('  '.repeat(depth) + 'Level', depth + ':', {
+                message,
+                stack: stack.join('\n')
+            });
+        });
     }
 </script>
 
 <div class="error-log" use:autoAnimate>
-    {#each party.recent_errors as error}
+    {#each party.recent_errors as error, errorIndex}
+        {@const processed = processedErrors[errorIndex]}
         <div
             class="error-item"
             class:global={error.via === 'global'}
             class:rejection={error.via === 'rejection'}
             class:console={error.via === 'console'}
-            on:mouseenter={() => hovered.set(error, true)}
-            on:mouseleave={() => hovered.set(error, false)}
+            onmouseenter={() => hovered.set(error, true)}
+            onmouseleave={() => hovered.set(error, false)}
         >
             <div class="error-time">{formatTime(error.now)}</div>
-            <div class="error-msg">
-                {#each [...errorChain(error)] as {depth, msg, stack, error: err}}
-                    <div class="error-line" style="padding-left: {depth * 1}em">
+            <div class="error-chain">
+                {#each processed.chain as {depth, message, rawError}, chainIndex}
+                    <div class="error-line" style="padding-left: {depth}em">
                         <span 
                             class="error-text" 
-                            class:has-stack={stack}
-                            on:click={() => stack && toggleStack(err)}
-                        >{msg}</span>
+                            class:has-stack={processed.compressedStacks[chainIndex].length > 0}
+                            onclick={() => toggleStack(rawError)}
+                        >{message}</span>
                         <button 
                             class="log-button" 
-                            on:click|stopPropagation={() => logError(err)}
+                            onclick={() => logError(rawError)}
                         >ℹ️</button>
-                        {#if stack && expandedStacks.has(err)}
-                            <pre class="local-stack">{stack}</pre>
+                        {#if expandedStacks.has(rawError)}
+                            <pre class="local-stack">
+                                {processed.compressedStacks[chainIndex].join('\n')}
+                            </pre>
                         {/if}
                     </div>
                 {/each}
@@ -122,9 +117,12 @@
         border-left: 3px solid #f55;
     }
 
+    .error-chain {
+        white-space: pre-wrap;
+    }
+
     .error-text {
         cursor: default;
-        display: block;
     }
 
     .error-text.has-stack {
@@ -158,26 +156,5 @@
 
     .log-button:hover {
         opacity: 1;
-    }
-
-    .error-item.global { border-left-color: #f55; }
-    .error-item.rejection { border-left-color: #f95; }
-    .error-item.console { border-left-color: #f75; }
-
-    .error-time {
-        font-size: 0.8rem;
-        opacity: 0.8;
-        margin-bottom: 0.2rem;
-    }
-
-    @keyframes slide-in {
-        from {
-            transform: translateX(100%);
-            opacity: 0;
-        }
-        to {
-            transform: translateX(0);
-            opacity: 1;
-        }
     }
 </style>

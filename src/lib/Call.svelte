@@ -589,11 +589,16 @@
     }
     function bang_top() {
         try {
-            bang_middle()
+            (() => {
+                bang_almost_middle()
+            })()
         }
         catch (err) {
             throw erring("bang_top()",err)
         }
+    }
+    function bang_almost_middle() {
+        bang_middle()
     }
     function bang_middle() {
         try {

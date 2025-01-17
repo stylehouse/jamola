@@ -113,15 +113,6 @@ export function erring(label: string, err?: Error | string): Error {
     wrappedError.msg = fullMessage;
     wrappedError.local_msg = label
     
-    
-    // Clean up stack trace to remove erring frames
-    const stackLines = wrappedError.stack.split('\n');
-    const cleanedStack = stackLines
-        .slice(1)  // Remove the error message line
-        .filter(line => !line.includes('at erring'))  // Remove erring frames
-        .join('\n');
-    wrappedError.local_stack = cleanedStack;
-    
     // V8-specific stack cleanup
     //  makes it go from the caller's perspective
     // < otherwise you get a stack full of "erring()" ?
