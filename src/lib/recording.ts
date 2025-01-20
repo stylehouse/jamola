@@ -52,7 +52,7 @@ export class parRecorder {
                 if (this.segmenting) {
                     // with the stop(),start() trick to make each piece playable,
                     //  we need to go and catch this event in the middle of segmenting
-                    delete this.segmenting
+                    this.segmenting = false
                     this.segmenting_complete()
                 }
             };
@@ -151,7 +151,7 @@ export class parRecorder {
             this.onsegmented && this.onsegmented()
         }
         let title_changing = this.title_changing && ", title_changing" || ""
-        delete this.title_changing
+        this.title_changing = false
         if (this.recordedChunks.length < 1) {
             // tiny bit of time, nothing else came available
             console.warn("no-Segmented"+title_changing,this.recordedChunks);
@@ -173,7 +173,7 @@ export class parRecorder {
                 let_go()
             },
             bad: (error) => {
-                console.error('Failed to upload audio segment: '+error);
+                console.error('audio-upload failed: '+error);
                 // Store failed uploads for retry
                 this.handleFailedUpload(rec);
                 let_go()
@@ -367,17 +367,22 @@ export async function retryRecordingUploads(sock: () => Socket) {
             return;
         }
         
-        console.log(`Retrying ${failedUploads.length} failed uploads`);
+        console.log(`audio-upload: retrying ${failedUploads.length} failed uploads`);
 
         for (const rec of failedUploads) {
             await upload_recrecord(sock,{
                 rec,
                 good: async () => {
-                    console.log(`Uploaded on retry: ${rec.filename}`);
+                    console.log(`audio-upload: retry OK: ${rec.filename}`);
                     // Remove successful upload from IndexedDB
-                    await store.delete(upload.id);
+                    await store.delete(rec.id);
                 },
-                bad: (error) => {
+                bad: async (error) => {
+                    if (error.startsWith("file already exists")) {
+                        console.error(`audio-upload: file exists: ${rec.filename}`);
+                        await store.delete(rec.id);
+                        return
+                    }
                     throw erring('Failed to retry upload', error);
                 },
             })
