@@ -3,72 +3,96 @@ interface ProcessedError {
     depth: number;
     message: string;
     stack: string[];
+    local_stack: string[];
     rawError: Error;
 }
 
 interface ProcessedErrorChain {
     chain: ProcessedError[];
-    compressedStacks: string[][];
 }
 
 function processErrorChain(errorEvent: any): ProcessedErrorChain {
     const chain: ProcessedError[] = [];
-    let current = errorEvent.error || errorEvent;
+    let current = errorEvent.reason || errorEvent.error || errorEvent;
     let depth = 0;
 
     // Build the chain of errors with their stacks
     while (current) {
-        const stackLines = (current.stack || '').split('\n')
-            .map(line => line.trim())
-            .filter(line => line && !line.includes('at erring'));
-        
-        // Separate error message line and stack frames
-        const messageLine = stackLines.find(line => line.startsWith('Error:'));
-        const stackFrames = stackLines.filter(line => !line.startsWith('Error:'));
+        // stack has the message and then the stack, split them
+        let N = (current.stack || '').split('\n')
+        // reversed (highest call first), stack only
+        let stack = []
+        let multi_message = []
+        while (N.length) {
+            let n = N.pop()
+            let l = n.replace(/^\s*/,'')
+            if (l != null && n.startsWith("    at ")) {
+                stack.push(l)
+            }
+            else {
+                multi_message.push(...N,n)
+                break
+            }
+        }
 
-        // Build processed stack with message at top and reversed stack frames
-        const processedStack = [
-            // Keep original message if present, otherwise use local_msg
-            messageLine ? `!${messageLine}` : (current.local_msg ? `!${current.local_msg}` : undefined),
-            // Reverse the actual stack frames
-            ...stackFrames.reverse()
-        ].filter(Boolean); // Remove undefined entries
+        stack = stack.filter(n=>n)
+        let last = stack.slice(-1)[0]
+        if (last && last.startsWith('at erring ')) {
+            stack.pop();
+        }
+        let message = current.local_msg || current.msg
+            || current.message || current
 
-        chain.push({
+        let cha = {
             depth,
-            // Add ! prefix for all but the top-level message
-            message: depth === 0 ? 
-                (current.local_msg || current.msg || "Unknown error") :
-                `!${current.local_msg || current.msg || "Unknown error"}`,
-            stack: processedStack,
+            message,
+            stack,
+            local_stack: null, // in a moment
             rawError: current
-        });
+        }
+        chain.push(cha)
         
         current = current.cause;
         depth++;
     }
 
     // Process stacks to remove duplicates, working backwards
-    const compressedStacks: string[][] = [];
-    for (let i = chain.length - 1; i >= 0; i--) {
-        const currentStack = chain[i].stack;
+    for (let [i, cha] of chain.entries()) {
+        let cha = chain[i]
         
-        if (i === chain.length - 1) {
-            // For the deepest error, include full stack
-            compressedStacks.unshift(currentStack);
+        // shallowest error shall have the calls above it
+        //  usually from an event handler to a high level action function
+        if (i === 0) {
             continue;
         }
 
         // Compare with previous error's stack to find unique frames
-        const prevStack = chain[i + 1].stack;
-        const uniqueFrames = currentStack.filter(frame => 
-            !prevStack.includes(frame) && !frame.startsWith('!')
-        );
+        const prevStack = chain[i-1].stack;
+        let si = -1
+        while (1) {
+            si++
+            if (si > 100) throw "infloop"
+            if (prevStack[si] == null) {
+                if (cha.stack[si] != null) throw "prevstack should be shorter"
+                throw "should never get here"
+            }
 
-        compressedStacks.unshift(uniqueFrames);
+
+            if (prevStack[si] == cha.stack[si]
+                && prevStack[si+1] != null
+            ) {
+                continue
+            }
+            // non-match from here
+            cha.local_stack = cha.stack.slice(si)
+            break
+        }
+        if (!cha.local_stack) {
+            // debugger
+        }
     }
 
-    return { chain, compressedStacks };
+    return { chain };
 }
 
 export { processErrorChain, type ProcessedErrorChain, type ProcessedError };
