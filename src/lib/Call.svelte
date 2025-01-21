@@ -332,7 +332,8 @@
     // < as an $effect() against a savable state...
     async function startStreaming() {
         if (localStream) {
-            throw "sort out doing this > once"
+            localStream = null;
+            // throw "sort out doing this > once"
         }
         await createLocalStream({
             name: userName,

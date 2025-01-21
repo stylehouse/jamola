@@ -12,7 +12,7 @@
             const now = Date.now();
             party.recent_errors = party.recent_errors.filter(error => {
                 return (now - error.now < 9000) || hovered.get(error)
-                    || party.recent_errors.length == 1;
+                    // || party.recent_errors.length == 1;
             });
         }, 1000);
     });
