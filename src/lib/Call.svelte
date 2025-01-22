@@ -578,7 +578,10 @@
     });
 
     async function lets_retryRecordingUploads() {
-        if (!sock()) return
+        if (!sock()) {
+            status = "No socket connection available";
+            return
+        }
         let many = await retryRecordingUploads(sock)
         if (!many) return
         status = `audio-upload retried ${many}`
@@ -600,6 +603,10 @@
         status = "Ping"
         console.log("Ya"+2 )
         lets_retryRecordingUploads()
+        if (!party.socket?.connected) {
+            status = "Not connected to server";
+            return;
+        }
         // bang_top()
     }
     function bang_top() {

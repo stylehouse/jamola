@@ -180,6 +180,9 @@ export class Paring {
             }
             // the whole message is JSON
             const json = new TextDecoder().decode(view);
+            if (json == "") {
+                throw erring('empty string')
+            }
             let data = JSON.parse(json)
             _D("unemit()",{json,data})
             part = 'handling'
