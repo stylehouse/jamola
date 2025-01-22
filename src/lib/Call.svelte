@@ -378,17 +378,25 @@
         console.log(`startConnection()`)
         // this will be, sync, after negate()
         status = "Plugging out";
-        let part = ''
         errorMessage = "";
+
+        // make getting the localStream to work optional
+        // < can't reboot often enough to keep ubuntu good
         try {
-            part = 'startStreaming'
             await startStreaming()
-            part = 'Peering'
+        } catch (err) {
+            console.error(erring("startStreaming() failed",err))
+            errorMessage = `startStreaming() failed, you are mute: ${err.message}`;
+            status = "Your stream failed to start";
+        }
+
+        try {
             // start signaling via websocket to bootstrap webrtc sessions...
             party.start()
         } catch (err) {
-            errorMessage = `Error in ${part}: ${err.message}`;
-            status = "Error occurred";
+            console.error(erring("party.start() failed",err))
+            errorMessage = `party.start() failed, you are alone: ${err.message}`;
+            status = "Party failed to start";
             throw erring(`startConnection()`, err);
         }
     }
@@ -569,12 +577,16 @@
         }
     });
 
-    //
+    async function lets_retryRecordingUploads() {
+        if (!sock()) return
+        let many = retryRecordingUploads(sock)
+        status = `audio-upload retried ${many}`
+    }
     let quitervals = []
     $effect(() => {
         let retry = () => {
             activate_recording_reuploading
-                && sock() && retryRecordingUploads(sock)
+                && lets_retryRecordingUploads()
         }
         setTimeout(() => {
             // Periodically retry failed uploads, eg now
@@ -586,7 +598,8 @@
     function lets_upload() {
         status = "Ping"
         console.log("Ya"+2 )
-        bang_top()
+        lets_retryRecordingUploads()
+        // bang_top()
     }
     function bang_top() {
         try {

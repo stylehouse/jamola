@@ -348,45 +348,78 @@ async function upload_recrecord(sock: () => Socket,{rec,good,bad}) {
         bad(error);
     }
 }
-// retry mechanism for failed uploads
+// Helper function to execute a transaction operation
+async function withFailedUploadsStore(db, mode, operation) {
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction('failedUploads', mode);
+        const store = tx.objectStore('failedUploads');
+        
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error);
+        
+        operation(store);
+    });
+}
+
+// Helper function to get all failed uploads
+async function getAllFailedUploads(db) {
+    return new Promise((resolve, reject) => {
+        let result;
+        withFailedUploadsStore(db, 'readonly', (store) => {
+            const request = store.getAll();
+            request.onsuccess = () => {
+                result = request.result;
+            };
+            request.onerror = () => reject(request.error);
+        }).then(() => resolve(result))
+          .catch(reject);
+    });
+}
+
+// Helper function to delete a failed upload
+async function deleteFailedUpload(db, id) {
+    return withFailedUploadsStore(db, 'readwrite', (store) => {
+        store.delete(id);
+    });
+}
+
 export async function retryRecordingUploads(sock: () => Socket) {
     try {
         const db = await openDB();
-        const tx = db.transaction('failedUploads', 'readwrite');
-        const store = tx.objectStore('failedUploads');
-        
-        const getAllRequest = await store.getAll();
-        // Wait for the request to complete
-        const failedUploads = await new Promise((resolve, reject) => {
-            getAllRequest.onsuccess = () => resolve(getAllRequest.result);
-            getAllRequest.onerror = () => reject(getAllRequest.error);
-        });
+        const failedUploads = await getAllFailedUploads(db);
 
-        if (!Array.isArray(failedUploads)) {
+        let many = failedUploads.length
+        if (!Array.isArray(failedUploads) || !many) {
             console.log('No failed uploads to retry');
-            return;
+            return 0;
         }
         
         console.log(`audio-upload: retrying ${failedUploads.length} failed uploads`);
 
         for (const rec of failedUploads) {
-            await upload_recrecord(sock,{
-                rec,
-                good: async () => {
-                    console.log(`audio-upload: retry OK: ${rec.filename}`);
-                    // Remove successful upload from IndexedDB
-                    await store.delete(rec.id);
-                },
-                bad: async (error) => {
-                    if (error.startsWith("file already exists")) {
-                        console.error(`audio-upload: file exists: ${rec.filename}`);
-                        await store.delete(rec.id);
-                        return
-                    }
-                    throw erring('Failed to retry upload', error);
-                },
-            })
+            try {
+                await upload_recrecord(sock, {
+                    rec,
+                    good: async () => {
+                        console.log(`audio-upload: retry OK: ${rec.filename}`);
+                        await deleteFailedUpload(db, rec.id);
+                    },
+                    bad: async (error) => {
+                        if (error.startsWith("file already exists")) {
+                            console.error(`audio-upload: file exists: ${rec.filename}`);
+                            await deleteFailedUpload(db, rec.id);
+                            return;
+                        }
+                        throw erring('Failed to retry upload', error);
+                    },
+                });
+            } catch (error) {
+                console.error(`Failed to process upload for ${rec.filename}:`, error);
+                continue;
+            }
         }
+        return many
     } catch (error) {
         throw erring('Failed to process upload retry queue', error);
     }

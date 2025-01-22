@@ -17,7 +17,7 @@
     let first_writingyourname = true;
     function writingyourname(event) {
         // a noise filter
-        console.log("writingyourname", event);
+        // console.log("writingyourname", event);
         if (event.key == "Enter") {
             console.log("Caught Enter, assume you want to Ring now");
             negate();
