@@ -580,6 +580,7 @@
     async function lets_retryRecordingUploads() {
         if (!sock()) return
         let many = await retryRecordingUploads(sock)
+        if (!many) return
         status = `audio-upload retried ${many}`
     }
     let quitervals = []

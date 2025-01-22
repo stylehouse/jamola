@@ -104,6 +104,14 @@ export class parRecorder {
     }
 
     async uploadCurrentSegment(title_changing) {
+        try {
+            return await this._uploadCurrentSegment(title_changing)
+        }
+        catch (err) {
+            throw erring(err)
+        }
+    }
+    async _uploadCurrentSegment(title_changing) {
         if (title_changing) {
             // title from peer, very early potentially...
             // no segment is too small to sync start_ts
@@ -145,7 +153,16 @@ export class parRecorder {
         return this.mediaRecorder && this.mediaRecorder.state == 'recording'
     }
     // and resume segmenting afrom the data handler
+
     async segmenting_complete() {
+        try {
+            return await this._segmenting_complete()
+        }
+        catch (err) {
+            throw erring(err)
+        }
+    }
+    async _segmenting_complete() {
         let let_go = () => {
             // .stop() lets us upload before spraying down with null
             this.onsegmented && this.onsegmented()
