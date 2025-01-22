@@ -70,6 +70,7 @@ services:
         FROM caddy:2
         COPY --from=builder /usr/bin/caddy /usr/bin/caddy
     ports:
+      - "9080:80"
       - "9443:443"
     volumes:
       - caddy_data:/data
@@ -185,4 +186,7 @@ configs:
               output file /var/log/caddy/access.log
               format console
           }
+      }
+      http://voulais.duckdns.org {
+          redir https://{host}{uri} permanent
       }
