@@ -40,11 +40,12 @@ services:
           FROM alpine:3.19
           RUN apk add --no-cache openssh-client
           RUN mkdir -p /root/.ssh && chmod 700 /root/.ssh
+      
+      # the -R connects all their :3000 to the app server here
       command: |
         sh -c 'echo "$$SSH_PRIVATE_KEY" > /root/.ssh/id_ed25519 && \
         chmod 600 /root/.ssh/id_ed25519 && \
         exec ssh -v -N \
-          # all their :3000 to this local container's :3000
           -R 0.0.0.0:3000:app:3000 \
           -i /root/.ssh/id_ed25519 \
           -o ServerAliveInterval=30 \
@@ -64,13 +65,11 @@ services:
   app:
     build:
       context: .
-      dockerfile: Dockerfile.cos-jamo
       dockerfile_inline: |
-        FROM caddy:2-builder AS builder
-        RUN xcaddy build --with github.com/caddy-dns/duckdns
-
-        FROM caddy:2
-        COPY --from=builder /usr/bin/caddy /usr/bin/caddy
+        FROM oven/bun:1
+        WORKDIR /app
+        COPY package*.json ./
+        RUN bun install
     volumes:
       # z lets SELinux share this mount (on Fedora, Debians have AppArmor which isn't fussy here)
       - .:/app:z
