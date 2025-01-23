@@ -1,0 +1,72 @@
+# extra services you could put in compose
+
+
+
+
+
+
+
+
+
+
+
+
+
+  # connects the internet to this caddy, voulais-dev
+  #  takes ages to build
+  #  also at the moment,
+  #   while being a script that crawls router admin ui,
+  #   it just does UPnP instead for now. a simple hack to switch over.
+  router-config:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM node:20-slim
+        
+        # Install Chrome dependencies
+        RUN apt-get update && apt-get install -y \
+            chromium \
+            chromium-driver \
+            # the fallback strategy, use a upnp-allowed port
+            miniupnpc \
+            --no-install-recommends \
+        && rm -rf /var/lib/apt/lists/*
+        
+        WORKDIR /app
+
+        # Create non-root user for running Chrome
+        RUN groupadd -r pptruser && useradd -r -g pptruser -G audio,video pptruser \
+            && mkdir -p /home/pptruser/Downloads \
+            && chown -R pptruser:pptruser /home/pptruser \
+            && chown -R pptruser:pptruser /app
+        
+        # Create directory for screenshots and logs
+        RUN mkdir -p logs && chown -R pptruser:pptruser logs
+        
+        COPY package*.json ./
+        RUN npm ci
+        
+        ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+            PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+        
+
+        CMD ["node", "scripts/router-config.js"]
+    volumes:
+      - ./scripts:/app/scripts
+      - ./logs:/app/logs
+    environment:
+      # < mostly not plugged in. develop if needed.
+      - ROUTER_URL=${ROUTER_URL}
+      - ROUTER_USERNAME=${ROUTER_USERNAME}
+      - ROUTER_PASSWORD=${ROUTER_PASSWORD}
+      # the :- operator is like || but not for 0 I believe
+      - CHECK_INTERVAL_SECONDS=${CHECK_INTERVAL_SECONDS:-3600}
+      - PUPPETEER_HEADLESS=true
+
+    # allow upnp
+    ports:
+      - "1900:1900/udp"  # SSDP/UPnP discovery
+      - "5351:5351/tcp"  # UPnP control port
+    network_mode: "host"  # Use host networking for better UPnP support
+    <<: *defaults
+  
