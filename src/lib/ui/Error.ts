@@ -74,6 +74,9 @@ function processErrorChain(errorEvent: any): ProcessedErrorChain {
             if (si > 100) throw "infloop"
             if (prevStack[si] == null) {
                 if (cha.stack[si] != null) throw "prevstack should be shorter"
+                if (!prevStack?.length && !cha.stack?.length) {
+                    return
+                }
                 debugger
                 // throw "should never get here"
             }

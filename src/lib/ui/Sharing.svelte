@@ -31,7 +31,27 @@
         // < do
         console.log('stuffs:', [sharing.localList,sharing.remoteList]);
     }
-    
+    // always have this in there...
+    let compat_mode = $state()
+    let compat_directory_input_element = $state()
+    $effect(() => {
+        if (!('showDirectoryPicker' in window)) {
+            compat_mode = true
+        }
+    })
+    $effect(async () => {
+        if (compat_directory_input_element) {
+            // < extra step|interaction here - not fast enough!
+            //   maybe if we Participant.svelte tog_ftp()
+            //    on pointerdown create this UI, pointerup hit sharing.start()
+            //     probably just exposes a crack to fall into
+            let hook = sharing.local_directory_compat
+            if (!hook) throw "hook not ready"
+            await hook(compat_directory_input_element)
+            console.log("IT IS compat element!")
+        }
+    })
+    $inspect("wee compat element", compat_directory_input_element)
 </script>
 
 <div class="file-sharing">
@@ -39,8 +59,17 @@
         <FileList 
             title="Local Files" 
             list={sharing.localList} 
-            onFileClick={click_push}
-        />
+            onFileClick={click_push} >
+            {#snippet compat()}
+                {#if compat_mode}
+                    THE COMPAT
+                    <span style="">
+                        <input bind:this={compat_directory_input_element}
+                            type=file webkitdirectory multiple />
+                    </span>
+                {/if}
+            {/snippet}
+        </FileList>
         {#if transfers.length > 0}
             <div class="transfers">
                 <h3>Active Transfers</h3>

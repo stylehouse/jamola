@@ -578,10 +578,7 @@
     });
 
     async function lets_retryRecordingUploads() {
-        if (!sock()) {
-            status = "No socket connection available";
-            return
-        }
+        if (!sock()) return
         let many = await retryRecordingUploads(sock)
         if (!many) return
         status = `audio-upload retried ${many}`

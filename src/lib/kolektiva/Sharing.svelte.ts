@@ -1,6 +1,7 @@
 import { SvelteMap } from "svelte/reactivity";
 import type { Participant } from "./Participants.svelte";
 import { erring } from "$lib/Y";
+import { tick } from "svelte";
 
 
 // inherited by Sharing, to hide the guts
@@ -22,7 +23,9 @@ export class Sharing extends Caring {
     // leads back to party
     par:Participant
     tm:TransferManager
-    private fsHandler = new FileSystemHandler()
+    private fsHandler:FileSystemHandler
+    // compat
+    local_directory_compat?:Function
     
     // < figure out how to do navigation and population
     // listings here + there
@@ -55,7 +58,7 @@ export class Sharing extends Caring {
     async start() {
         try {
             this.tm = new TransferManager({sharing:this})
-            this.fsHandler = new FileSystemHandler();
+            this.fsHandler = new FileSystemHandler({sharing:this});
             // consent by the user
             await this.fsHandler.start()
             
@@ -71,6 +74,7 @@ export class Sharing extends Caring {
                 this.send('sharing-ready',{})
                 // make things look like they're working here
                 //  but we'll do this again when they're ready
+                // in compat mode the picker isn't ready yet.
                 await this.refresh_localList()
             }
 
@@ -194,8 +198,8 @@ export class Sharing extends Caring {
         parhand('file-list-request', async () => {
             try {
                 // < could be moving around
-                let listing = this.localList.transportable()
-                await this.par.emit('file-list-response', {listing})
+                let listing = this.localList?.transportable()
+                listing && await this.par.emit('file-list-response', {listing})
             } catch (err) {
                 throw erring('sending file list:', err)
             }
@@ -585,8 +589,14 @@ class FileSystemHandler {
         dirHandle: FileSystemDirectoryHandle | null,
         fileHandles: Map<string, FileSystemFileHandle>,
     }
-    constructor() {
-        this._fs.fileHandles = new Map()
+    private sharing:Sharing
+    private compat_mode:Boolean
+    constructor({sharing}) {
+        this.sharing = sharing
+        this._fs = {
+            dirHandle: null,
+            fileHandles: new Map()
+        };
     }
     async start() {
         await this.requestDirectoryAccess()
@@ -600,17 +610,104 @@ class FileSystemHandler {
     
     // Request directory access from user
     // < permanent shares
+    private isFileSystemAccessSupported(): boolean {
+        return 'showDirectoryPicker' in window;
+    }
     async requestDirectoryAccess(): Promise<FileSystemDirectoryHandle> {
         try {
-            const dirHandle = await window.showDirectoryPicker({
+            if (!this.isFileSystemAccessSupported()) {
+                this.compat_VirtualDirectoryHandle()
+                return
+            }
+            // Modern browsers that support File System Access API
+            this._fs.dirHandle = await window.showDirectoryPicker({
                 mode: 'readwrite'
-            });
-            this._fs.dirHandle = dirHandle;
-            return dirHandle;
+            })
         } catch (err) {
             throw erring('Error accessing directory', err);
         }
     }
+    private compat_VirtualDirectoryHandle() {
+        this.compat_mode = true
+        // Fallback for browsers without File System Access API support
+        this.sharing.local_directory_compat = (input) => {
+            return new Promise((resolve, reject) => {
+                input.onchange = async (event) => {
+                    const files = Array.from(input.files || []);
+                    if (files.length > 0) {
+                        // Create a virtual directory handle
+                        this._fs.dirHandle = this.createVirtualDirectoryHandle(files);
+                        resolve(this._fs.dirHandle);
+                        this.sharing.refresh_localList()
+                    } else {
+                        reject(new Error('No directory selected'));
+                    }
+                };
+                // Trigger the file picker? too late now,
+                // < perhaps the UI should precede sharing.start()?
+                // input.click();
+            })
+        }
+    }
+    // compat - older browsers can throw a whole folder at us
+    private createVirtualDirectoryHandle(files: File[]) {
+        return {
+            kind: 'directory',
+            *values() {
+                for (const file of files) {
+                    yield {
+                        kind: 'file',
+                        name: file.name,
+                        getFile: async () => file
+                    };
+                }
+            },
+            async getFileHandle(name: string) {
+                const file = files.find(f => f.name === name);
+                if (!file) throw new Error('File not found');
+                return {
+                    kind: 'file',
+                    name: file.name,
+                    getFile: async () => file,
+                    createWritable: async () => {
+                        // Implement in-memory write operations
+                        let chunks: Uint8Array[] = [];
+                        return {
+                            write: async (chunk: Uint8Array) => {
+                                chunks.push(chunk);
+                            },
+                            close: async () => {
+                                const blob = new Blob(chunks);
+                                // Trigger download since we can't write directly
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = name;
+                                a.click();
+                                URL.revokeObjectURL(url);
+                            }
+                        };
+                    }
+                };
+            }
+        };
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
     // go somewhere
@@ -624,7 +721,13 @@ class FileSystemHandler {
 
     // List all files in the directory
     async listDirectory(): Promise<DirectoryListing> {
-        if (!this._fs.dirHandle) throw erring('No directory access')
+        if (!this._fs.dirHandle) {
+            if (this.compat_mode) {
+                // localList unavailable for longer than usual
+                return
+            }
+            throw erring('No directory access')
+        }
         
         const listing = new DirectoryListing()
         // < tabulation?

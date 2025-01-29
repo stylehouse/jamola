@@ -1,12 +1,14 @@
 <script lang="ts">
     import type { FileListing } from "$lib/kolektiva/Sharing.svelte";
+    import type { Snippet } from "svelte";
 
     type args = {
         list: DirectoryListing,
         title: string,
-        onFileClick: (file: FileListing) => void
+        onFileClick: (file: FileListing) => void,
+        compat?: Snippet
     }
-    let { list,title,onFileClick }:args = $props();
+    let { list,title,onFileClick,compat }:args = $props();
     let {files,directories} = $derived(list || {})
     onFileClick ||= () => {
         throw "plug in"
@@ -15,6 +17,8 @@
 
 <div class="file-list">
     <h3 class="title">{title}</h3>
+
+    {@render compat?.()}
 
     {#if !list}
         list awaits...
