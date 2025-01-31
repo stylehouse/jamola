@@ -162,23 +162,38 @@ export class Sharing extends Caring {
     }
 
     // List available files
+    // memoized here:
+    localList_string?:string
     async refresh_localList(): Promise<string[]> {
         this.localList = await this.fsHandler.listDirectory();
+
+        let was = this.localList_string
+        this.localList_string = JSON.stringify(
+            this.localList?.transportable()
+        )
+        if (was !== this.localList_string) {
+            // Notify remote peer of changes
+            this.send_file_list()
+        }
     }
     async refresh_remoteList() {
         await this.par.emit('file-list-request')
+    }
+    async send_file_list() {
+        try {
+            // < could be moving around
+            let listing = this.localList?.transportable()
+            listing && await this.par.emit('file-list-response', {listing})
+        } catch (err) {
+            throw erring('sending file lists', err)
+        }
     }
     // Watch for local file system changes
     async watchLocalChanges() {
         // Periodically check for changes
         this.watchLocal_interval = setInterval(async () => {
             try {
-                let was = this.localList
                 this.refresh_localList()
-                if (JSON.stringify(was) !== JSON.stringify(this.localList)) {
-                    // Notify remote peer of changes
-                    await this.par.emit('file-list-response', { listing: this.localList })
-                }
             } catch (err) {
                 throw erring('watchLocalChanges()', err)
             }
@@ -196,13 +211,7 @@ export class Sharing extends Caring {
 
         // remote peer requesting our file list
         parhand('file-list-request', async () => {
-            try {
-                // < could be moving around
-                let listing = this.localList?.transportable()
-                listing && await this.par.emit('file-list-response', {listing})
-            } catch (err) {
-                throw erring('sending file list:', err)
-            }
+            await this.send_file_list()
         })
         // receiving remote peer's file list
         // < data.directory:string[]
@@ -392,7 +401,7 @@ class TransferManager {
     constructor(opt: { sharing: Sharing }) {
         Object.assign(this,opt)
     }
-    private transfers = $state(new SvelteMap<string, Transfer>());
+    transfers = $state(new SvelteMap<string, Transfer>());
     
     initTransfer(
         type: TransferType,
@@ -638,6 +647,7 @@ class FileSystemHandler {
                         // Create a virtual directory handle
                         this._fs.dirHandle = this.createVirtualDirectoryHandle(files);
                         resolve(this._fs.dirHandle);
+                        // and read from it
                         this.sharing.refresh_localList()
                     } else {
                         reject(new Error('No directory selected'));

@@ -1,9 +1,9 @@
 <script lang="ts">
-    import { FileListing } from '$lib/kolektiva/Sharing.svelte';
+    import { FileListing, Sharing } from '$lib/kolektiva/Sharing.svelte';
     import FileList from './FileList.svelte';
     
     let { par } = $props();
-    let sharing = par.sharing;
+    let sharing:Sharing = par.sharing;
 
     // Convert transfer objects to FileListing-like objects
     let transfers = $derived(
@@ -48,7 +48,6 @@
             let hook = sharing.local_directory_compat
             if (!hook) throw "hook not ready"
             await hook(compat_directory_input_element)
-            console.log("IT IS compat element!")
         }
     })
     $inspect("wee compat element", compat_directory_input_element)
@@ -59,7 +58,8 @@
         <FileList 
             title="Local Files" 
             list={sharing.localList} 
-            onFileClick={click_push} >
+            onFileClick={click_push}
+            onRefreshClick={() => sharing.refresh_localList()} >
             {#snippet compat()}
                 {#if compat_mode}
                     THE COMPAT
@@ -95,6 +95,7 @@
             title="Remote Files" 
             list={sharing.remoteList}
             onFileClick={click_pull}
+            onRefreshClick={() => sharing.refresh_remoteList()}
         />
     </div>
 </div>

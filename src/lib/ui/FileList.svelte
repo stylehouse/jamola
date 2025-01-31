@@ -6,17 +6,20 @@
         list: DirectoryListing,
         title: string,
         onFileClick: (file: FileListing) => void,
+        onRefreshClick: () => void,
         compat?: Snippet
     }
-    let { list,title,onFileClick,compat }:args = $props();
+    let { list,title,onFileClick,onRefreshClick,compat }:args = $props();
     let {files,directories} = $derived(list || {})
-    onFileClick ||= () => {
-        throw "plug in"
-    }
+    onRefreshClick ||= () => {}
+    onFileClick ||= () => {}
 </script>
 
 <div class="file-list">
-    <h3 class="title">{title}</h3>
+    <h3 class="title">
+        {title} 
+        <span role=button onclick={onRefreshClick}>⟳</span>
+    </h3>
 
     {@render compat?.()}
 
@@ -26,7 +29,7 @@
         {#if directories?.length}
             <div class="items">
                 {#each directories as dir (dir.name)}
-                    <div class="item dir" on:click={() => onFileClick(dir)}>
+                    <div class="item dir" onclick={() => onFileClick(dir)}>
                         <span class="name">
                             {dir.name}
                             <span class=slash>/</span>
@@ -44,7 +47,7 @@
         {:else}
             <div class="items">
                 {#each files as file (file.name)}
-                    <div class="item file" on:click={() => onFileClick(file)}>
+                    <div class="item file" onclick={() => onFileClick(file)}>
                         <span class="name">{file.name}</span>
                         <span class="meta">
                             <span class="size">{file.formattedSize}</span>
