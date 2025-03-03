@@ -62,7 +62,16 @@
             onRefreshClick={() => sharing.refresh_localList()} >
             {#snippet compat()}
                 {#if compat_mode}
-                    THE COMPAT
+                    <h3>THE COMPAT MODE SPEECH</h3>
+                    <p>You don't seem to allow Directory writing access.
+                        Downloads will be batched in a .tar file to preserve directory structure, use
+                        <a href="https://play.google.com/store/apps/details?id=com.rarlab.rar">
+                            Android's RAR</a>
+                        or 
+                        <a href="https://apps.apple.com/us/app/izip-zip-unzip-unrar/id413971331">
+                            Apple's iZip</a>
+                        to extract it.
+                    </p>
                     <span style="">
                         <input bind:this={compat_directory_input_element}
                             type=file webkitdirectory multiple />

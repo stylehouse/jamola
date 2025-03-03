@@ -636,88 +636,6 @@ class FileSystemHandler {
             throw erring('Error accessing directory', err);
         }
     }
-    private compat_VirtualDirectoryHandle() {
-        this.compat_mode = true
-        // Fallback for browsers without File System Access API support
-        this.sharing.local_directory_compat = (input) => {
-            return new Promise((resolve, reject) => {
-                input.onchange = async (event) => {
-                    const files = Array.from(input.files || []);
-                    if (files.length > 0) {
-                        // Create a virtual directory handle
-                        this._fs.dirHandle = this.createVirtualDirectoryHandle(files);
-                        resolve(this._fs.dirHandle);
-                        // and read from it
-                        this.sharing.refresh_localList()
-                    } else {
-                        reject(new Error('No directory selected'));
-                    }
-                };
-                // Trigger the file picker? too late now,
-                // < perhaps the UI should precede sharing.start()?
-                // input.click();
-            })
-        }
-    }
-    // compat - older browsers can throw a whole folder at us
-    private createVirtualDirectoryHandle(files: File[]) {
-        return {
-            kind: 'directory',
-            *values() {
-                for (const file of files) {
-                    yield {
-                        kind: 'file',
-                        name: file.name,
-                        getFile: async () => file
-                    };
-                }
-            },
-            async getFileHandle(name: string) {
-                const file = files.find(f => f.name === name);
-                if (!file) throw new Error('File not found');
-                return {
-                    kind: 'file',
-                    name: file.name,
-                    getFile: async () => file,
-                    createWritable: async () => {
-                        // Implement in-memory write operations
-                        let chunks: Uint8Array[] = [];
-                        return {
-                            write: async (chunk: Uint8Array) => {
-                                chunks.push(chunk);
-                            },
-                            close: async () => {
-                                const blob = new Blob(chunks);
-                                // Trigger download since we can't write directly
-                                const url = URL.createObjectURL(blob);
-                                const a = document.createElement('a');
-                                a.href = url;
-                                a.download = name;
-                                a.click();
-                                URL.revokeObjectURL(url);
-                            }
-                        };
-                    }
-                };
-            }
-        };
-    }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
     // go somewhere
@@ -793,6 +711,85 @@ class FileSystemHandler {
         this._fs.fileHandles.set(filename, fileHandle);
         return writable;
     }
+
+
+
+
+
+
+//#region fs-compat
+    // this'll all go
+    
+    private compat_VirtualDirectoryHandle() {
+        this.compat_mode = true
+        // Fallback for browsers without File System Access API support
+        this.sharing.local_directory_compat = (input) => {
+            return new Promise((resolve, reject) => {
+                input.onchange = async (event) => {
+                    const files = Array.from(input.files || []);
+                    if (files.length > 0) {
+                        // Create a virtual directory handle
+                        this._fs.dirHandle = this.createVirtualDirectoryHandle(files);
+                        resolve(this._fs.dirHandle);
+                        // and read from it
+                        this.sharing.refresh_localList()
+                    } else {
+                        reject(new Error('No directory selected'));
+                    }
+                };
+                // Trigger the file picker? too late now,
+                // < perhaps the UI should precede sharing.start()?
+                // input.click();
+            })
+        }
+    }
+    // compat - older browsers can throw a whole folder at us
+    private createVirtualDirectoryHandle(files: File[]) {
+        return {
+            kind: 'directory',
+            *values() {
+                for (const file of files) {
+                    yield {
+                        kind: 'file',
+                        name: file.name,
+                        getFile: async () => file
+                    };
+                }
+            },
+            async getFileHandle(name: string) {
+                const file = files.find(f => f.name === name);
+                if (!file) throw new Error('File not found');
+                return {
+                    kind: 'file',
+                    name: file.name,
+                    getFile: async () => file,
+                    createWritable: async () => {
+                        // Implement in-memory write operations
+                        let chunks: Uint8Array[] = [];
+                        return {
+                            write: async (chunk: Uint8Array) => {
+                                chunks.push(chunk);
+                            },
+                            close: async () => {
+                                const blob = new Blob(chunks);
+                                // Trigger download since we can't write directly
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = name;
+                                a.click();
+                                URL.revokeObjectURL(url);
+                            }
+                        };
+                    }
+                };
+            }
+        };
+    }
+
+
+
+
 }
 
 
