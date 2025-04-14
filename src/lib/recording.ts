@@ -433,7 +433,7 @@ export async function retryRecordingUploads(sock: () => Socket) {
                 });
             } catch (error) {
                 console.error(`Failed to process upload for ${rec.filename}:`, error);
-                continue;
+                break;
             }
         }
         return many
