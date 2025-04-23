@@ -524,6 +524,7 @@
             // < fade in. this is for the awkward slow loads.
             themain.style.display = "initial";
         }
+
     });
     // button's word changes
     let say_negate = $state("Ring");
@@ -598,7 +599,6 @@
     })
     function lets_upload() {
         status = "Ping"
-        console.log("Ya"+2 )
         lets_retryRecordingUploads()
         if (!party.socket?.connected) {
             status = "Not connected to server";

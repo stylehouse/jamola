@@ -431,9 +431,8 @@ export async function retryRecordingUploads(sock: () => Socket) {
                         throw erring('Failed to retry upload', error);
                     },
                 });
-            } catch (error) {
-                console.error(`Failed to process upload for ${rec.filename}:`, error);
-                break;
+            } catch (err) {
+                throw erring(`Failed to process upload for ${rec.filename}`, err)
             }
         }
         return many
