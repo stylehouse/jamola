@@ -358,6 +358,7 @@
             name: userName,
             local: true,
         });
+        party.participants.set(par.name,par);
 
         // is ready immediately?
         // doesn't seem to be...

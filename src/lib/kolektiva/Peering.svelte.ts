@@ -355,8 +355,13 @@ export class Peering {
         //    each one wants a Rack etc
         let peerId = ing.peerId
         let was = this.party.find_par({ peerId })
+        let usedtobe = this.party.find_par({ peerId:'???' })
+        if (usedtobe) {
+            debugger
+        }
         // indexed by the peerId
-        let par = this.party.createPar({peerId})
+        let par = this.party.createPar({})
+        this.party.participants.set(peerId,par);
         // pair, separate for aesthetics
         // both have emit
         par.ing = ing
@@ -411,6 +416,7 @@ export class Peering {
         ];
         const newState = states.join('/');
         const par = ing.par;
+        if (!par) return
         
         if (newState !== par.constate) {
             par.constate = newState;
@@ -474,7 +480,6 @@ export class Peering {
     // < put at a higher level, no other name in here
     sendIdentity(ing) {
         console.log(`${ing} sendIdentity`)
-
         ing.emit("participant",{name:ing.par.party.userName})
     }
     // channel.onmessage

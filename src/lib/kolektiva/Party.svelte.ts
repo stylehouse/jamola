@@ -207,7 +207,9 @@ export class Party extends GoodTime {
         })
     }
     repar(par) {
-        return this.find_par({par})
+        let found = this.find_par({par})
+        if (!found) console.warn("!find_par",par)
+        return found
     }
     // read a participant (by peerId or par)
     find_par(c):Participant {
@@ -217,13 +219,16 @@ export class Party extends GoodTime {
             //  see "it seems like a svelte5 object proxy problem"
             peerId = par.peerId
         }
+        if (par && par.local) {
+            if (!par.name) debugger
+            peerId = par.name
+        }
         par = this.participants.get(peerId)
         return par
     }
 
     createPar(c) {
         const par = new Participant({ party: this, ...c })
-        this.participants.set(par.peerId,par);
         return par
     }
 
