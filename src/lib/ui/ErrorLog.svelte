@@ -2,8 +2,10 @@
     import { onDestroy } from 'svelte';
     import autoAnimate from "@formkit/auto-animate"
     import Error from './Error.svelte';
+    import { Party } from '$lib/kolektiva/Party.svelte';
 
-    let { party } = $props();
+    type withparty = {party:Party}
+    let { party }:withparty = $props();
     let hovered = new WeakMap<Error, boolean>();
     
     let cleanupInterval: any;
@@ -26,7 +28,7 @@
 
 <div class="error-log" use:autoAnimate>
     {#each party.recent_errors as error, errorIndex}
-        <Error {error}
+        <Error {error} {party}
             onmouseenter={() => hovered.set(error, true)}
             onmouseleave={() => hovered.set(error, false)} ></Error>
     {/each}

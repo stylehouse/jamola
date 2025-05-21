@@ -3,7 +3,7 @@
     import autoAnimate from "@formkit/auto-animate"
     import { processErrorChain } from './Error';
 
-    let { error } = $props();
+    let { error, party } = $props();
     // expand to 
     let processed = $derived(processErrorChain(error))
     let expandedStacks = $state(new SvelteSet());
@@ -41,7 +41,31 @@
         });
     }
 
+    $effect(() => {
+        if (party?.socket && error) {
+            let message = processed.chain.map(({message,local_stack,stack}) => {
+                return "\n"+message+"\n\n"+(local_stack || stack)+"\n"
+            })
+            // Construct the data object to send to the server
+            const errorData = {
+                message,
+                // Include any other relevant properties from your 'error' object
+                // that you want to log on the server.
+                // For example, if your 'error' object has a 'via' property:
+                via: error.via,
+                now: error.now,
+                username: party.userName,
+            };
 
+            party.socket.emit("error", errorData, (response: { status: string; message: string; }) => {
+                if (response.status === 'success') {
+                    console.log('Error successfully sent to server for logging.');
+                } else {
+                    console.error('Failed to send error to server:', response.message);
+                }
+            });
+        }
+    })
 
 </script>
 

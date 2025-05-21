@@ -605,7 +605,7 @@
             status = "Not connected to server";
             return;
         }
-        // bang_top()
+        bang_top()
     }
     function bang_top() {
         try {
@@ -673,7 +673,6 @@
             <input type="checkbox" bind:checked={party.activate_recording} />
             rec
         </label>
-
         <ErrorLog {party} />
     </div>
     <div class="controls">

@@ -1,6 +1,8 @@
 import { Server } from 'socket.io'
 import { writeFile, access, mkdir } from 'fs/promises';
 import { join, dirname } from 'path';
+import fs from 'fs/promises';
+import path from 'path';
 import { constants } from 'fs';
 
 const UPLOAD_DIR = 'uploads'
@@ -23,8 +25,45 @@ export const webSocketServer = {
 			WebRTCSignalingServer(socket, io)
 
 			AudioUploadServer(socket, io)
+			ErrorServer(socket, io)
 		});
 	}
+}
+
+function ErrorServer(socket, io) {
+	// frontend javascript explosions sent in for analysis
+	socket.on('error', async (data, callback) => {
+        try {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const hour = String(now.getHours()).padStart(2, '0');
+
+			// file it under the day+hour: errors/YMD-H/${username}.errors
+            const username = data.username || 'anonymous'; 
+
+            const folderPath = path.join(process.cwd(), `errors/${year}${month}${day}-${hour}`);
+            const filename = `${username}.errors`;
+            const filePath = path.join(folderPath, filename);
+
+            await fs.mkdir(folderPath, { recursive: true });
+			let message = data.message
+			delete data.message
+			let log = JSON.stringify(data) + '\n'+message+"\n\n\n"
+			console.log("Error uploaded: "+filePath+"\n"+log)
+            await fs.appendFile(filePath, log);
+
+            if (callback) {
+                callback({ status: 'success', message: 'Error logged successfully' });
+            }
+        } catch (error) {
+            console.error('Failed to write error to file:', error);
+            if (callback) {
+                callback({ status: 'error', message: 'Failed to log error on server' });
+            }
+        }
+	})
 }
 
 function AudioUploadServer(socket, io) {
