@@ -269,15 +269,15 @@
     // < flip on|off video
     const constraints = {
         audio: {
-            echoCancellation: false,
+            echoCancellation: true,
             noiseSuppression: false,
-            autoGainControl: false,
+            autoGainControl: true,
         },
         video: false,
     };
     // find input devices onload
     let possible_audio_input_devices = $state()
-    $inspect("possible_audio_input_devices",possible_audio_input_devices)
+    // $inspect("possible_audio_input_devices",possible_audio_input_devices)
     async function enumerateDevices() {
         const devices = await navigator.mediaDevices.enumerateDevices();
         console.log("Yer devices: ", devices)
@@ -605,7 +605,7 @@
             status = "Not connected to server";
             return;
         }
-        bang_top()
+        // bang_top()
     }
     function bang_top() {
         try {

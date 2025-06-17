@@ -7,6 +7,8 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 echo -e "${GREEN}🎵 Installing Jamola - HiFi Internet Telephony for Musicians${NC}\n"
+echo "Note- if you are not hosting your app via https (restricting it to localhost),"
+echo "  you may abort and simply run: docker compose up"
 
 # Check if docker is installed
 if ! command -v docker &> /dev/null; then

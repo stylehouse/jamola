@@ -1,0 +1,156 @@
+# extra services you could put in compose
+
+
+
+
+
+
+
+
+
+services:
+  # connects (via port forwarding) the internet to this caddy, voulais-dev
+  #  suitable for home networks with upnp or a Huawei router with login
+  #  takes ages to build
+  #  also at the moment,
+  #   while being a script that crawls router admin ui,
+  #   it just does UPnP instead for now. a simple hack to switch over.
+  router-config:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM node:20-slim
+        
+        # Install Chrome dependencies
+        RUN apt-get update && apt-get install -y \
+            chromium \
+            chromium-driver \
+            # the fallback strategy, use a upnp-allowed port
+            miniupnpc \
+            --no-install-recommends \
+        && rm -rf /var/lib/apt/lists/*
+        
+        WORKDIR /app
+
+        # Create non-root user for running Chrome
+        RUN groupadd -r pptruser && useradd -r -g pptruser -G audio,video pptruser \
+            && mkdir -p /home/pptruser/Downloads \
+            && chown -R pptruser:pptruser /home/pptruser \
+            && chown -R pptruser:pptruser /app
+        
+        # Create directory for screenshots and logs
+        RUN mkdir -p logs && chown -R pptruser:pptruser logs
+        
+        COPY package*.json ./
+        RUN npm ci
+        
+        ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+            PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+        
+
+        CMD ["node", "theflatrouter/router-config.js"]
+    volumes:
+      - ./scripts:/app/scripts
+      - ./logs:/app/logs
+    environment:
+      # < mostly not plugged in. develop if needed.
+      - ROUTER_URL=${ROUTER_URL}
+      - ROUTER_USERNAME=${ROUTER_USERNAME}
+      - ROUTER_PASSWORD=${ROUTER_PASSWORD}
+      # the :- operator is like || but not for 0 I believe
+      - CHECK_INTERVAL_SECONDS=${CHECK_INTERVAL_SECONDS:-3600}
+      - PUPPETEER_HEADLESS=true
+
+    # allow upnp
+    ports:
+      - "1900:1900/udp"  # SSDP/UPnP discovery
+      - "5351:5351/tcp"  # UPnP control port
+    network_mode: "host"  # Use host networking for better UPnP support
+    <<: *defaults
+  
+
+
+
+
+
+
+
+
+
+
+# the above requires a Caddy here (unlike theproxy)
+services:
+  # this caddy uses DNS challenges, not requiring public port 443 access
+  #  ie, you can run your service on a upnp-able port like 9443
+  #   in case you have limited access, see router-config.js merely_upnp()
+  caddy:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM caddy:2-builder AS builder
+        RUN xcaddy build --with github.com/caddy-dns/duckdns
+
+        FROM caddy:2
+        COPY --from=builder /usr/bin/caddy /usr/bin/caddy
+    ports:
+      - "9080:80"
+      - "9443:443"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+      - ./logs:/var/log/caddy
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    environment:
+      - DUCKDNS_DOMAIN=${DUCKDNS_DOMAIN}
+      - DUCKDNS_TOKEN=${DUCKDNS_TOKEN}
+    networks:
+      - web
+    <<: *defaults
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+networks:
+  web:
+
+configs:
+  caddy_config:
+    content: |
+      voulais-dev.duckdns.org {
+          # Enable automatic HTTPS
+          tls {
+              dns duckdns $DUCKDNS_TOKEN
+          }
+          
+          # Enable compression
+          encode zstd gzip
+          
+          # Handle all requests
+          handle {
+              reverse_proxy app:3000
+          }
+          
+          # Basic security headers
+          header {
+              # Enable HSTS
+              Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+              # Prevent browsers from sniffing MIME types
+              X-Content-Type-Options "nosniff"
+              # XSS protection
+              X-XSS-Protection "1; mode=block"
+              # Click-jacking protection
+              X-Frame-Options "DENY"
+          }
+          
+          # Enable logging
+          log {
+              output file /var/log/caddy/access.log
+              format console
+          }
+      }
+      http://voulais.duckdns.org {
+          redir https://{host}{uri} permanent
+      }

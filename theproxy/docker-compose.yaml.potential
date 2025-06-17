@@ -1,0 +1,33 @@
+
+# next to the local app server
+#  feeding it stuff from where remote Caddy is reversing to (tunnel destiny)
+services
+  # See also theproxy/README.md to run the public Caddy server elsewhere.
+  ssh-tunnel-source:
+      build:
+        context: .
+        dockerfile_inline: |
+          FROM alpine:3.19
+          RUN apk add --no-cache openssh-client
+          RUN mkdir -p /root/.ssh && chmod 700 /root/.ssh
+      
+      # the -R connects all their :3000 to the app server here
+      command: |
+        sh -c 'echo "$$SSH_PRIVATE_KEY" > /root/.ssh/id_ed25519 && \
+        chmod 600 /root/.ssh/id_ed25519 && \
+        exec ssh -v -N \
+          -R 0.0.0.0:3000:app:3000 \
+          -i /root/.ssh/id_ed25519 \
+          -o ServerAliveInterval=30 \
+          -o ExitOnForwardFailure=yes \
+          -o StrictHostKeyChecking=accept-new \
+          -p 2023 \
+          root@d'
+      environment:
+        - SSH_PRIVATE_KEY=${SSH_PRIVATE_KEY}
+      depends_on:
+        - app
+      networks:
+        - web
+      <<: *defaults
+    

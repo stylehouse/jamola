@@ -10,19 +10,19 @@ In-browser jam space with recording. Self hosted (in docker compose) multiplayer
 
 You can set a title for everyone, which makes everyone's uploads to the server more coherent.
 
-The server is a svelte+vite+nodejs webserver behind a forwarding Caddy webserver, the easiest way to attain https.
+The server is a svelte+vite+nodejs webserver, which you can plumb to the web:
 
-# requirements
+# hosting
 
-- docker-compose
-- a duckdns account
-- upnpc or other port forward access for your router (device between local and inter networks)
+- with eg a duckdns account, for a name, and any of:
+- _theflatrouter/_ describes hosting at home
+- _theproxy/_ at the cloud
+- my project _leproxy_ can public-https-ify local http services (at the cloud)
+- some user-friendly vpn solution based on WireGuard (examples?)
 
-# install
+For any _the*/_ you'd want to know what *netstat -plant* is already, and then go and read `install.sh`.
 
-Have a look into `install.sh` which will ask for duckdns secrets, get LetsEncrypt ssl for you, and run it all.
-
-Which implies how you might run `docker compose up` subsequently, or `upnpc -r 443 tcp 9443` or so to forward ports on an ongoing basis, perhaps you'd add this to `docker-compose.yaml` if it works. My consumer router wouldn't let me forward 80|443 via upnp, I had to log in with the default password > forwarding > define a new "service" type to have internal port = 9443, add a use of it pointing at my "device", which was in a list. YMMV
+_leproxy_ doesn't involve hacking text files but needs somewhere public to reverse ports from.
 
 # contributing
 
@@ -35,16 +35,6 @@ Pending arrival. Hopefully it'll be big.
 # notes
 
 It's a svelte dev server.
-
-## dns in your network
-
-If browsing to your site from your own network takes you to your router's management website, it's probably because you are a LAN host sending http requests to the router, which it has a server of its own for. Only traffic from outside gets port forwarding. So I added to `/etc/hosts`:
-```
-127.0.0.1 localhost voulais.duckdns.org
-```
-And browse `https://voulais.duckdns.org:9443/`.
-
-Apparently this can be done on a rooted Android as well. Or do your own DNS, host it elsewhere, or use it elsewhere. Your local art gallery may have free wifi reachable from a nice place.
 
 ## fake input devices
 

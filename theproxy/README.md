@@ -2,6 +2,11 @@
 
 A minimal reverse proxy setup that securely exposes your local jamola server to the internet. Uses Caddy for HTTPS and SSH tunneling for the connection back to your local machine.
 
+Have a look into `install.sh` which will ask for duckdns secrets, get LetsEncrypt ssl for you, and run it all.
+
+Which implies how you might run `docker compose up` subsequently, or `upnpc -r 443 tcp 9443` or so to forward ports on an ongoing basis, perhaps you'd add this to `docker-compose.yaml` if it works. My consumer router wouldn't let me forward 80|443 via upnp, I had to log in with the default password > forwarding > define a new "service" type to have internal port = 9443, add a use of it pointing at my "device", which was in a list. YMMV
+
+
 ## How It Works
 
 1. Local jamola instance runs on port 9090

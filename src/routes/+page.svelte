@@ -1,10 +1,16 @@
 <script>
 
     import Call from "$lib/Call.svelte";
-
+    let on = $state()
+    $effect(() => {
+        if (self.navigator) {
+            on = 1
+        }
+    })
 </script>
 
-<Call />
+
+{#if on}<Call />{/if}
 
 <style>
     :global(body) {
