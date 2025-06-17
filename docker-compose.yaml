@@ -5,10 +5,11 @@ services:
     build:
       context: .
       dockerfile_inline: |
-        FROM oven/bun:1
+        FROM alpine:3.19
         WORKDIR /app
-        COPY package*.json ./
-        RUN bun install
+        RUN apk add --no-cache \
+            nodejs \
+            npm
     volumes:
       # z lets SELinux share this mount (on Fedora, Debians have AppArmor which isn't fussy here)
       - .:/app:z
@@ -24,7 +25,7 @@ services:
       - /app/.svelte-kit
     ports:
       - "9090:3000"
-    command: bun run dev -- --port 3000 --host 0.0.0.0
+    command: npm run dev -- --port 3000 --host 0.0.0.0
     # healthcheck:
     #   test: ["CMD", "wget", "--spider", "http://127.0.0.1:9090"]
     #   interval: 2s
