@@ -24,7 +24,7 @@ services:
       - /app/node_modules
       - /app/.svelte-kit
     ports:
-      - "9090:3000"
+      - "172.17.0.1:9090:3000"
     command: npm run dev -- --port 3000 --host 0.0.0.0
     # healthcheck:
     #   test: ["CMD", "wget", "--spider", "http://127.0.0.1:9090"]
