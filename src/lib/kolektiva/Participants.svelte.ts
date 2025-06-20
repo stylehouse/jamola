@@ -224,6 +224,14 @@ export class Participant {
         if (!this.cooked.output) {
             debugger
         }
+
+        // < what makes you hear it?
+
+        if (this.local) {
+            // publishable to par that arrive
+            this.party.get_localStream = () => stream
+        }
+
         // now output via webaudio from the last (this) effect, not an <audio>
         this.may_record()
     }

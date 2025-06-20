@@ -4,7 +4,7 @@
     import { parRecorder,retryRecordingUploads } from "$lib/recording";
     import YourName from "./YourName.svelte";
     import YourTitle from "./YourTitle.svelte";
-    import { CookedStream, Delaysagne, FreshStream, Gainorator, Gaintrol } from "./audio.svelte";
+    import { CookedStream, Delaysagne, FreshStream, Gainorator, Gaintrol, Transmit } from "./audio.svelte";
     import { erring, oncer, retryUntil, throttle, userAgent } from "./Y";
     import { Party } from "./kolektiva/Party.svelte";
     import Participants from "./ui/Participants.svelte";
@@ -256,6 +256,13 @@
         // the microphone domesticator
         par.gain = new Gainorator({par})
         par.delay = new Delaysagne({par})
+
+        if (par.local) {
+            // < can't remember how to wire up a passthrough effect
+            //   wants to have a MediaStream, so transmits from CookedStream
+            // par.Transmit = new Transmit({par})
+        }
+        
         // how much goes into the mix you hear
         par.vol = new Gaintrol({par})
 
@@ -429,7 +436,8 @@
     //    tracks should be sourced from their effect chain as a send|tape
     //    and added to localStream, which should then readd tracks for all par
     //     > sending your track to a remote distortion pedal, and getting it back
-    party.get_localStream = () => localStream
+    
+    // party.get_localStream = () => localStream
     // after tracks are added, they bitrate adjust here:
     party.on_addTrack = async (par, track, sender) => {
         if (track.kind === "audio") {

@@ -144,6 +144,7 @@ export abstract class AudioEffectoid {
         // < in such a way that completes par.effects, once
         let {fore,aft} = this.get_wired_in()
         console.log(`------ ${this.par} ${fore?.constructor?.name} -> ${this.constructor?.name} -> ${aft?.constructor?.name}`)
+        console.log(`         ${fore?.output?.constructor} => ${this?.output?.constructor}`)
         
         // we only have our abstract notion of par.effects, that we must sync to:
         if (fore && fore.output) {
@@ -358,6 +359,45 @@ export class Delaysagne extends AudioEffectoid {
     }
 
     // < basically where to do speed-up and slow-down to adjust stream buffer|latency?
+}
+
+// < Streaming itself
+export class Transmit extends AudioEffectoid {
+    null = 1 // ms
+    constructor(opt) {
+        super({order:7, ...opt})
+        this.controls = [
+            new AudioControl({
+                fec: this,
+                fec_key: 'null',
+                max: 1,
+                step: 1,
+                unit: 'bool',
+                on_set:(v,hz) => this.set_null(v,hz),
+            }),
+        ]
+    }
+    input(stream) {
+        // for all par that arrive
+        this.par.party.get_localStream = () => {
+            debugger
+            return stream
+        }
+
+        // and simply pass along
+        this.stream = stream
+        this.output = stream
+        this.check_wiring('just_did_input')
+    }
+    set_null(v) {
+        if (v) {
+            // < yoink the streams from...
+        }
+        else {
+            // < publish the streams to certain par...
+        }
+        console.log(`Transmit? ${v}`)
+    }
 }
 
 
