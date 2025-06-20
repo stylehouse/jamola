@@ -312,6 +312,7 @@ class AudioControl {
 // Stream buffering or slight time travels
 export class Delaysagne extends AudioEffectoid {
     delay = 1 // ms
+    hz = 16 // change_hz, how fast to move towards that delay
     constructor(opt) {
         super({order:666, ...opt})
         this.controls = [
@@ -321,9 +322,16 @@ export class Delaysagne extends AudioEffectoid {
                 max: 2200,
                 step: 10,
                 unit: 'ms',
-                change_hz: 16,
                 on_set:(v,hz) => this.set_delay(v,hz),
-            })
+            }),
+            new AudioControl({
+                fec: this,
+                fec_key: 'hz',
+                max: 6.28,
+                step: 0.05,
+                unit: 'hz',
+                on_set:(v,hz) => this.set_hz(v,hz),
+            }),            
         ]
 
         this.delayNode = this.AC.createDelay(5);
@@ -338,7 +346,11 @@ export class Delaysagne extends AudioEffectoid {
         // Go on inputting
         this.check_wiring('just_did_input')
     }
+    set_hz(v) {
+        this.hz = v
+    }
     set_delay(v,hz=5) {
+        hz ||= 0.0001
         this.delayNode.delayTime.linearRampToValueAtTime(
             v / 1000, // ms -> s
             this.AC.currentTime + 1/hz // hz -> s
@@ -374,6 +386,7 @@ export class AudioGainEffectoid extends AudioEffectoid {
 
     // Set gain level
     set_gain(v,hz=5) {
+        hz ||= 0.0001
         // < this shouldn't fire so much (too reactive)
         this.gainNode.gain.linearRampToValueAtTime(
             v,
