@@ -22,7 +22,7 @@ class GoodTime {
     // stored:
     activate_recording = $state(false)
     // not ui'd, records our local stream
-    activate_recording_for_peerIds = [""]
+    activate_recording_for_peerIds = ["???"]
     // stored:
     forever = $state({})
 
