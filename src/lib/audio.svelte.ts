@@ -238,6 +238,7 @@ export class CookedStream extends AudioEffectoid {
 }
 
 
+//#region con
 // things get interactive
 class AudioControl {
     min = 0
@@ -254,16 +255,21 @@ class AudioControl {
     toString() {
         return this.name
     }
+    // how fast to adjust the value
+    change_hz = 3
     get Knob_props() {
+        // speed of slow
+        let change_hz = this.change_hz ?? 3
         let propos = {
             min: this.min,
             max: this.max,
             step: this.step,
+            change_hz,
             value: this.fec[this.fec_key],
             // < how to just do a bindable $value from here...
             //   it would need to come from and to this.*...
             // fast and slow
-            feed: (value) => this.set(value),
+            slow: (value) => this.set(value),
             commit: (value) => this.commit(value),
         }
         console.log(`made props for fec:${this.fec.name} aka ${this.fec} con:${this.name} aka ${this}`);
@@ -279,11 +285,11 @@ class AudioControl {
     set(value) {
         this.fec[this.fec_key] = value
         // may tell the *Node to adjust
-        this.on_set?.(value,this.fec_key)
+        this.on_set?.(value)
         // tells config after adjustment is finished, via commit()
     }
     commit(value) {
-        if (this.fec[this.fec_key] != value) throw "commit not following == set"
+        // value might be more recent that slow has given
         this.fec.par.party.set_forever(this.forever_key,value)
     }
 
@@ -302,6 +308,7 @@ class AudioControl {
     ui_version = $state(1)
 }
 
+//#region fec
 // Stream buffering or slight time travels
 export class Delaysagne extends AudioEffectoid {
     delay = 1 // ms
@@ -314,7 +321,8 @@ export class Delaysagne extends AudioEffectoid {
                 max: 2200,
                 step: 10,
                 unit: 'ms',
-                on_set:() => this.set_delay(),
+                change_hz: 16,
+                on_set:(v,hz) => this.set_delay(v,hz),
             })
         ]
 
@@ -323,15 +331,18 @@ export class Delaysagne extends AudioEffectoid {
     input(stream) {
         this.input_to_Node(stream,this.delayNode)
         
-        this.set_delay()
+        this.set_delay(this.delay)
 
         this.output_Node(this.delayNode)
 
         // Go on inputting
         this.check_wiring('just_did_input')
     }
-    set_delay() {
-        this.delayNode.delayTime.setValueAtTime(this.delay / 1000, this.AC.currentTime);
+    set_delay(v,hz=5) {
+        this.delayNode.delayTime.linearRampToValueAtTime(
+            v / 1000, // ms -> s
+            this.AC.currentTime + 1/hz // hz -> s
+        );
     }
 
     // < basically where to do speed-up and slow-down to adjust stream buffer|latency?
@@ -354,7 +365,7 @@ export class AudioGainEffectoid extends AudioEffectoid {
                 fec: this,
                 fec_key: 'gainValue',
                 name: 'gain',
-                on_set:() => this.set_gain(),
+                on_set:(v,hz) => this.set_gain(v,hz),
             })
         )
         this.gainNode = this.AC.createGain();
@@ -362,10 +373,12 @@ export class AudioGainEffectoid extends AudioEffectoid {
     }
 
     // Set gain level
-    set_gain() {
+    set_gain(v,hz=5) {
         // < this shouldn't fire so much (too reactive)
-        // console.log(`${this.par} ${this.name} gain twid ${this.gainValue}`)
-        this.gainNode.gain.setValueAtTime(this.gainValue, this.AC.currentTime);
+        this.gainNode.gain.linearRampToValueAtTime(
+            v,
+            this.AC.currentTime + 1/hz // hz -> s
+        );
     }
 }
 

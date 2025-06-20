@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { throttle } from "$lib/Y";
     import { onDestroy, tick } from "svelte";
 
 	// < gestures to step up|down scale...
@@ -13,11 +14,13 @@
 	let {
 		value=$bindable(5),
 
-		// < callbacks|bindables to feed values while twiddling
+		// < prefer these callbacks to bindable value?
+		//    we seem to be resvelting a lot of Knob while twiddling value
 		//    commit to value itself on release
 			feed,
-			// < debounce 50ms?
 			slow,
+			change_hz = 16,
+
 			// idiomatic?
 			valued=$bindable(),
 
@@ -64,9 +67,31 @@
 		let extent = range
 		extent ||= (max||0) - (min||0)
 		extent ||= 20
+
 		scaleFactor = space / extent;
-		console.log("New scaleFactor: "+scaleFactor)
+
+		slow_throttle = throttle(
+			// < change change_hz for more refined moves when pressing harder etc
+			(v) => slow(v,change_hz),
+			1000 / change_hz
+		)
 	})
+
+	// output stage
+	// fast callback: any unique value
+	let feed_value = value
+	let slow_value = value
+	let slow_throttle
+	$effect(() => {
+		if (feed && value != null && value != feed_value) {
+			feed(value)
+			feed_value = value
+		}
+		if (slow && value != null && value != slow_value) {
+			slow_throttle(value)
+		}
+	})
+	// < not too fast callback
 
 
 	// < if above we say: grabbed=$bindable(false),
@@ -276,17 +301,6 @@
 		value = constrainValue(v);
 	}
 
-	// output stages
-	// fast callback
-	let feed_value = value
-	$effect(() => {
-		if (feed && value != null && value != feed_value) {
-			console.log("knob v=", value)
-			feed(value)
-			feed_value = value
-		}
-	})
-	// < not too fast callback
 
 
 	// the min and max values cause the knob to lean either way

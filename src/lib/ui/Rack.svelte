@@ -13,7 +13,7 @@
 
 </script>
 
-    {#if par.gain}<span class="bitrate">{Math.round(par.gain.peakLevel*1000)/1000} dB</span
+    {#if 0 && par.gain}<span class="bitrate">{Math.round(par.gain.peakLevel*1000)/1000} dB</span
         >{/if}
     {#if par.bitrate}<span class="bitrate" style="filter:hue(45deg)">{par.bitrate} kbps</span
         >{/if}
