@@ -65,6 +65,7 @@
         background: #2b463b;
         border-radius: 4px;
         overflow: hidden;
+        z-index:11;
     }
 
     .participant-content {

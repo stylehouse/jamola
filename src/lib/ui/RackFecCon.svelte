@@ -21,11 +21,11 @@
     <Knob
         {...Knob_props}
     >
-    {#snippet label()}
-        <span class=maxout>
-            {con.name}
-        </span>
-    {/snippet}
+        {#snippet label()}
+            <span class=maxout>
+                {con.name}
+            </span>
+        {/snippet}
     </Knob>
     <!-- {/if} -->
 </label>

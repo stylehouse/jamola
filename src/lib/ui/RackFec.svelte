@@ -8,12 +8,15 @@
 <span class="effect ">
     <span class="theyname" 
         onclick={() => console.log("fec: ",fec) }
-        role="button"
-        >{fec.name}</span>
+        role=button
+        title={fec.name}
+        >
+        {fec.name}
+    </span>
 
-        {#each fec.controls as con (con.fec_key)}
-            <RackFecCon {con}></RackFecCon>
-        {/each}
+    {#each fec.controls as con (con.fec_key)}
+        <RackFecCon {con}></RackFecCon>
+    {/each}
 
 </span>
 
@@ -23,15 +26,27 @@
         border-radius:1em;
         border-left:none;
         min-height:3em;
+        min-width:1em;
         position:relative;
         display:inline-block;
+        padding-left:1em;
+        bottom: 0em;
+        overflow: hidden;
+        background-color: rgb(17, 73, 73);
+    }
+    .effect:hover {
+        /* overflow: visible; */
+        /* transform: rotate(-5deg) skew(15deg) translate(3px, -2%) scale(1.1);
+        transform-origin: top left; */
     }
     .effect .theyname {
         position: absolute;
-        bottom: 0px;
-        margin-right: -2em;
-        transform: rotate(-90deg) skew(25deg);
-        transform-origin: bottom left;
-        pointer-events:none;
+        left:0em;
+        top:0em;
+        transform: rotate(90deg) skew(15deg) translate(3px, -97%);
+        transform-origin: top left;
+        /* pointer-events:none; */
+        background:orange;
+        /* z-index:-22; */
     }
 </style>
