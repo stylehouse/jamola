@@ -17,6 +17,7 @@
 </script>
 <label class=acontrol>
     <!-- con.name will appear here, and interact as part of the knob -->
+    <!-- {#if Knob_props} -->
     <Knob
         {...Knob_props}
     >
@@ -26,6 +27,7 @@
         </span>
     {/snippet}
     </Knob>
+    <!-- {/if} -->
 </label>
 <style>
     .maxout {

@@ -242,7 +242,7 @@ export class CookedStream extends AudioEffectoid {
 class AudioControl {
     min = 0
     max = 2
-    step = 0.025
+    step = 0.05
     name?:string
     // where value resides on the parent
     fec_key:string
@@ -266,9 +266,9 @@ class AudioControl {
             feed: (value) => this.set(value),
             commit: (value) => this.commit(value),
         }
-        console.log(`made props for fec:${this.fec.name} aka ${this.fec} con:${this.name} aka ${this}`,
+        console.log(`made props for fec:${this.fec.name} aka ${this.fec} con:${this.name} aka ${this}`);
             // < can't write this {this,propos} or big errors
-            {this:this,propos})
+            // {this:this,propos})
         return propos
     }
 

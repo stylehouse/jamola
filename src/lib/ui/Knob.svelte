@@ -56,10 +56,18 @@
 
 	} = $props()
 
-	if (!range) {
-		range = (max||0) - (min||0)
-		range ||= 20
-	}
+	// interpretation of arguments
+	//  and repeatable, see RacFecCon.svelte
+	//   where you might instantiate Knob with no Knob_props initially
+	let scaleFactor
+	$effect(() => {
+		let extent = range
+		extent ||= (max||0) - (min||0)
+		extent ||= 20
+		scaleFactor = space / extent;
+		console.log("New scaleFactor: "+scaleFactor)
+	})
+
 
 	// < if above we say: grabbed=$bindable(false),
 	//    Svelte complains:
@@ -179,7 +187,6 @@
 	};
 	onDestroy(unlock);
 
-	let scaleFactor = space / range;
 	function knobMove(event: PointerEvent): void {
 		preventDefault(event)
 
