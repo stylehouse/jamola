@@ -1,5 +1,6 @@
 import { untrack } from "svelte"
 import { throttle } from "./Y"
+import type { Participant } from "./kolektiva/Participants.svelte"
 
 
 
@@ -10,7 +11,7 @@ import { throttle } from "./Y"
 
 type ParticipantWithEffects = {
     effects: AudioEffectoid[],
-}
+} & Participant
 type AC = AudioContext
 export type streamables = MediaStream|AudioEffectoid
 
@@ -261,9 +262,9 @@ class AudioControl {
             value: this.fec[this.fec_key],
             // < how to just do a bindable $value from here...
             //   it would need to come from and to this.*...
-            feed: (value) => {
-                this.set(value)
-            },
+            // fast and slow
+            feed: (value) => this.set(value),
+            commit: (value) => this.commit(value),
         }
         console.log(`made props for fec:${this.fec.name} aka ${this.fec} con:${this.name} aka ${this}`,
             // < can't write this {this,propos} or big errors
@@ -274,13 +275,18 @@ class AudioControl {
     get forever_key():Array<string|Object> {
         return [this.fec.par,this.fec,this]
     }
+
     set(value) {
         this.fec[this.fec_key] = value
         // may tell the *Node to adjust
         this.on_set?.(value,this.fec_key)
-        // tell config
+        // tells config after adjustment is finished, via commit()
+    }
+    commit(value) {
+        if (this.fec[this.fec_key] != value) throw "commit not following == set"
         this.fec.par.party.set_forever(this.forever_key,value)
     }
+
     // may remember this setting
     read_config() {
         let v = this.fec.par.party.get_forever(this.forever_key)
