@@ -1,5 +1,6 @@
 <script lang="ts">
-    import Rack from "./Rack.svelte";
+    import Partool from "./Partool.svelte";
+import Rack from "./Rack.svelte";
     import Sharing from "./Sharing.svelte";
     
     let { par } = $props();
@@ -46,6 +47,7 @@
 
         {#if par.gain}
             <div class="rack">
+                <Partool {par} />
                 <Rack {par} />
             </div>
         {/if}
