@@ -1,5 +1,5 @@
 import { untrack } from "svelte"
-import { throttle } from "./Y"
+import { erring, throttle } from "./Y"
 import type { Participant } from "./kolektiva/Participants.svelte"
 
 
@@ -44,73 +44,12 @@ export abstract class AudioEffectoid {
     toString() {
         return this.name
     }
-    // < needs de-experimentalising
-    input(stream) {
+
+    // part of most input() schemes, along with check_wiring()
+    usual_input(stream_or_node) {
         this.par = this.par.party.repar(this.par)
         this.disconnect_all_nodes()
-        this.stream = stream
-        let clas = this.constructor.name
-        // we convert between a transportable and effectable media here
-        // < right?
-        if (stream instanceof MediaStream) {
-            if (clas != "FreshStream") debugger
-            this.streamNode = this.AC.createMediaStreamSource(stream);
-            // outputs a Node
-            this.output = this.streamNode
-        }
-        else if (stream instanceof AudioNode) {
-            if (clas != "CookedStream") debugger
-            // in CookedStream, the signal becomes a transportable MediaStream again
-            if (stream instanceof MediaStreamAudioSourceNode) {
-                // if we have no other effects, this is Fresh -> Cooked
-                //  it probably avoids decoding yet if we didn't .connect() anywhere
-                console.log("No effects other than *Stream")
-                this.output = this.stream.mediaStream
-            }
-            else if (stream instanceof MediaStreamAudioDestinationNode) {
-                // < no effect would leave one of these as output
-                //   they would be sidechaining to tape|call at the gain stage
-                debugger
-                this.outputNode ||= this.AC.createMediaStreamDestination()
-                stream.connect(this.outputNode)
-                this.output = this.outputNode.stream
-            }
-            else {
-                this.output = stream.stream
-                if (!this.output) {
-                    // prep something to record from
-                    this.outputNode ||= this.AC.createMediaStreamDestination()
-                    stream.connect(this.outputNode)
-                    this.output = this.outputNode.stream
-                }
-                stream.connect(this.AC.destination)
-            }
-        }
-        else {
-            throw "other stream: "+stream.constructor.name
-        }
-        // console.log(`The input of ${this.constructor.name} for ${this.par.name} stream: `,
-        //     stream
-        //     {
-        //         id: stream.id,
-        //         active: stream.active,
-        //         tracks: stream.getTracks().map(track => ({
-        //             kind: track.kind,
-        //             enabled: track.enabled,
-        //             muted: track.muted,
-        //             readyState: track.readyState
-        //         }))
-        //     }
-        // )
-
-
-        // makes sure this leads somewhere, which can't be done without this.output made up?
-        //  may set off a bunch more input() through par.effects
-        this.check_wiring('just_did_input')
-        
-        // CookedStream uses this
-        // as the final effect in the effects, elsewhere go
-        this.on_output && this.on_output(this.output)
+        this.stream = stream_or_node
     }
 
     // all effects (besides the FreshStream, which is MediaStream)
@@ -186,7 +125,7 @@ export abstract class AudioEffectoid {
         fore = fore.slice(-1)[0]
         return {fore,aft}
     }
-    get AC() {
+    get AC():AudioContext {
         let party = this.par.party
         let AC = party.audioContext ||= new AudioContext()
         // will resume playback once unsuspended
@@ -225,16 +164,60 @@ export abstract class AudioEffectoid {
     }
 }
 // < detangle these's implementations from AudioEffectoid?
+
+
 export class FreshStream extends AudioEffectoid {
     constructor(opt) {
         super({order:0, ...opt})
+    }
+    // we convert between a transportable and effectable media here
+    // < check that, cpu saving?
+    input(stream) {
+        this.usual_input(stream)
+        if (stream instanceof MediaStream) {
+            this.streamNode = this.AC.createMediaStreamSource(stream);
+            // outputs a Node
+            this.output = this.streamNode
+        }
+        this.check_wiring('just_did_input')
     }
 }
 export class CookedStream extends AudioEffectoid {
     constructor(opt) {
         super({order:999, ...opt})
     }
-    on_output = Function
+    input(stream) {
+        this.usual_input(stream)
+        if (stream instanceof AudioNode) {
+            // this thing doesn't allow connections from it
+            this.outputNode ||= this.AC.createMediaStreamDestination()
+            stream.connect(this.outputNode)
+            // but provides a .stream to record or transmit
+            this.output = this.outputNode.stream
+            
+            // a node   (of our own, wrt disconnect_all_nodes)
+            //  to connect to AC.destination
+            // a Gain is the most generic type of AudioNode
+            this.lastNode ||= this.AC.createGain(stream);
+            stream.connect(this.lastNode)
+        }
+        else if (stream instanceof MediaStream) {
+            // the only effect?
+            this.output = stream
+            // make able to connect to AC.destination
+            this.lastNode = this.AC.createMediaStreamSource(stream);
+        }
+        else {
+            throw erring("CookedStream type "+stream)
+        }
+        // makes sure this leads somewhere, which can't be done without this.output made up?
+        //  may set off a bunch more input() through par.effects
+        // < how far does it need to go? til a remembered *Node is found?
+        this.check_wiring('just_did_input')
+
+        // elsewhere go
+        this.par.have_output(this)
+    }
 }
 
 

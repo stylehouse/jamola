@@ -31,6 +31,7 @@ export class parRecorder {
 
     tape_in(stream:MediaStream) {
         try {
+            if (this.input_stream == stream) return
             // reset per segment
             this.start_ts = Date.now();
             // see also began_ts, title_ts

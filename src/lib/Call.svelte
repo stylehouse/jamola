@@ -253,21 +253,22 @@
 
 
     party.setup_par_effects = (par) => {
-        // the microphone domesticator
+        // < the microphone domesticator
+        // levels measurer and manual control
         par.gain = new Gainorator({par})
-        par.delay = new Delaysagne({par})
 
         if (par.local) {
+            // 
+            par.delay = new Delaysagne({par})
             // < can't remember how to wire up a passthrough effect
             //   wants to have a MediaStream, so transmits from CookedStream
             // par.Transmit = new Transmit({par})
-        }
         
-        // how much goes into the mix you hear
-        par.vol = new Gaintrol({par})
+            // how much goes into the mix you hear
+            par.vol = new Gaintrol({par})
+            par.vol.set_gain(default_volume)
+        }
 
-        let hear = par.local ? 0 : default_volume
-        par.vol.set_gain(hear)
     }
 
     // mainly
@@ -378,7 +379,11 @@
                 }
                 par.fresh.input(localStream)
             }
-            par.may_record()
+            if (par.recording) {
+                if (!par.recording.is_rolling()) {
+                    debugger
+                }
+            }
         },111)
 
     }

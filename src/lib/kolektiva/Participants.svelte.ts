@@ -84,6 +84,7 @@ export class Participant {
         return this.ing?.peerId ?? "???"
     }
 
+    recorder:parRecorder
     wants_recording() {
         if (this.party.activate_recording
             && (!this.party.activate_recording_for_peerIds
@@ -200,10 +201,7 @@ export class Participant {
         this.party.setup_par_effects(this)
 
         par.cooked = new CookedStream({par})
-        // the last effect has nowhere to flow on to
-        par.cooked.on_output = (stream) => {
-            this.have_output(stream)
-        }
+        // sends itself to have_output()
 
         this.shouldHaveTrackTimeoutId
             && clearTimeout(this.shouldHaveTrackTimeoutId)
@@ -220,38 +218,26 @@ export class Participant {
             })
         })
     }
-    have_output(stream) {
-        if (!this.cooked.output) {
-            debugger
-        }
-
-        // < what makes you hear it?
+    // when the final effect is wired|input to
+    //   (happens slightly more than once? same outputNode etc though?)
+    // < check how many (dis)connect()s happen
+    have_output(fec) {
+        // makes you hear it
+        //  all *Node are disconnected when effects rewire
+        //  so we come here every time
+        fec.lastNode.connect(fec.AC.destination)
 
         if (this.local) {
             // publishable to par that arrive
-            this.party.get_localStream = () => stream
+            this.party.get_localStream = () => fec.output
         }
 
-        // now output via webaudio from the last (this) effect, not an <audio>
-        this.may_record()
-    }
-
-    // the one place to start recordings
-    // occurs two ways:
-    //  usually, streams arriving cause a par.cooked.on_output()
-    //  the local stream only "arrives" and causes that once though
-    //   so we also do this in i_myself_par(), as we reconnect (reRing)
-    // < we should be able to record audio without a connection! an offline webapp.
-    may_record() {
-        if (!this.recorder) return
-        if (!this.cooked.output) return console.log("No cooked output")
-        if (this.recorder.is_rolling()) return
+        // < record audio without a connection! an offline webapp.
         // < take the recording just after this.gain and this.delay
         //    but before this.reverb|echo and the messier|refinable effects
         //    and apply|refine the later effects on listen...
-        //     ie in post ie post-production, which can mean any treatment not live
         //    since it's better to record clear audio
         //     and make it into a reverb cloud after decoded
-        this.recorder.tape_in(this.cooked.output);
+        this.recorder?.tape_in(fec.output);
     }
 }

@@ -112,7 +112,7 @@ export class Party extends GoodTime {
     //    to storage...
     audioContext
     // checked when the above is first got
-    wants_audio_permission?:Function
+    wants_audio_permission?:Function = $state()
 
     // to sometimes log your _D(name,...)
     //  set (name =~ /^(\w+)/)[0] to true in here:
