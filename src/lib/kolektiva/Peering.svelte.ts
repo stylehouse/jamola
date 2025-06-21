@@ -375,6 +375,7 @@ export class Peering {
         let perc_state = () => this.updateConnectionState(ing)
         ing.pc.oniceconnectionstatechange = () => {
             this.handleICEStateChange(ing);
+            
             perc_state()
         };
         ing.pc.onsignalingstatechange = perc_state
@@ -417,6 +418,11 @@ export class Peering {
         const newState = states.join('/');
         const par = ing.par;
         if (!par) return
+
+        if (ing.once_onopen && ing.pc.signalingState != 'closed') {
+            ing.once_onopen()
+            delete ing.once_onopen
+        }
         
         if (newState !== par.constate) {
             par.constate = newState;
@@ -435,6 +441,20 @@ export class Peering {
             this.couldbeready(par);
         }
     }
+    async when_not_closed(ing) {
+        return new Promise((resolve,reject) => {
+            if (ing.pc.signalingState != 'closed') {
+                return resolve(0)
+            }
+            // replace older calls to makeOffer()
+            if (ing.once_onopen) debugger
+            ing.once_onopen?.(1)
+            ing.once_onopen = (die) => {
+                resolve(die||0)
+            }
+        })
+    }
+
 
 //#region channel
     private initDataChannel(ing: Paring) {
@@ -447,7 +467,7 @@ export class Peering {
     }
     private setupDataChannelHandlers(ing: Paring) {
         ing.channel.onerror = (e) => {
-            throw erring(`${ing} channel error: ${e.error}`,e);
+            console.error(`${ing} channel error: ${e.error}`,e);
         };
         ing.channel.onopen = () => {
             this.handleChannelOpen(ing);
@@ -488,7 +508,7 @@ export class Peering {
         ing.par = ing.par.party.repar(ing.par)
         ing.unemit(data)
     }
-    
+//#endregion
 
 
     // socket.onmessage type=offer
@@ -497,6 +517,7 @@ export class Peering {
     async makeOffer(ing) {
         ing.signalingState = 'offering';
         try {
+            if (await this.when_not_closed(ing)) return
             const offer = await ing.pc.createOffer();
             await ing.pc.setLocalDescription(offer);
     
