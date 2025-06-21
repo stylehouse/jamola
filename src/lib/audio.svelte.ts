@@ -144,7 +144,6 @@ export abstract class AudioEffectoid {
         // < in such a way that completes par.effects, once
         let {fore,aft} = this.get_wired_in()
         console.log(`------ ${this.par} ${fore?.constructor?.name} -> ${this.constructor?.name} -> ${aft?.constructor?.name}`)
-        console.log(`         ${fore?.output?.constructor} => ${this?.output?.constructor}`)
         
         // we only have our abstract notion of par.effects, that we must sync to:
         if (fore && fore.output) {
@@ -480,7 +479,7 @@ export class Gainorator extends AudioGainEffectoid {
 
         // Create analyser node for metering
         this.analyserNode = this.AC.createAnalyser();
-        this.analyserNode.fftSize = 2048;
+        this.analyserNode.fftSize = 64;
         this.bufferLength = this.analyserNode.frequencyBinCount;
         this.dataArray = new Uint8Array(this.bufferLength);
     }
