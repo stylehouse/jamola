@@ -2,7 +2,7 @@ import { parRecorder } from "$lib/recording"
 import type { Party } from "./Party.svelte"
 import type { Paring } from "./Peering.svelte"
 import { AudioEffectoid, CookedStream, FreshStream, Gainorator, Gaintrol } from "$lib/audio.svelte"
-import { userAgent } from "$lib/Y"
+import { erring, userAgent } from "$lib/Y"
 import { setupSharingCourtshipHandlers, Sharing } from "./Sharing.svelte"
 
 
@@ -27,7 +27,7 @@ export class Participant {
     fresh?:CookedStream|undefined
     // this one triggers the Participant/Rack.svelte to appear
     gain:Gainorator|undefined = $state()
-    cooked?:CookedStream|undefined
+    Cooked?:CookedStream|undefined
     vol?:Gaintrol
     // incoming tracks from Peering while setting up
     ontrack_queue
@@ -200,13 +200,13 @@ export class Participant {
         // everything that matters in the middle here is in Call.svelte for visibility
         this.party.setup_par_effects(this)
 
-        par.cooked = new CookedStream({par})
+        par.Cooked = new CookedStream({par})
         // sends itself to have_output()
 
         this.shouldHaveTrackTimeoutId
             && clearTimeout(this.shouldHaveTrackTimeoutId)
         this.shouldHaveTrackTimeoutId = setTimeout(() => {
-            if (par.cooked.output) return
+            if (par.Cooked.outputNode) return
             // should have it by now
             console.error(`should have ${this} stream by now`)
         },6600)
@@ -221,23 +221,27 @@ export class Participant {
     // when the final effect is wired|input to
     //   (happens slightly more than once? same outputNode etc though?)
     // < check how many (dis)connect()s happen
-    have_output(fec) {
+    have_output() {
         // makes you hear it
         //  all *Node are disconnected when effects rewire
         //  so we come here every time
-        fec.lastNode.connect(fec.AC.destination)
+        this.Cooked.outputNode.connect(this.party.AC.destination)
 
-        if (this.local) {
+        if (this.Transmit) {
+            let MS = this.Transmit.transmission
+            if (!MS) throw erring("!par.Transmit.transmission")
+            
             // publishable to par that arrive
-            this.party.get_localStream = () => fec.output
-        }
+            this.party.get_localStream = () => MS
 
-        // < record audio without a connection! an offline webapp.
-        // < take the recording just after this.gain and this.delay
-        //    but before this.reverb|echo and the messier|refinable effects
-        //    and apply|refine the later effects on listen...
-        //    since it's better to record clear audio
-        //     and make it into a reverb cloud after decoded
-        this.recorder?.tape_in(fec.output);
+            // record
+            // < record audio without a connection! an offline webapp.
+            // < take the recording just after this.gain and this.delay
+            //    but before this.reverb|echo and the messier|refinable effects
+            //    and apply|refine the later effects on listen...
+            //    since it's better to record clear audio
+            //     and make it into a reverb cloud after decoded
+            this.recorder?.tape_in(MS);
+        }
     }
 }

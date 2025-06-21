@@ -126,22 +126,7 @@ export abstract class AudioEffectoid {
         return {fore,aft}
     }
     get AC():AudioContext {
-        let party = this.par.party
-        let AC = party.audioContext ||= new AudioContext()
-        // will resume playback once unsuspended
-        // < test this
-        // < what does "no audio data is lost" mean and how should we approach catch up on being behind the ideal 20ms or so latency
-        if (AC.state === 'suspended') {
-            party.wants_audio_permission = async () => {
-                await AC.resume()
-                if (AC.state === 'suspended') {
-                    throw "still suspended after wants_audio_permission"
-                }
-                delete party.wants_audio_permission
-            }
-        }
-        if (!AC) throw "!AC"
-        return AC
+        return this.par.party.AC
     }
     disconnect_all_nodes(and_null?) {
         // Find and disconnect all properties ending with 'Node'
@@ -182,30 +167,74 @@ export class FreshStream extends AudioEffectoid {
         this.check_wiring('just_did_input')
     }
 }
-export class CookedStream extends AudioEffectoid {
+// < Streaming itself
+export class Transmit extends AudioEffectoid {
+    null = 1 // ms
     constructor(opt) {
-        super({order:999, ...opt})
+        super({order:7, ...opt})
+        this.controls = [
+            new AudioControl({
+                fec: this,
+                fec_key: 'null',
+                max: 1,
+                step: 1,
+                unit: 'bool',
+                on_set:(v,hz) => this.set_null(v,hz),
+            }),
+        ]
     }
     input(stream) {
         this.usual_input(stream)
+
         if (stream instanceof AudioNode) {
             // this thing doesn't allow connections from it
             this.outputNode ||= this.AC.createMediaStreamDestination()
             stream.connect(this.outputNode)
             // but provides a .stream to record or transmit
-            this.output = this.outputNode.stream
-            
+            this.transmission = this.outputNode.stream
+
+            // < proactively check that gets picked up in have_output() within 400ms?
+        }
+        else {
+            throw erring(`Transmit type ${stream}`)
+        }
+
+        // and simply pass thing along
+        this.output = stream
+        this.check_wiring('just_did_input')
+    }
+    set_null(v) {
+        if (v) {
+            // < yoink the streams from...
+        }
+        else {
+            // < publish the streams to certain par...
+        }
+        console.log(`Transmit? ${v}`)
+    }
+}
+
+export class CookedStream extends AudioEffectoid {
+    constructor(opt) {
+        super({order:999, ...opt})
+    }
+    outputNode ?:AudioNode
+    input(stream) {
+        this.usual_input(stream)
+        if (stream instanceof AudioNode) {
+            // nobody needs a stream from Cooked since Transmit
             // a node   (of our own, wrt disconnect_all_nodes)
             //  to connect to AC.destination
+            // < do we ever get here without also going to par.have_output()
             // a Gain is the most generic type of AudioNode
-            this.lastNode ||= this.AC.createGain(stream);
-            stream.connect(this.lastNode)
+            this.outputNode ||= this.AC.createGain(stream);
+            stream.connect(this.outputNode)
         }
         else if (stream instanceof MediaStream) {
             // the only effect?
             this.output = stream
             // make able to connect to AC.destination
-            this.lastNode = this.AC.createMediaStreamSource(stream);
+            this.outputNode = this.AC.createMediaStreamSource(stream);
         }
         else {
             throw erring("CookedStream type "+stream)
@@ -343,45 +372,6 @@ export class Delaysagne extends AudioEffectoid {
     // < basically where to do speed-up and slow-down to adjust stream buffer|latency?
 }
 
-// < Streaming itself
-export class Transmit extends AudioEffectoid {
-    null = 1 // ms
-    constructor(opt) {
-        super({order:7, ...opt})
-        this.controls = [
-            new AudioControl({
-                fec: this,
-                fec_key: 'null',
-                max: 1,
-                step: 1,
-                unit: 'bool',
-                on_set:(v,hz) => this.set_null(v,hz),
-            }),
-        ]
-    }
-    input(stream) {
-        // for all par that arrive
-        this.par.party.get_localStream = () => {
-            debugger
-            return stream
-        }
-
-        // and simply pass along
-        this.stream = stream
-        this.output = stream
-        this.check_wiring('just_did_input')
-    }
-    set_null(v) {
-        if (v) {
-            // < yoink the streams from...
-        }
-        else {
-            // < publish the streams to certain par...
-        }
-        console.log(`Transmit? ${v}`)
-    }
-}
-
 
 
 
@@ -462,7 +452,7 @@ export class Gainorator extends AudioGainEffectoid {
 
         // Create analyser node for metering
         this.analyserNode = this.AC.createAnalyser();
-        this.analyserNode.fftSize = 64;
+        this.analyserNode.fftSize = 32;
         this.bufferLength = this.analyserNode.frequencyBinCount;
         this.dataArray = new Uint8Array(this.bufferLength);
     }

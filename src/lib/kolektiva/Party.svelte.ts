@@ -67,6 +67,7 @@ class GoodTime {
         this.store_config(config)
 
     }
+
 }
 
 
@@ -113,6 +114,23 @@ export class Party extends GoodTime {
     audioContext
     // checked when the above is first got
     wants_audio_permission?:Function = $state()
+    get AC():AudioContext {
+        let AC = this.audioContext ||= new AudioContext()
+        // will resume playback once unsuspended
+        // < test this
+        // < what does "no audio data is lost" mean and how should we approach catch up on being behind the ideal 20ms or so latency
+        if (AC.state === 'suspended') {
+            this.wants_audio_permission = async () => {
+                await AC.resume()
+                if (AC.state === 'suspended') {
+                    throw "still suspended after wants_audio_permission"
+                }
+                delete this.wants_audio_permission
+            }
+        }
+        if (!AC) throw "!AC"
+        return AC
+    }
 
     // to sometimes log your _D(name,...)
     //  set (name =~ /^(\w+)/)[0] to true in here:
