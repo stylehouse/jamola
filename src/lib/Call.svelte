@@ -276,7 +276,7 @@
     // < flip on|off video
     const constraints = {
         audio: {
-            echoCancellation: false,
+            echoCancellation: true,
             noiseSuppression: false,
             autoGainControl: true,
         },
