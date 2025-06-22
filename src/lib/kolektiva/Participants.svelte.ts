@@ -1,7 +1,9 @@
 import { parRecorder } from "$lib/recording"
 import type { Party } from "./Party.svelte"
 import type { Paring } from "./Peering.svelte"
-import { AudioEffectoid, CookedStream, FreshStream, Gainorator, Gaintrol } from "$lib/audio.svelte"
+
+import type { AudioEffectoid } from "$lib/audio/audio.svelte"
+import { CookedStream, FreshStream, Gainorator, Gaintrol } from "$lib/audio/effects.svelte"
 import { erring, userAgent } from "$lib/Y"
 import { setupSharingCourtshipHandlers, Sharing } from "./Sharing.svelte"
 

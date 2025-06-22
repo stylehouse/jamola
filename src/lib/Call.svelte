@@ -4,7 +4,7 @@
     import { parRecorder,retryRecordingUploads } from "$lib/recording";
     import YourName from "./YourName.svelte";
     import YourTitle from "./YourTitle.svelte";
-    import { CookedStream, Delaysagne, FreshStream, Gainorator, Gaintrol, Transmit } from "./audio.svelte";
+    import { CookedStream, Delaysagne, FreshStream, Gainorator, Gaintrol, Transmit } from "./audio/effects.svelte";
     import { erring, oncer, retryUntil, throttle, userAgent } from "./Y";
     import { Party } from "./kolektiva/Party.svelte";
     import Participants from "./ui/Participants.svelte";
