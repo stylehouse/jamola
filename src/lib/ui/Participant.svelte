@@ -1,6 +1,6 @@
 <script lang="ts">
     import Partool from "./Partool.svelte";
-import Rack from "./Rack.svelte";
+    import Rack from "./Rack.svelte";
     import Sharing from "./Sharing.svelte";
     
     let { par } = $props();
