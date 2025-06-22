@@ -1,13 +1,14 @@
 <script lang="ts">
-    let { gainorator, debug = false } = $props();
+    let { fec, debug = false } = $props();
     
-    let volumeLevel = $derived(gainorator.volumeLevel);
-    let peakLevel = $derived(gainorator.peakLevel);
+    let volumeLevel = $derived(fec.volumeLevel);
+    let peakLevel = $derived(fec.peakLevel);
     
     // Debug logging to track the drift issue
     $effect(() => {
-        if (debug) {
-            console.log(`[VolumeMeter Debug] volumeLevel: ${volumeLevel}, peakLevel: ${peakLevel}, gain: ${gainorator.gain?.value || 'N/A'}`);
+        if (0 && debug) {
+            console.log(`[VolumeMeter Debug] volumeLevel: ${volumeLevel},`
+                +` peakLevel: ${peakLevel}, gain: ${fec.gain?.value || 'N/A'}`);
         }
     });
 </script>
@@ -17,7 +18,7 @@
         <div class="debug-info">
             <small>vol: {Math.round(volumeLevel * 1000) / 1000}</small>
             <small>peak: {Math.round(peakLevel * 1000) / 1000}</small>
-            <small>gain: {Math.round((gainorator.gain?.value || 0) * 1000) / 1000}</small>
+            <small>gain: {Math.round((fec.gainValue || 0) * 1000) / 1000}</small>
         </div>
     {/if}
     

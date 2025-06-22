@@ -1,5 +1,5 @@
 <script lang="ts">
-    import Knob from "./Knob.svelte";
+    import Knob from "$lib/ui/Knob.svelte";
     let {con} = $props()
     let Knob_props = $derived(con.ui_version && con.Knob_props)
 </script>

@@ -1,5 +1,6 @@
 <script lang="ts">
     import RackFecCon from "./RackFecCon.svelte";
+    import VolumeMeter from "./VolumeMeter.svelte";
     let {fec} = $props()
 </script>
 
@@ -17,6 +18,11 @@
     {#each fec.controls as con (con.fec_key)}
         <RackFecCon {con}></RackFecCon>
     {/each}
+
+    {#if fec.volumeLevel != null}
+        <VolumeMeter {fec} debug={true} />
+    {/if}
+
 
 </span>
 

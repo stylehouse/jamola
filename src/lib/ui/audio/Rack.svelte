@@ -1,6 +1,5 @@
 <script lang="ts">
     import RackFec from "./RackFec.svelte";
-    import VolumeMeter from "./audio/VolumeMeter.svelte";
 
     let {par} = $props()
 
@@ -17,16 +16,6 @@
         >{/if}
     {#if latency}<span class="bitrate latency">{latency} ms</span
         >{/if}
-
-    {#if par.gain}
-        <VolumeMeter gainorator={par.gain} debug={true} />
-    {/if}
-    {#if par.autogain}
-        <VolumeMeter gainorator={par.autogain} debug={true} />
-    {/if}
-    {#if par.alsogain}
-        <VolumeMeter gainorator={par.alsogain} debug={true} />
-    {/if}
 
 <!-- all the effects themselves, to be verbose -->
         {#each par.effects as fec}
