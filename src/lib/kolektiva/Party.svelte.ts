@@ -140,10 +140,14 @@ export class Party extends GoodTime {
         super()
     }
 
+
     singularise() {
         let was = window.party_singleton 
         if (was) was.stop()
         window.party_singleton = this
+    }
+    is_usurped() {
+        return window.party_singleton && this != window.party_singleton
     }
     start() {
         this.peering?.stop()

@@ -2,8 +2,13 @@
     import Partool from "./Partool.svelte";
     import Rack from "./audio/Rack.svelte";
     import Sharing from "./Sharing.svelte";
+    import { onDestroy } from "svelte";
     
     let { par } = $props();
+    onDestroy(() => {
+        // < doesn't work (leaves effects undestroyed?)
+        par.drop_effects()
+    })
     
     async function tog_ftp() {
         // if you await start_sharing() you get "must be handling user gesture" errors

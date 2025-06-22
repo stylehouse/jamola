@@ -13,6 +13,8 @@
     let volDB = $derived(rnd(volumeLevel > 0 ? amplitudeToDB(volumeLevel) : -Infinity));
     let peakDB = $derived(rnd(peakLevel > 0 ? amplitudeToDB(peakLevel) : -Infinity));
     let gainDB = $derived(rnd(fec.gainValue ? amplitudeToDB(fec.gainValue) : -Infinity));
+
+    let stable = $derived(((fec.stableTime || 0)/1000).toFixed(2))
     
 </script>
 
@@ -22,7 +24,10 @@
             <small>gain: {gainDB}dB</small>
             {#if isAutoGain}
                 <small>target: {fec.targetPeakLevel}dB</small>
-                <small>stable: {fec.stableTime || 0}ms</small>
+                <small>stable: {stable}s</small>
+                <small>peak: {fec.recentPeak}dB</small>
+                <small>diff: {fec.diff}dB</small>
+                <small>ratio: {fec.ratio}</small>
             {/if}
             <small>vol: {volDB}dB</small>
         </div>
@@ -78,7 +83,7 @@
     }
     
     .debug-info {
-        display: flex;
+        display: inline-block;
         gap: 0.5em;
         font-size: 0.7em;
         color: #2c0202;

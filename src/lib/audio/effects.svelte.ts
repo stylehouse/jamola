@@ -1,7 +1,7 @@
 
 
 
-import { erring } from "$lib/Y";
+import { erring, throttle } from "$lib/Y";
 import { AudioEffectoid,AudioControl,levelToVolumeLevel, dbToAmplitude, amplitudeToDB } from "./audio.svelte";
 
 
@@ -222,7 +222,7 @@ export class Gainorator extends AudioGainEffectoid {
     // goes way up
     max = 12;
     // looks at the signal after gaining
-    private analyserNode: AnalyserNode | null = null;
+    analyserNode: AnalyserNode | null = null;
 
     // Stores to track volume and peak levels
     public volumeLevel = $state(0);
@@ -231,7 +231,7 @@ export class Gainorator extends AudioGainEffectoid {
     private dataArray: Uint8Array;
     private bufferLength: number;
     private meterUpdateId: number
-    signal_sample = $state();
+    public signal_sample = $state();
 
     constructor(opt) {
         super({order:12, ...opt})
@@ -243,7 +243,7 @@ export class Gainorator extends AudioGainEffectoid {
 
         // Create analyser node for metering
         this.analyserNode = this.AC.createAnalyser();
-        this.analyserNode.fftSize = 32;
+        this.analyserNode.fftSize = 256;
         this.bufferLength = this.analyserNode.frequencyBinCount;
         this.dataArray = new Uint8Array(this.bufferLength);
     }
@@ -270,26 +270,14 @@ export class Gainorator extends AudioGainEffectoid {
         const meterUpdate = () => {
             if (!this.analyserNode) return
             cancelAnimationFrame(this.meterUpdateId);
+            if (this.par.party.is_usurped()) return
 
-            // Get volume data
             this.analyserNode.getByteTimeDomainData(this.dataArray);
             this.signal_sample = this.dataArray.slice(0,8)
 
-            // Calculate RMS volume
-            if (this.dataArray.length != this.bufferLength) throw "lengths"
-            let sum = 0;
-            Array.from(this.dataArray).map(value => {
-                value = (value - 128) / 128
-                sum += value * value
-            })
-            const rms = Math.sqrt(sum / this.bufferLength);
+            this.calc_peakLevel()
+            this.calc_volumeLevel()
             
-            // Update volume level (0-1 range)
-            // Raw RMS calculation typically produces values between 0 and ~0.5
-            // Multiplying by 2 stretches this to a 0-1 range, which is more useful for UI representation
-            let level = Math.min(rms * 2, 1);
-            // Scale logarithmically, so smaller signals are more visible
-            this.volumeLevel = levelToVolumeLevel(level)
 
             // Check for peak (clipping)
             const peak = Math.max(...this.dataArray) / 255;
@@ -306,7 +294,43 @@ export class Gainorator extends AudioGainEffectoid {
         };
         this.meterUpdateId = requestAnimationFrame(meterUpdate);
     }
-
+    // Get volume data
+    calc_peakLevel() {
+        let maxAbsoluteValue = 0;
+        for (let i = 0; i < this.bufferLength; i++) {
+            // Normalize to -1 to 1 range
+            const value = (this.dataArray[i] - 128) / 128;
+            maxAbsoluteValue = Math.max(maxAbsoluteValue, Math.abs(value));
+        }
+        let nextMostValue = 0
+        for (let i = 0; i < this.bufferLength; i++) {
+            // Normalize to -1 to 1 range
+            const value = (this.dataArray[i] - 128) / 128;
+            if (value == maxAbsoluteValue) continue
+            nextMostValue = Math.max(nextMostValue, Math.abs(value));
+        }
+        if (nextMostValue * 1.5 > maxAbsoluteValue) {
+            // not a fluke
+            this.peakLevel = maxAbsoluteValue
+        }
+    }
+    // Calculate RMS volume
+    calc_volumeLevel() {
+        if (this.dataArray.length != this.bufferLength) throw "lengths"
+        let sum = 0;
+        Array.from(this.dataArray).map(value => {
+            value = (value - 128) / 128
+            sum += value * value
+        })
+        const rms = Math.sqrt(sum / this.bufferLength);
+        
+        // Update volume level (0-1 range)
+        // Raw RMS calculation typically produces values between 0 and ~0.5
+        // Multiplying by 2 stretches this to a 0-1 range, which is more useful for UI representation
+        let level = Math.min(rms * 2, 1);
+        // Scale logarithmically, so smaller signals are more visible
+        this.volumeLevel = levelToVolumeLevel(level)
+    }
 
     destroy() {
         // Call base class destroy to handle node disconnection
@@ -326,21 +350,21 @@ export class Gainorator extends AudioGainEffectoid {
 // gain with self-turning knob
 export class AutoGainorator extends Gainorator {
     // Tracking gain adjustments and state
-    targetPeakLevel = -4; // Target peak level in dB
+    targetPeakLevel = $state(-4); // Target peak level in dB
     private silenceThreshold = -50; // dB threshold for silence
 
-    private gainUpRate = 0.02; // Slow gain increase
-    private gainDownRate = 0.3; // Fast gain decrease
-    private stableTime = 0; // Time spent near target level
+    private gainUpRate = 0.3; // Slow gain increase
+    private gainDownRate = 0.9; // Fast gain decrease
+    private stableTime = $state(0); // Time spent near target level
     private lastAdjustmentTime = 0;
     private stabilizationPeriod = 3000; // 3 seconds to stabilize
 
     // stretch of time to remember the signal being loud
     private memoryQueue: Array<{peakDB: number, timestamp: number}> = []; 
-    memoryTime = 12; // how long ago
+    memoryTime = $state(2); // how long ago
 
-    private maxGain = 10; // Prevent excessive amplification
-    private minGain = 0.1; // Prevent complete silence
+    private maxGain = 19; // Prevent excessive amplification
+    private minGain = 0.01; // Prevent complete silence
 
     constructor(opt) {
         super({order:13, ...opt})
@@ -359,29 +383,33 @@ export class AutoGainorator extends Gainorator {
                 fec: this,
                 min: 0,
                 max: 22,
-                fec_key: 'mem',
-                name: 'memoryTime',
+                fec_key: 'memoryTime',
+                name: 'mem',
                 on_set:(v,hz) => this.set_gain(v,hz),
             }),
         )
         this.gainNode.gain.value = 1; // Start with unity gain
     }
 
+    // < using... some better loudness metric
+    //    with maths such that we can be sure of our gain
+    //    rather than constantly measuring how it is doing
+    //   
     // Process incoming audio stream, to the analyser first
     //  ie we analyse what we haven't played with
-    input(stream: MediaStream) {
-        this.input_to_Node(stream,this.analyserNode)
+    // input(stream: MediaStream) {
+    //     this.input_to_Node(stream,this.analyserNode)
 
-        this.analyserNode.connect(this.gainNode);
+    //     this.analyserNode.connect(this.gainNode);
 
-        // this.output_Node(this.analyserNode)
-        this.output = this.gainNode
+    //     // this.output_Node(this.analyserNode)
+    //     this.output = this.gainNode
 
-        // Start metering
-        this.startMetering();
-        // Go on inputting
-        this.check_wiring('just_did_input')
-    }
+    //     // Start metering
+    //     this.startMetering();
+    //     // Go on inputting
+    //     this.check_wiring('just_did_input')
+    // }
 
     // hook into super|Gainorator.startMetering()
     meterings = 0
@@ -395,16 +423,9 @@ export class AutoGainorator extends Gainorator {
 
     private cleanMemoryQueue() {
         const currentTime = performance.now();
-        const cutoffTime = currentTime - this.memoryTime;
-        
+        const cutoffTime = currentTime - (this.memoryTime * 1000);
         // Remove entries older than memoryTime
         while (this.memoryQueue.length > 0 && this.memoryQueue[0].timestamp < cutoffTime) {
-            this.memoryQueue.shift();
-        }
-        
-        // If queue is still too long, remove two oldest entries
-        if (this.memoryQueue.length > this.memoryTime / 100) { // Rough estimate of max reasonable entries
-            this.memoryQueue.shift();
             this.memoryQueue.shift();
         }
     }
@@ -414,9 +435,16 @@ export class AutoGainorator extends Gainorator {
         return Math.max(...this.memoryQueue.map(entry => entry.peakDB));
     }
     
+    recentPeak = $state()
+    set_gain_throttled:Function
+    set_gain_last:number
     private adjustGain() {
         const currentTime = performance.now();
-        const peakDB = amplitudeToDB(this.peakLevel);
+        // < using... some better loudness metric
+        // const peakDB = amplitudeToDB(this.peakLevel);
+        const peakDB = amplitudeToDB(this.volumeLevel);
+        // startup anomaly
+        if (!this.memoryQueue.length && !peakDB) return
 
         // Add current peak to memory queue
         this.memoryQueue.push({peakDB, timestamp: currentTime});
@@ -427,44 +455,61 @@ export class AutoGainorator extends Gainorator {
         const currentGain = this.gainNode.gain.value;
         
         // Silence detection
+        console.log(`the Peak: ${peakDB.toFixed(1)}dB `
+            +`\t Memory: ${this.recentPeak}dB *${this.memoryQueue.length}`)
         if (peakDB < this.silenceThreshold) {
-            console.log(`🔇 SILENCE: ${peakDB.toFixed(2)}dB - SKIPPING`);
             return;
         }
 
         // Check recent memory for loud signals
-        const recentMaxPeak = this.getRecentMaxPeak();
-        const shouldConsiderMemory = recentMaxPeak > this.targetPeakLevel;
-        
-        // Use recent max if it's louder than current and above target
-        const effectivePeak = shouldConsiderMemory ? 
-            Math.max(peakDB, recentMaxPeak) : peakDB;
-        const effectivePeakAmplitude = dbToAmplitude(effectivePeak);
+        //  including now
+        this.recentPeak = this.getRecentMaxPeak().toFixed(1)
 
+
+        let diff = this.targetPeakLevel - this.recentPeak
+        this.diff = diff.toFixed(1)
         // Calculate ideal gain
-        let newGain = currentGain * (targetAmplitude / this.peakLevel);
+        let ratio = this.targetPeakLevel / this.recentPeak
+        this.ratio = ratio.toFixed(1)
+        let newGain = currentGain / ratio;
         
-        // Determine if we're turning gain up or down
-        const needsReduction = effectivePeak > this.targetPeakLevel;
-        const adjustmentRate = needsReduction ? this.gainDownRate : this.gainUpRate;
-        
+        // if it's shooting down, let it change fast
+        const adjustmentRate = newGain * 1.1 < currentGain
+            ? this.gainDownRate
+            : this.gainUpRate
+
         // Apply asymmetric smoothing
         const smoothedGain = currentGain + (newGain - currentGain) * adjustmentRate;
-        newGain = smoothedGain;
+        newGain = smoothedGain.toFixed(2);
         
         // Clamp gain to safe limits
         newGain = Math.max(this.minGain, Math.min(newGain, this.maxGain));
 
-        console.log(`🎚️ ${needsReduction ? '📉 DOWN' : '📈 UP'}: ${currentGain.toFixed(3)} → ${newGain.toFixed(3)} | Peak: ${peakDB.toFixed(1)}dB | Memory: ${recentMaxPeak.toFixed(1)}dB`);
+        // console.log(`🎚️ ${currentGain.toFixed(3)} →` ${newGain.toFixed(3)} `
+        // +`| Peak: ${peakDB.toFixed(1)}dB | Memory: ${this.recentPeak.toFixed(1)}dB`);
 
         // Update gain
         if (this.controls[0].name != 'gain') throw "!con:gain"
-        this.controls[0].push(newGain)
+
+        this.set_gain_throttled ||= throttle(
+            (v) => {
+                if (!this.analyserNode) return // destroy()ed
+                this.controls[0].push(v)
+            },
+            450
+        )
+        if (this.set_gain_last != newGain) {
+            this.set_gain_last = newGain
+            this.set_gain(newGain)
+            // for the ui
+            this.set_gain_throttled(newGain)
+        }
+        
         
         // Track stabilization
-        const errorDB = Math.abs(effectivePeak - this.targetPeakLevel);
-        if (errorDB < 1) {
-            this.stableTime += currentTime - this.lastAdjustmentTime;
+        const errorDB = Math.abs(this.recentPeak - this.targetPeakLevel);
+        if (errorDB < 3) {
+            this.stableTime += (currentTime - this.lastAdjustmentTime);
         } else {
             this.stableTime = 0;
         }
