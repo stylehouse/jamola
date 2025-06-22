@@ -258,7 +258,7 @@
         par.gain = new Gainorator({par})
 
         if (par.local) {
-            // par.delay = new Delaysagne({par})
+            par.delay = new Delaysagne({par})
             // < can't remember how to wire up a passthrough effect
             //   wants to have a MediaStream, so transmits from CookedStream
             par.Transmit = new Transmit({par})

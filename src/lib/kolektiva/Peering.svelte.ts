@@ -314,6 +314,10 @@ export class Peering {
             //  = receiver of the first offer = older non-joining peer
             ing = await this.createPeer(peerId,false);
         }
+        else {
+            // all par disappear when
+            debugger
+        }
         
         try {
             // this part is common with handleNegotiationNeeded()  
@@ -556,10 +560,18 @@ export class Peering {
             if (offerCollision) {
                 // we are the polite peer
                 console.log(`${ing} Handling colliding offer politely`)
-                await Promise.all([
-                    ing.pc.setLocalDescription({ type: 'rollback' }),
-                    ing.pc.setRemoteDescription(offer)
-                ]);
+                
+                // await ing.pc.setLocalDescription({ type: 'rollback' })
+                // await ing.pc.setRemoteDescription(offer)
+                // await new Promise((resolve) => {
+                //     setTimeout(async () => {
+                        await Promise.all([
+                            ing.pc.setLocalDescription({ type: 'rollback' }),
+                            ing.pc.setRemoteDescription(offer)
+                        ]);
+                //         resolve()
+                //     },230)
+                // })
             } else {
                 await ing.pc.setRemoteDescription(offer);
             }

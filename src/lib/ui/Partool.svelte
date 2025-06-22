@@ -1,7 +1,7 @@
 <script lang="ts">
     let {par} = $props();
     function Hi() {
-        console.log("Hi",par.gain.output)
+        console.log("Hi",par)
         return console.log("Hi",par.cooked)
         let stream = par.gain.output
         const track = stream.getTracks()[0];

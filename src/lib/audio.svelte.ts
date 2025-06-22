@@ -387,13 +387,14 @@ export class AudioGainEffectoid extends AudioEffectoid {
         (this.controls ||= []).push(
             new AudioControl({
                 fec: this,
+                max: this.max,
                 fec_key: 'gainValue',
                 name: 'gain',
                 on_set:(v,hz) => this.set_gain(v,hz),
             })
         )
         this.gainNode = this.AC.createGain();
-        this.gainNode.gain.value = 0.85;
+        this.gainNode.gain.value = 1;
     }
 
     // Set gain level
@@ -430,6 +431,8 @@ export class Gaintrol extends AudioGainEffectoid {
 
 // gain with metering
 export class Gainorator extends AudioGainEffectoid {
+    // goes way up
+    max = 12;
     // looks at the signal after gaining
     private analyserNode: AnalyserNode | null = null;
 
@@ -448,7 +451,6 @@ export class Gainorator extends AudioGainEffectoid {
 
     Gainorator_init() {
         this.init_gain()
-        this.gainNode.gain.value = 1;
 
         // Create analyser node for metering
         this.analyserNode = this.AC.createAnalyser();
@@ -508,7 +510,7 @@ export class Gainorator extends AudioGainEffectoid {
             setTimeout(() => {
                 // Continue metering
                 this.meterUpdateId = requestAnimationFrame(meterUpdate);
-            }, 150)
+            }, 250)
         };
         this.meterUpdateId = requestAnimationFrame(meterUpdate);
     }
