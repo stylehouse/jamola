@@ -215,6 +215,16 @@ export class AudioControl {
         return [this.fec.par,this.fec,this]
     }
 
+    // bump to resync ui from our state
+    //  we are working on values we can't assume are $state()
+    //  but hardly need to read from unless we re-read_config()
+    // you should not be calling Knob_props too often
+    ui_version = $state(1)
+    // set from config load or elsewhere
+    push(value) {
+        this.set(value)
+        this.ui_version++
+    }
     set(value) {
         this.fec[this.fec_key] = value
         // may tell the *Node to adjust
@@ -230,14 +240,8 @@ export class AudioControl {
     read_config() {
         let v = this.fec.par.party.get_forever(this.forever_key)
         if (v != null) {
-            this.set(v)
-            this.ui_version++
+            this.push(v)
         }
     }
-    // bump to resync ui from our state
-    //  we are working on values we can't assume are $state()
-    //  but hardly need to read from unless we re-read_config()
-    // you should not be calling Knob_props too often
-    ui_version = $state(1)
 }
 

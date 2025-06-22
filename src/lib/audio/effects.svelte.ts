@@ -301,7 +301,7 @@ export class Gainorator extends AudioGainEffectoid {
             setTimeout(() => {
                 // Continue metering
                 this.meterUpdateId = requestAnimationFrame(meterUpdate);
-            }, 50)
+            }, 250)
         };
         this.meterUpdateId = requestAnimationFrame(meterUpdate);
     }
@@ -321,6 +321,7 @@ export class Gainorator extends AudioGainEffectoid {
     }
 }
 
+//#region autogain
 // gain with self-turning knob
 export class AutoGainorator extends Gainorator {
     // Tracking gain adjustments and state
@@ -334,7 +335,7 @@ export class AutoGainorator extends Gainorator {
     private minGain = 0.1; // Prevent complete silence
 
     constructor(opt) {
-        super(opt);
+        super({order:13, ...opt})
         if (!this.name) {
             console.error(`didn't call the AudioEffectoid constructor for ${this.par} `)
         }
@@ -345,11 +346,12 @@ export class AutoGainorator extends Gainorator {
     meterings = 0
     on_metering() {
         // Gain adjustment logic
-        if (meterings % 1000) {
-            console.log("Did AutoGainorator.on_metering!")
+        if (!this.meterings++ % 11) {
+            console.log("Did 11 AutoGainorator.on_metering! ")
         }
         this.adjustGain();
     }
+
     private adjustGain() {
         // AI says:
         //  performance.now() provides a high-resolution timestamp
@@ -388,7 +390,9 @@ export class AutoGainorator extends Gainorator {
         newGain = Math.max(this.minGain, Math.min(newGain, this.maxGain));
 
         // Update gain
-        this.gainNode.gain.setValueAtTime(newGain, this.AC.currentTime);
+        if (this.controls[0].name != 'gain') throw "!con:gain"
+        this.controls[0].push(newGain)
+        console.log("Did adjustGain! ")
         
         // Track stabilization
         if (Math.abs(peakDB - this.targetPeakLevel) < 1) {

@@ -4,7 +4,7 @@
     import { parRecorder,retryRecordingUploads } from "$lib/recording";
     import YourName from "./YourName.svelte";
     import YourTitle from "./YourTitle.svelte";
-    import { CookedStream, Delaysagne, FreshStream, Gainorator, Gaintrol, Transmit } from "./audio/effects.svelte";
+    import { AutoGainorator, CookedStream, Delaysagne, FreshStream, Gainorator, Gaintrol, Transmit } from "./audio/effects.svelte";
     import { erring, oncer, retryUntil, throttle, userAgent } from "./Y";
     import { Party } from "./kolektiva/Party.svelte";
     import Participants from "./ui/Participants.svelte";
@@ -256,6 +256,8 @@
         // < the microphone domesticator
         // levels measurer and manual control
         par.gain = new Gainorator({par})
+        par.autogain = new AutoGainorator({par})
+        par.alsogain = new Gainorator({order:14,par})
 
         if (par.local) {
             par.delay = new Delaysagne({par})
