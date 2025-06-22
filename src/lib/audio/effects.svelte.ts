@@ -1,6 +1,7 @@
 
 
 
+import { erring } from "$lib/Y";
 import { AudioEffectoid,AudioControl,levelToVolumeLevel, dbToAmplitude, amplitudeToDB } from "./audio.svelte";
 
 
@@ -325,21 +326,61 @@ export class Gainorator extends AudioGainEffectoid {
 // gain with self-turning knob
 export class AutoGainorator extends Gainorator {
     // Tracking gain adjustments and state
-    private targetPeakLevel = -9; // Target peak level in dB
+    targetPeakLevel = -4; // Target peak level in dB
     private silenceThreshold = -50; // dB threshold for silence
-    private gainAdjustmentRate = 0.1; // Gentle gain adjustment speed
+
+    private gainUpRate = 0.02; // Slow gain increase
+    private gainDownRate = 0.3; // Fast gain decrease
     private stableTime = 0; // Time spent near target level
     private lastAdjustmentTime = 0;
     private stabilizationPeriod = 3000; // 3 seconds to stabilize
+
+    // stretch of time to remember the signal being loud
+    private memoryQueue: Array<{peakDB: number, timestamp: number}> = []; 
+    memoryTime = 12; // how long ago
+
     private maxGain = 10; // Prevent excessive amplification
     private minGain = 0.1; // Prevent complete silence
 
     constructor(opt) {
         super({order:13, ...opt})
-        if (!this.name) {
-            console.error(`didn't call the AudioEffectoid constructor for ${this.par} `)
-        }
+        if (!this.name) throw erring(`didn't call the AudioEffectoid constructor for ${this.par}`)
+        
+        this.controls.push(
+            new AudioControl({
+                fec: this,
+                min: -42,
+                max: 19,
+                fec_key: 'targetPeakLevel',
+                name: 'target',
+                on_set:(v,hz) => this.set_gain(v,hz),
+            }),
+            new AudioControl({
+                fec: this,
+                min: 0,
+                max: 22,
+                fec_key: 'mem',
+                name: 'memoryTime',
+                on_set:(v,hz) => this.set_gain(v,hz),
+            }),
+        )
         this.gainNode.gain.value = 1; // Start with unity gain
+    }
+
+    // Process incoming audio stream, to the analyser first
+    //  ie we analyse what we haven't played with
+    input(stream: MediaStream) {
+        this.input_to_Node(stream,this.analyserNode)
+
+        this.analyserNode.connect(this.gainNode);
+
+        // this.output_Node(this.analyserNode)
+        this.output = this.gainNode
+
+        // Start metering
+        this.startMetering();
+        // Go on inputting
+        this.check_wiring('just_did_input')
     }
 
     // hook into super|Gainorator.startMetering()
@@ -352,23 +393,34 @@ export class AutoGainorator extends Gainorator {
         this.adjustGain();
     }
 
+    private cleanMemoryQueue() {
+        const currentTime = performance.now();
+        const cutoffTime = currentTime - this.memoryTime;
+        
+        // Remove entries older than memoryTime
+        while (this.memoryQueue.length > 0 && this.memoryQueue[0].timestamp < cutoffTime) {
+            this.memoryQueue.shift();
+        }
+        
+        // If queue is still too long, remove two oldest entries
+        if (this.memoryQueue.length > this.memoryTime / 100) { // Rough estimate of max reasonable entries
+            this.memoryQueue.shift();
+            this.memoryQueue.shift();
+        }
+    }
+
+    private getRecentMaxPeak(): number {
+        if (this.memoryQueue.length === 0) return -Infinity;
+        return Math.max(...this.memoryQueue.map(entry => entry.peakDB));
+    }
+    
     private adjustGain() {
-        // AI says:
-        //  performance.now() provides a high-resolution timestamp
-        //   relative to the page load, measuring wall clock time.
-        //   It's not affected by system clock changes and continues
-        //   to increase even when the page is inactive
-        //   or the system is sleeping
-        //  this.AC.currentTime is of the audio context. It starts
-        //   at zero when the context is created and advances in 
-        //   real-time, but only when the audio context is in the
-        //   "running" state.
-        //  The latter may stutter or pause relative to the former,
-        //   if tab is inactive (!running), audio processing
-        //   interruptions, heavy load.
-        //   
         const currentTime = performance.now();
         const peakDB = amplitudeToDB(this.peakLevel);
+
+        // Add current peak to memory queue
+        this.memoryQueue.push({peakDB, timestamp: currentTime});
+        this.cleanMemoryQueue();
 
         // Calculate needed gain adjustment
         const targetAmplitude = dbToAmplitude(this.targetPeakLevel);
@@ -376,26 +428,42 @@ export class AutoGainorator extends Gainorator {
         
         // Silence detection
         if (peakDB < this.silenceThreshold) {
-            // If signal is very low, don't amplify
+            console.log(`🔇 SILENCE: ${peakDB.toFixed(2)}dB - SKIPPING`);
             return;
         }
 
-        // Calculate gain needed to reach target
+        // Check recent memory for loud signals
+        const recentMaxPeak = this.getRecentMaxPeak();
+        const shouldConsiderMemory = recentMaxPeak > this.targetPeakLevel;
+        
+        // Use recent max if it's louder than current and above target
+        const effectivePeak = shouldConsiderMemory ? 
+            Math.max(peakDB, recentMaxPeak) : peakDB;
+        const effectivePeakAmplitude = dbToAmplitude(effectivePeak);
+
+        // Calculate ideal gain
         let newGain = currentGain * (targetAmplitude / this.peakLevel);
         
-        // Smooth out gain changes
-        newGain = currentGain + (newGain - currentGain) * this.gainAdjustmentRate;
+        // Determine if we're turning gain up or down
+        const needsReduction = effectivePeak > this.targetPeakLevel;
+        const adjustmentRate = needsReduction ? this.gainDownRate : this.gainUpRate;
         
-        // Clamp gain to prevent extreme amplification
+        // Apply asymmetric smoothing
+        const smoothedGain = currentGain + (newGain - currentGain) * adjustmentRate;
+        newGain = smoothedGain;
+        
+        // Clamp gain to safe limits
         newGain = Math.max(this.minGain, Math.min(newGain, this.maxGain));
+
+        console.log(`🎚️ ${needsReduction ? '📉 DOWN' : '📈 UP'}: ${currentGain.toFixed(3)} → ${newGain.toFixed(3)} | Peak: ${peakDB.toFixed(1)}dB | Memory: ${recentMaxPeak.toFixed(1)}dB`);
 
         // Update gain
         if (this.controls[0].name != 'gain') throw "!con:gain"
         this.controls[0].push(newGain)
-        console.log("Did adjustGain! ")
         
         // Track stabilization
-        if (Math.abs(peakDB - this.targetPeakLevel) < 1) {
+        const errorDB = Math.abs(effectivePeak - this.targetPeakLevel);
+        if (errorDB < 1) {
             this.stableTime += currentTime - this.lastAdjustmentTime;
         } else {
             this.stableTime = 0;
@@ -403,14 +471,11 @@ export class AutoGainorator extends Gainorator {
 
         this.lastAdjustmentTime = currentTime;
 
-        // Emergency loudness catch
+        // Emergency loudness protection
         if (peakDB > 0) {
-            // Rapid gain reduction if clipping occurs
-            this.gainNode.gain.setValueAtTime(
-                Math.max(currentGain * 0.5, this.minGain), 
-                this.AC.currentTime
-            );
+            const emergencyGain = Math.max(currentGain * 0.3, this.minGain);
+            console.log(`🚨 EMERGENCY! Peak ${peakDB.toFixed(2)}dB - CUTTING to ${emergencyGain.toFixed(4)}`);
+            this.gainNode.gain.setValueAtTime(emergencyGain, this.AC.currentTime);
         }
     }
-
 }
