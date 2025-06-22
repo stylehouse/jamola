@@ -263,10 +263,10 @@
             //   wants to have a MediaStream, so transmits from CookedStream
             par.Transmit = new Transmit({par})
         
+        }
             // how much goes into the mix you hear
             par.vol = new Gaintrol({par})
             par.vol.set_gain(default_volume)
-        }
 
     }
 
@@ -278,7 +278,7 @@
         audio: {
             echoCancellation: true,
             noiseSuppression: false,
-            autoGainControl: true,
+            autoGainControl: false,
         },
         video: false,
     };

@@ -230,6 +230,7 @@ export class Gainorator extends AudioGainEffectoid {
     private dataArray: Uint8Array;
     private bufferLength: number;
     private meterUpdateId: number
+    signal_sample = $state();
 
     constructor(opt) {
         super({order:12, ...opt})
@@ -268,15 +269,18 @@ export class Gainorator extends AudioGainEffectoid {
         const meterUpdate = () => {
             if (!this.analyserNode) return
             cancelAnimationFrame(this.meterUpdateId);
+
             // Get volume data
             this.analyserNode.getByteTimeDomainData(this.dataArray);
-            
+            this.signal_sample = this.dataArray.slice(0,8)
+
             // Calculate RMS volume
+            if (this.dataArray.length != this.bufferLength) throw "lengths"
             let sum = 0;
-            for (let i = 0; i < this.bufferLength; i++) {
-                const value = (this.dataArray[i] - 128) / 128;
-                sum += value * value;
-            }
+            Array.from(this.dataArray).map(value => {
+                value = (value - 128) / 128
+                sum += value * value
+            })
             const rms = Math.sqrt(sum / this.bufferLength);
             
             // Update volume level (0-1 range)
@@ -297,7 +301,7 @@ export class Gainorator extends AudioGainEffectoid {
             setTimeout(() => {
                 // Continue metering
                 this.meterUpdateId = requestAnimationFrame(meterUpdate);
-            }, 250)
+            }, 50)
         };
         this.meterUpdateId = requestAnimationFrame(meterUpdate);
     }

@@ -109,6 +109,7 @@ export class Paring {
         options ||= {}
         const { priority = 'high' } = options;
         if (!this.channel || this.channel.readyState != "open") {
+            if (type == 'latency_ping') return false
             console.error(`${this} channel not open, cannot send message type=${type}`);
             return false;
         }
