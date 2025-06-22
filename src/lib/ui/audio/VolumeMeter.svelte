@@ -1,24 +1,30 @@
+<!-- VolumeMeter.svelte -->
 <script lang="ts">
+    import { amplitudeToDB } from "$lib/audio/audio.svelte";
+    
     let { fec, debug = false } = $props();
     
-    let volumeLevel = $derived(fec.volumeLevel);
-    let peakLevel = $derived(fec.peakLevel);
+    let rnd = (v) => Math.round(v * 1000) / 1000
+    let peakLevel = $derived(fec.peakLevel)
+    let volumeLevel = $derived(rnd(fec.volumeLevel));
+    let isAutoGain = $derived(fec.constructor.name === 'AutoGainorator');
     
-    // Debug logging to track the drift issue
-    $effect(() => {
-        if (0 && debug) {
-            console.log(`[VolumeMeter Debug] volumeLevel: ${volumeLevel},`
-                +` peakLevel: ${peakLevel}, gain: ${fec.gain?.value || 'N/A'}`);
-        }
-    });
+    // Calculate dB values for AutoGain debug
+    let volDB = $derived(rnd(volumeLevel > 0 ? amplitudeToDB(volumeLevel) : -Infinity));
+    let peakDB = $derived(rnd(peakLevel > 0 ? amplitudeToDB(peakLevel) : -Infinity));
+    let gainDB = $derived(rnd(fec.gainValue ? amplitudeToDB(fec.gainValue) : -Infinity));
+    
 </script>
 
 <div class="volume-meter">
     {#if debug}
         <div class="debug-info">
-            <small>vol: {Math.round(volumeLevel * 1000) / 1000}</small>
-            <small>peak: {Math.round(peakLevel * 1000) / 1000}</small>
-            <small>gain: {Math.round((fec.gainValue || 0) * 1000) / 1000}</small>
+            <small>gain: {gainDB}dB</small>
+            {#if isAutoGain}
+                <small>target: {fec.targetPeakLevel}dB</small>
+                <small>stable: {fec.stableTime || 0}ms</small>
+            {/if}
+            <small>vol: {volDB}dB</small>
         </div>
     {/if}
     
@@ -45,11 +51,17 @@
     }
 
     .meter-container {
-        width: 100px;
+        width: 5em;
         height: 30px;
         background-color: #e0e0e0;
         position: relative;
         overflow: hidden;
+    }
+
+    .meter-labels {
+        width:3em;
+        height:2em;
+        position:relative;
     }
 
     .meter-fill {
@@ -69,7 +81,7 @@
         display: flex;
         gap: 0.5em;
         font-size: 0.7em;
-        color: #666;
+        color: #2c0202;
         margin-bottom: 0.2em;
     }
 </style>
