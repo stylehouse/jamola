@@ -205,7 +205,7 @@ export class AudioControl {
             slow: (value) => this.set(value),
             commit: (value) => this.commit(value),
         }
-        console.log(`made props for fec:${this.fec.name} aka ${this.fec} con:${this.name} aka ${this}`);
+        // console.log(`made props for fec:${this.fec.name} aka ${this.fec} con:${this.name} aka ${this}`);
             // < can't write this {this,propos} or big errors
             // {this:this,propos})
         return propos

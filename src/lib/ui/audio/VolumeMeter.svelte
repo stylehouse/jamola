@@ -1,6 +1,7 @@
 <!-- VolumeMeter.svelte -->
 <script lang="ts">
     import { amplitudeToDB } from "$lib/audio/audio.svelte";
+    import ShrinkingNumbers from "./ShrinkingNumbers.svelte";
     
     let { fec, debug = false } = $props();
     
@@ -21,15 +22,15 @@
 <div class="volume-meter">
     {#if debug}
         <div class="debug-info">
-            <small>gain: {gainDB}dB</small>
+            <small>gain: <ShrinkingNumbers v={gainDB} />dB</small>
             {#if isAutoGain}
-                <small>target: {fec.targetPeakLevel}dB</small>
-                <small>stable: {stable}s</small>
-                <small>peak: {fec.recentPeak}dB</small>
-                <small>diff: {fec.diff}dB</small>
+                <small>target: <ShrinkingNumbers v={fec.targetPeakLevel} />dB</small>
+                <small>stable: <ShrinkingNumbers v={stable} />s</small>
+                <small>peak: <ShrinkingNumbers v={fec.recentPeak} />dB</small>
+                <small>diff: <ShrinkingNumbers v={fec.diff} />dB</small>
                 <small>ratio: {fec.ratio}</small>
             {/if}
-            <small>vol: {volDB}dB</small>
+            <small>vol: <ShrinkingNumbers v={volDB} />dB</small>
         </div>
     {/if}
     

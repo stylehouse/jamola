@@ -455,8 +455,6 @@ export class AutoGainorator extends Gainorator {
         const currentGain = this.gainNode.gain.value;
         
         // Silence detection
-        console.log(`the Peak: ${peakDB.toFixed(1)}dB `
-            +`\t Memory: ${this.recentPeak}dB *${this.memoryQueue.length}`)
         if (peakDB < this.silenceThreshold) {
             return;
         }

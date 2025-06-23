@@ -274,7 +274,7 @@
 
     // mainly
     // having no voice-only audio processing is essential for hifi
-    // < high bitrate
+    // < yet the audio quality seems to be broken of late...
     // < flip on|off video
     const constraints = {
         audio: {
