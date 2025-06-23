@@ -363,7 +363,7 @@ export class AutoGainorator extends Gainorator {
     private memoryQueue: Array<{peakDB: number, timestamp: number}> = []; 
     memoryTime = $state(2); // how long ago
 
-    private maxGain = 19; // Prevent excessive amplification
+    private maxGain = 42; // Prevent excessive amplification
     private minGain = 0.01; // Prevent complete silence
 
     constructor(opt) {
@@ -375,6 +375,7 @@ export class AutoGainorator extends Gainorator {
                 fec: this,
                 min: -42,
                 max: 19,
+                step: 0.1,
                 fec_key: 'targetPeakLevel',
                 name: 'target',
                 on_set:(v,hz) => this.set_gain(v,hz),
@@ -434,17 +435,34 @@ export class AutoGainorator extends Gainorator {
         if (this.memoryQueue.length === 0) return -Infinity;
         return Math.max(...this.memoryQueue.map(entry => entry.peakDB));
     }
+    private getRecentMaxPeak_nextHighestPeak(maxPeak): number {
+        if (this.memoryQueue.length === 0) return -Infinity;
+        let done = 0
+        let nextMax = -Infinity
+        this.memoryQueue.slice().reverse().map(entry => {
+            if (done) return
+            if (entry.peakDB == maxPeak) return done = 1
+            nextMax = Math.max(entry.peakDB,nextMax)
+        })
+        return nextMax
+    }
     
+    diff = $state()
+    ratio = $state()
     recentPeak = $state()
     set_gain_throttled:Function
     set_gain_last:number
     private adjustGain() {
         const currentTime = performance.now();
-        // < using... some better loudness metric
-        // const peakDB = amplitudeToDB(this.peakLevel);
-        const peakDB = amplitudeToDB(this.volumeLevel);
+        // Use a combination of peak and RMS levels
+        const peakDB = amplitudeToDB(this.peakLevel);
+        const rmsDB = amplitudeToDB(this.volumeLevel);
+        let loudnessDB = rmsDB
+        // (peakDB + rmsDB + rmsDB) / 3 // weighted
+
         // startup anomaly
-        if (!this.memoryQueue.length && !peakDB) return
+        if (!this.memoryQueue.length && !loudnessDB) return;
+
 
         // Add current peak to memory queue
         this.memoryQueue.push({peakDB, timestamp: currentTime});
@@ -461,7 +479,10 @@ export class AutoGainorator extends Gainorator {
 
         // Check recent memory for loud signals
         //  including now
-        this.recentPeak = this.getRecentMaxPeak().toFixed(1)
+        this.recentPeak = this.getRecentMaxPeak()
+        // mix in some of the next highest peak, in case it was an anomaly
+        loudnessDB = loudnessDB + this.getRecentMaxPeak_nextHighestPeak(this.recentPeak) / 2
+        this.recentPeak = this.recentPeak.toFixed(1)
 
 
         let diff = this.targetPeakLevel - this.recentPeak
