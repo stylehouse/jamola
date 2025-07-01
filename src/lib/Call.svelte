@@ -256,11 +256,11 @@
         // < the microphone domesticator
         // levels measurer and manual control
         par.gain = new Gainorator({par})
-        par.autogain = new AutoGainorator({par})
-        par.alsogain = new Gainorator({order:14,par})
+        // par.autogain = new AutoGainorator({par})
+        // par.alsogain = new Gainorator({order:14,par})
 
-        if (par.local) {
             par.delay = new Delaysagne({par})
+        if (par.local) {
             // < can't remember how to wire up a passthrough effect
             //   wants to have a MediaStream, so transmits from CookedStream
             par.Transmit = new Transmit({par})
@@ -276,14 +276,16 @@
     // having no voice-only audio processing is essential for hifi
     // < yet the audio quality seems to be broken of late...
     // < flip on|off video
-    const constraints = {
-        audio: {
-            echoCancellation: true,
-            noiseSuppression: false,
-            autoGainControl: false,
-        },
-        video: false,
-    };
+    function getUserMedia_constraints() {
+        return {
+            audio: {
+                echoCancellation: (userName == 'Sunbirds' ? false : true),
+                noiseSuppression: false,
+                autoGainControl: false,
+            },
+            video: false,
+        }
+    }
     // find input devices onload
     let possible_audio_input_devices = $state()
     // $inspect("possible_audio_input_devices",possible_audio_input_devices)
@@ -355,6 +357,7 @@
     async function createLocalStream({deviceId,...opt}) {
         // reuse this media options object
         // they might choose a stream, null for default
+        let constraints = getUserMedia_constraints()
         constraints.audio.deviceId = deviceId
         try {
             localStream = await navigator.mediaDevices.getUserMedia(constraints)

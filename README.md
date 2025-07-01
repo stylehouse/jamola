@@ -12,7 +12,26 @@ You can set a title for everyone, which makes everyone's uploads to the server m
 
 The server is a svelte+vite+nodejs webserver, which you can plumb to the web:
 
-# hosting
+## setup
+
+First time,
+
+```bash
+# get such a container
+docker compose build
+# populate your ./node_modules, mounted in the container under /app
+docker run --rm -v .:/app jamola-app:latest npm install"
+```
+
+Thence,
+
+```bash
+docker compose up
+```
+
+If your docker0 interface isnt 172.17.0.1 (so _leproxy_ can reverse to it), edit *docker-compose.yml* and related things until it works.
+
+## hosting
 
 - with eg a duckdns account, for a name, and any of:
 - _theflatrouter/_ describes hosting at home

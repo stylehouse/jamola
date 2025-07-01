@@ -24,7 +24,8 @@
     <div class="participant-content">
         <div class="always_visible_horizontally">
             <div class="parjunk">
-                <span class="theyname">{par.name || par.peerId}</span>
+                <span class="theyname">{par.name}</span>
+                <span style="opacity:0.5;">{par.peerId}</span>
                 {#if par.local}<span class="streamtype">monitor</span>{/if}
                 {#if par.offline}<span class="error">offline</span>{/if}
                 {#if par.constate}<span class="techwhat">{par.constate}</span>{/if}

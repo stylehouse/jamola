@@ -21,7 +21,7 @@ services:
       #  this means any `npm i ...` you make in another environ (eg the host)
       #   will need pushing to the container via package.json, the above RUN npm ci
         #  as part of a $ docker compose up --build
-      - /app/node_modules
+      # - /app/node_modules
       - /app/.svelte-kit
     ports:
       - "172.17.0.1:9090:3000"

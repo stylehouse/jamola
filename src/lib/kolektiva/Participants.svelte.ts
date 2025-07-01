@@ -24,7 +24,7 @@ export class Participant {
     constate = $state()
     // Call
     effects:Array<AudioEffectoid>|undefined = $state()
-    // < tis messy just throwing these on here, but we want them by name sometimes
+    // < tis messy just throwing these on here, but
     // sometimes want to access effects by name
     fresh?:CookedStream|undefined
     // this one triggers the Participant/Rack.svelte to appear
