@@ -1,6 +1,6 @@
 <script>
 
-    import Call from "$lib/view/Call.svelte";
+    import Advanced from "$lib/view/Advanced.svelte";
     let on = $state()
     $effect(() => {
         if (self.navigator) {
@@ -10,7 +10,11 @@
 </script>
 
 
-{#if on}<Call />{/if}
+{#if on}<Advanced />
+{:else}
+Lobing...
+{/if}
+
 
 <style>
     :global(body) {

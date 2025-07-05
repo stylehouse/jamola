@@ -1,7 +1,7 @@
 <script lang="ts">
     import Partool from "./Partool.svelte";
     import Rack from "./audio/Rack.svelte";
-    import Sharing from "./Sharing.svelte";
+    import Sharing from "./ftp/Sharing.svelte";
     import { onDestroy } from "svelte";
     
     let { par } = $props();

@@ -2,13 +2,13 @@
     import { onDestroy, untrack } from "svelte";
     import { Measuring } from "$lib/measuring.svelte";
     import { parRecorder,retryRecordingUploads } from "$lib/recording";
-    import YourName from "./YourName.svelte";
-    import YourTitle from "./YourTitle.svelte";
-    import { AutoGainorator, CookedStream, Delaysagne, FreshStream, Gainorator, Gaintrol, Transmit } from "./audio/effects.svelte";
-    import { erring, oncer, retryUntil, throttle, userAgent } from "./Y";
-    import { Party } from "./kolektiva/Party.svelte";
-    import Participants from "./ui/Participants.svelte";
-    import ErrorLog from "./ui/ErrorLog.svelte";
+    import YourName from "../ui/user/YourName.svelte";
+    import YourTitle from "../ui/user/YourTitle.svelte";
+    import { AutoGainorator, CookedStream, Delaysagne, FreshStream, Gainorator, Gaintrol, Transmit } from "../audio/effects.svelte";
+    import { erring, oncer, retryUntil, throttle, userAgent } from "../Y";
+    import { Party } from "../kolektiva/Party.svelte";
+    import Participants from "../ui/Participants.svelte";
+    import ErrorLog from "../ui/error/ErrorLog.svelte";
     
     let sock = () => party?.socket?.connected && party.socket
     let localStream;
