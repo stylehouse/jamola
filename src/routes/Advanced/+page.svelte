@@ -1,6 +1,6 @@
 <script>
 
-    import Advanced from "$lib/view/Advanced.svelte";
+    import Advanced from "$lib/view/A.svelte";
     let on = $state()
     $effect(() => {
         if (self.navigator) {
