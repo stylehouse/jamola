@@ -1,6 +1,6 @@
 <script>
 
-    import Advanced from "$lib/view/A.svelte";
+    import A from "$lib/view/A.svelte";
     let on = $state()
     $effect(() => {
         if (self.navigator) {
@@ -10,7 +10,7 @@
 </script>
 
 
-{#if on}<Advanced />
+{#if on}<A />
 {:else}
 Lobing...
 {/if}
