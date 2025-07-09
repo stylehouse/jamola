@@ -171,7 +171,8 @@ export class Paring {
         try {
             const view = new Uint8Array(encoded);
             if (view[0] === 98) {  // 'b' character
-                const newlineIndex = Array.from(view).findIndex(byte => byte === 10);
+                const newlineIndex = Array.from(view)
+                    .findIndex(byte => byte === 10); // \n character, which can't exist in JSON
                 if (newlineIndex === -1) throw new Error('Invalid binary message format');
                 
                 const text = new TextDecoder().decode(view.slice(1, newlineIndex));
@@ -287,15 +288,7 @@ export class Peering {
             await this.handleAnswer(peerId, answer);
         })
         this.socket.on('ice-candidate', async ({ candidate, from:peerId }) => {
-            let ing = this.ings.get(peerId);
-            try {
-                await ing.pc.addIceCandidate(candidate);
-            } catch (e) {
-                // Ignore candidates if we're not in the right state
-                if (ing.pc.remoteDescription && ing.pc.remoteDescription.type) {
-                    throw erring("ICE candidate error:", e);
-                }
-            }
+            await this.handleSocketedICECandidate(peerId, candidate);
         });
         // audio-upload may cause these
         this.socket.on('audio-upload-error', async ({ error, filename }) => {
@@ -616,12 +609,25 @@ export class Peering {
     }
 
     // then magically!
+    // these emerge from ing.pc.onicecandidate
     private handleICECandidate(ing: Paring, candidate: RTCIceCandidate) {
         console.log(`${ing} ICE candidate: ${candidate.type} ${candidate.protocol} ${candidate.address||'[redacted]'}:${candidate.port}`);
         this.socket.emit('ice-candidate', {
             targetId: ing.peerId,
             candidate
         });
+    }
+    async handleSocketedICECandidate(peerId, candidate) {
+        console.log(`Socketed ICE candidate:`,candidate);
+        let ing = this.ings.get(peerId);
+        try {
+            await ing.pc.addIceCandidate(candidate);
+        } catch (e) {
+            // Ignore candidates if we're not in the right state
+            if (ing.pc.remoteDescription && ing.pc.remoteDescription.type) {
+                throw erring("ICE candidate error:", e);
+            }
+        }
     }
     
     private updatePeerState(ing: Paring, newState: PeerState) {

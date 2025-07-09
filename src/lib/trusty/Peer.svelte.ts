@@ -49,7 +49,7 @@ export class IdentoCrypto {
 //#endregion
 //#region idento
 // lifecycle-related helpers
-type storableIdento = {pub:string,key:string}
+export type storableIdento = {pub:string,key:string}
 export class Idento extends IdentoCrypto {
     // url bit with a pubkey
     from_location_hash() {
@@ -62,7 +62,7 @@ export class Idento extends IdentoCrypto {
             console.warn("Malformed public key?",mex)
         }
     }
-    to_location_hash({short}) {
+    to_location_hash() {
         window.location.hash = this.pretty_pubkey()
         return window.location.toString()
     }

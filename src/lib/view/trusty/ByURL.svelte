@@ -1,7 +1,8 @@
 <script lang="ts">
     import { Idento } from "$lib/trusty/Peer.svelte";
+    import type { Peerily } from "$lib/trusty/Peerily.svelte";
 
-    let {flo} = $props()
+    let {P}:{P:Peerily} = $props()
     // take someone's invite from the URL
 
     $effect(() => {
@@ -13,36 +14,34 @@
     let link
     async function startup() {
         // yourself
-        flo.Id = Id = new Idento()
-        if (flo.stash.Id) {
-            Id.thaw(flo.stash.Id)
+        if (P.stash.Id) {
+            P.Id.thaw(P.stash.Id)
         }
         else {
             // become someone
-            await Id.generateKeys()
-            flo.stash.Id = Id.freeze()
-            flo.stashed()
+            await P.Id.generateKeys()
+            P.stash.Id = P.Id.freeze()
         }
 
         // the location may be another persons
         Ud = new Idento()
         Ud.from_location_hash()
         // if it's not us
-        if (Ud.publicKey && Ud.pretty_pubkey() != Id.pretty_pubkey()) {
-            flo.seek_Id(Ud)
+        if (Ud.publicKey && Ud.pretty_pubkey() != P.Id.pretty_pubkey()) {
+            P.connect_pubkey(Ud.pretty_pubkey())
         }
         // console.log("Id",Id.freeze())
         // console.log("Ud",Ud)
 
         // location becomes us, so we can share it easily
-        link = Id.to_location_hash({short:true})
+        link = P.Id.to_location_hash()
     }
 
     async function sharing() {
         console.log("Broadcast: ", Id)
         // puts this into the address bar
-        let link = Id.to_location_hash()
-        // QR code, copyable link?
+        let link = P.Id.to_location_hash()
+        // < QR code, copyable link?
     }
 </script>
 

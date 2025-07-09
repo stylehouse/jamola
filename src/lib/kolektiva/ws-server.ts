@@ -4,6 +4,7 @@ import { join, dirname } from 'path';
 import fs from 'fs/promises';
 import path from 'path';
 import { constants } from 'fs';
+import { PeerilySignalingServer } from '../trusty/ws-server/PeerilySignalingServer';
 
 const UPLOAD_DIR = 'uploads'
 
@@ -26,6 +27,8 @@ export const webSocketServer = {
 
 			AudioUploadServer(socket, io)
 			ErrorServer(socket, io)
+
+			PeerilySignalingServer(socket,io)
 		});
 	}
 }

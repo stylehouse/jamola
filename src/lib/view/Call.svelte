@@ -247,7 +247,7 @@
         measuring.handle_latency_pong(par, timestamp);
     }
 
-    // life and times
+    // life and times!!!!
     
 
 
@@ -281,7 +281,7 @@
             audio: {
                 echoCancellation: (userName == 'Sunbirds' ? false : true),
                 noiseSuppression: false,
-                autoGainControl: false,
+                autoGainControl: true,
             },
             video: false,
         }
