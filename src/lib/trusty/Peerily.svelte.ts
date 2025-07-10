@@ -38,10 +38,15 @@ export class Peerily {
     async connect_pubkey(pub) {
         pub = ''+pub
         let con = this.eer.connect(pub)
+        if (!con) {
+            throw "OHNO"
+        }
         con.on('open', () => {
             if (con.peer != pub) debugger
             console.log(`-> connection(${pub})`,con)
             this.a_pier(pub).init(con)
+                // someone has to try con.send() to get it open
+                .say_hello()
         });
         console.log(`connect_pubkey(${pub})`)
     }
@@ -53,57 +58,6 @@ export class Peerily {
             pier = this.peers_by_pub[pub] = new Pier({P:this,pub})
         }
         return pier
-    }
-
-    // await for socket to be connected
-    async wantsock() {
-        if (this.socket.connected) return
-        return new Promise((resolve) => {
-            this.awaits_socket.push(resolve)
-        })
-    }
-
-    emit(pier,type,data={},options={}) {
-        // put in type
-        // < binary mode
-        data = {type, ...data}
-        // become only about data going somewhere
-        // < sign from here
-        let msg = {
-            pub: pier.pub,
-            from: this.Id.pretty_pubkey(),
-            data
-        }
-        this.socket.emit('pub',msg)
-    }
-    unemit(msg) {
-        // < verify it's from there, etc
-        let data = msg.data
-        let pier = this.peers_by_pub[msg.from]
-        if (!pier) {
-            if (data.type == 'connectable') {
-                pier = this.a_pier(msg.from)
-            }
-            else {
-                throw "not our pier"
-            }
-        }
-        // < check this is someone cleared to manipulate us this way
-        this.handleMessage(pier,data,msg)
-    }
-    handleMessage(pier:Pier,data) {
-        const handler = this.handlers[data.type]
-        if (!handler) {
-            return console.warn(`${this} channel !handler for message type:`, data);
-        }
-        handler(pier, data);
-    }
-
-    handlers = {
-        connectable: (pier,data,msg) => {
-            console.log("Make them")
-            pier.Peerify()
-        }
     }
 }
 

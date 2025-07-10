@@ -1,5 +1,6 @@
 <script lang="ts">
     import { Peerily } from "$lib/trusty/Peerily.svelte";
+    import { onDestroy } from "svelte";
     import ByURL from "./trusty/ByURL.svelte";
     import Signal from "./trusty/Signal.svelte";
 
@@ -19,6 +20,9 @@
     let tryit = () => {
         P.connect_pubkey("7c225f82554d67c6")
     }
+    onDestroy(() => {
+        P.eer?.destroy()
+    })
 
 </script>
 

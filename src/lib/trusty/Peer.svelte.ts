@@ -102,13 +102,66 @@ export class Pier {
     constructor(opt) {
         Object.assign(this, opt)
     }
-    emit(type,data={},options={}) {
-        this.P.emit(this,type,data,options)
-    }
     init(con) {
-        console.log(`do stuff`,con)
-        debugger
         this.con = con
+        // Receive messages
+        this.con.on('data', (msg) => {
+            this.unemit(msg)
+        });
+        return this
+    }
+    said_hello = false
+    say_hello() {
+        if (this.said_hello) return true
+        // give them our entire pubkey
+        // < sign a recent timestamp
+        this.emit('hello',{publicKey:enhex(this.P.Id.publicKey)})
+        this.said_hello = true
+    }
+
+    emit(type,data={},options={}) {
+        // put in type
+        // < binary mode
+        data = {type, ...data}
+        // become only about data going somewhere
+        // < sign from here (another JSON.stringify() at each end?)
+        if (!this.pub) throw "!Pier.pub"
+        let msg = {
+            to: this.pub,
+            from: this.P.Id.pretty_pubkey(),
+            sig: "yes",
+            data
+        }
+        this.con.send(msg)
+    }
+    unemit(msg) {
+        let data = msg.data
+        // < check permit
+        this.handleMessage(data,msg)
+    }
+    handleMessage(data) {
+        const handler = this.handlers[data.type]
+        if (!handler) {
+            return console.warn(`${this} channel !handler for message type:`, data);
+        }
+        handler(data);
+    }
+
+    handlers = {
+        hello: (data) => {
+            console.log("they say hi: ",data)
+            if (!this.said_hello) {
+                this.say_hello()
+            }
+            else {
+                this.emit('story',{yadda:3})
+            }
+        },
+        story: (data) => {
+            console.log("they say story: ",data)
+            data.yadda++ < 9
+                && this.emit('story',{yadda:data.yadda})
+        },
     }
 }
 //#endregion
