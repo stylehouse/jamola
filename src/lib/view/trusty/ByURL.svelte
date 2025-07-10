@@ -22,6 +22,7 @@
             await P.Id.generateKeys()
             P.stash.Id = P.Id.freeze()
         }
+        P.listen_pubkey(P.Id)
 
         // the location may be another persons
         Ud = new Idento()

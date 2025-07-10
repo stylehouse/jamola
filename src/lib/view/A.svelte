@@ -1,6 +1,5 @@
 <script lang="ts">
     import { Peerily } from "$lib/trusty/Peerily.svelte";
-    import { bunch_of_nowish } from "$lib/trusty/ws-server/PeerilySignalingServer";
     import ByURL from "./trusty/ByURL.svelte";
     import Signal from "./trusty/Signal.svelte";
 
@@ -16,12 +15,6 @@
         if (!P.stash) return
         console.log(`saving Astash`)
         localStorage.Astash = JSON.stringify(P.stash)
-    })
-    let begun = false
-    $effect(() => {
-        if (begun) return
-        begun = true
-        setTimeout(() => P.begin(),0)
     })
     let tryit = () => {
         P.connect_pubkey("7c225f82554d67c6")

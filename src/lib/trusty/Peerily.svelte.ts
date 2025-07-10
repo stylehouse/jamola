@@ -1,55 +1,49 @@
 
-import type { Socket } from "socket.io";
-import { io } from "socket.io-client";
 import { _D, erring } from "$lib/Y";
 import { Idento, Pier } from "./Peer.svelte";
 import type { storableIdento } from "./Peer.svelte";
+import Peer from 'peerjs'
 
 type TheStash = {
     Id: storableIdento,
     trust: {},
 }
 type pubid = string
+export function bunch_of_nowish() {
+    let seconds = Math.floor(Date.now() / 1000)
+    let t = Math.floor(seconds / 5) * 5
+    return [t,t-5,t+5,t-10,t+10]
+
+}
 export class Peerily {
-    socket:Socket
-    awaits_socket:Array<Function> = []
     stash:TheStash = $state({})
     Id:Idento = new Idento()
+    eer:Peer
     peers_by_pub = {}
     constructor(opt={}) {
         Object.assign(this, opt)
     }
-    begin() {
-        this.setupSocket()
-    }
-    setupSocket() {
-        this.socket = io();
-        this.socket.on('hi', async () => {
-            this.Id.publicKey && this.listen_pubkey(this.Id)
-            this.awaits_socket.map(y => y())
-            this.awaits_socket = []
-        });
-        this.socket.on('pub', async (data) => {
-            // go to the unemit
-            console.log(`pub`,data)
-            this.unemit(data)
-        });
-    }
     // own pubkey location
     // < by proving you own it
     async listen_pubkey(pub) {
-        await this.wantsock()
         pub = ''+pub
         if (!pub) throw "!pub"
+        this.eer = new Peer(pub)
         console.log(`listen_pubkey(${pub})`)
-        this.socket.emit("sub",{pub})
+        this.eer.on('connection', (con) => {
+            console.log(`<- connection(${pub})`,con)
+            this.a_pier(con.peer).init(con)
+        })
     }
-    // < create a Peer, one at each end per peer?
     async connect_pubkey(pub) {
-        await this.wantsock()
         pub = ''+pub
+        let con = this.eer.connect(pub)
+        con.on('open', () => {
+            if (con.peer != pub) debugger
+            console.log(`-> connection(${pub})`,con)
+            this.a_pier(pub).init(con)
+        });
         console.log(`connect_pubkey(${pub})`)
-        this.a_pier(pub).Peerify(false)
     }
     a_pier(pub):Pier {
         if (!pub) throw "!pub"

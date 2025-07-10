@@ -1,6 +1,5 @@
 import * as ed from '@noble/ed25519';
-import SimplePeer from '@thaunknown/simple-peer';
-// import type { Peerily } from './Peerily.svelte';
+import type { DataConnection } from 'peerjs';
 
 type prepub = string
 //#region crypto
@@ -97,7 +96,8 @@ export class Idento extends IdentoCrypto {
 export class Pier {
     P:Peerily
     pub:prepub|null // if we want to find that full pretty_pubkey()
-    SP:SimplePeer
+    con:DataConnection
+
 
     constructor(opt) {
         Object.assign(this, opt)
@@ -105,25 +105,10 @@ export class Pier {
     emit(type,data={},options={}) {
         this.P.emit(this,type,data,options)
     }
-    Peerify(initiator=true) {
-        if (!initiator) {
-            // tell them to become the initiator
-            this.emit('connectable')
-        }
-        this.SP = new SimplePeer({
-            initiator,
-            // trickle: false
-        })
-        this.SP.on('signal', data => {
-            console.log("Signal...")
-            this.emit("signal",{data})
-        })
-        this.SP.on('connect', data => {
-            this.connected = true
-            console.log("Connected!")
-        })
-        
-
+    init(con) {
+        console.log(`do stuff`,con)
+        debugger
+        this.con = con
     }
 }
 //#endregion
