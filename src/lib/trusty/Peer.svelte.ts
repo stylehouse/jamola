@@ -1,5 +1,7 @@
 import * as ed from '@noble/ed25519';
+// import type { Peerily } from './Peerily.svelte';
 
+type prepub = string
 //#region crypto
 // Export keys to hexadecimal
 export const enhex = ed.etc.bytesToHex
@@ -69,8 +71,11 @@ export class Idento extends IdentoCrypto {
     // when we only have the pretty part of the pubkey
     //  we can't verify signatures but can find out the longer pubkey
     advert = false
-    pretty_pubkey() {
+    pretty_pubkey():prepub {
         return enhex(this.publicKey).slice(0,16)
+    }
+    toString() {
+        return this.pretty_pubkey()
     }
 
     thaw(a:storableIdento) {
@@ -87,12 +92,17 @@ export class Idento extends IdentoCrypto {
 //#endregion
 //#region Room
 
-export class Participant {
-    peerId:string
+// aka Participant
+export class Pier {
+    P:Peerily
+    pub:prepub|null // if we want to find that full pretty_pubkey()
     name:string|undefined = $state()
 
     constructor(opt) {
         Object.assign(this, opt)
+    }
+    emit(type,data,options) {
+        this.P.emit(this,type,data,options)
     }
 }
 //#endregion

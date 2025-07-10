@@ -10,7 +10,7 @@ export function bunch_of_nowish() {
 
 }
 function sane_pub(pub) {
-	if (typeof pub != 'string' || pub.length != 16) throw "!pub"
+	if (typeof pub != 'string' || pub.length != 16) throw "!pub: "+pub
 }
 export function PeerilySignalingServer(socket, io) {
 	socket.emit('hi')
@@ -18,8 +18,9 @@ export function PeerilySignalingServer(socket, io) {
 		sane_pub(pub)
 		await socket.join(pub);
 	})
-	socket.on('pub', async ({pub,data}) => {
+	socket.on('pub', async (msg) => {
+		let {pub} = msg
 		sane_pub(pub)
-		socket.to(pub).emit('pub', data);
+		socket.to(pub).emit('pub', msg);
 	})
 }

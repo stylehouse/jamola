@@ -17,16 +17,21 @@
         console.log(`saving Astash`)
         localStorage.Astash = JSON.stringify(P.stash)
     })
+    let begun = false
     $effect(() => {
+        if (begun) return
+        begun = true
         setTimeout(() => P.begin(),0)
     })
+    let tryit = () => {
+        P.connect_pubkey("7c225f82554d67c6")
+    }
 
-
-</script>s
+</script>
 
 <ByURL {P} />
 <Signal {P} />
 
-<p>Everything.</p>
+<p><a href="/A?3#7c225f82554d67c6">Everything.</a></p>
 
-<button >New ID</button>
+<button onclick={tryit}>go</button>
