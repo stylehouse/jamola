@@ -1,4 +1,5 @@
 import * as ed from '@noble/ed25519';
+import SimplePeer from '@thaunknown/simple-peer';
 // import type { Peerily } from './Peerily.svelte';
 
 type prepub = string
@@ -61,7 +62,7 @@ export class Idento extends IdentoCrypto {
         if (hex.length == 16) this.advert = true
         this.publicKey = dehex(hex)
         if (!this.publicKey) {
-            console.warn("Malformed public key?",mex)
+            console.warn("Malformed public key?",hex)
         }
     }
     to_location_hash() {
@@ -96,13 +97,33 @@ export class Idento extends IdentoCrypto {
 export class Pier {
     P:Peerily
     pub:prepub|null // if we want to find that full pretty_pubkey()
-    name:string|undefined = $state()
+    SP:SimplePeer
 
     constructor(opt) {
         Object.assign(this, opt)
     }
-    emit(type,data,options) {
+    emit(type,data={},options={}) {
         this.P.emit(this,type,data,options)
+    }
+    Peerify(initiator=true) {
+        if (!initiator) {
+            // tell them to become the initiator
+            this.emit('connectable')
+        }
+        this.SP = new SimplePeer({
+            initiator,
+            // trickle: false
+        })
+        this.SP.on('signal', data => {
+            console.log("Signal...")
+            this.emit("signal",{data})
+        })
+        this.SP.on('connect', data => {
+            this.connected = true
+            console.log("Connected!")
+        })
+        
+
     }
 }
 //#endregion

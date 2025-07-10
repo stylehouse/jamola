@@ -22,10 +22,11 @@
 	"dependencies": {
 		"@formkit/auto-animate": "^0.8.2",
 		"@noble/ed25519": "^2.3.0",
+		"@thaunknown/simple-peer": "^10.0.11",
 		"@types/express": "^5.0.3",
+		"@types/simple-peer": "^9.11.8",
 		"express": "^5.1.0",
 		"puppeteer": "^23.11.1",
-		"simple-peer": "^9.11.1",
 		"socket.io": "^4.8.1",
 		"socket.io-client": "^4.8.1"
 	}

@@ -49,7 +49,7 @@ export class Peerily {
         await this.wantsock()
         pub = ''+pub
         console.log(`connect_pubkey(${pub})`)
-        this.a_pier(pub).emit('connectable')
+        this.a_pier(pub).Peerify(false)
     }
     a_pier(pub):Pier {
         if (!pub) throw "!pub"
@@ -95,7 +95,7 @@ export class Peerily {
             }
         }
         // < check this is someone cleared to manipulate us this way
-        this.handleMessage(pier,data)
+        this.handleMessage(pier,data,msg)
     }
     handleMessage(pier:Pier,data) {
         const handler = this.handlers[data.type]
@@ -106,8 +106,9 @@ export class Peerily {
     }
 
     handlers = {
-        connectable: (pier,data) => {
+        connectable: (pier,data,msg) => {
             console.log("Make them")
+            pier.Peerify()
         }
     }
 }
